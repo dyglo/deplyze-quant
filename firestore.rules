@@ -1,0 +1,99 @@
+rules_version = '2';
+
+// ─── Deplyze Quant — Firestore security rules ────────────────────────────────
+//
+// Tenancy model:
+//   workspaces/{wid}                                 — research desk
+//   workspaces/{wid}/projects/{pid}                  — strategy / portfolio
+//   workspaces/{wid}/projects/{pid}/artifacts/{id}   — agent-generated insight
+//   workspaces/{wid}/projects/{pid}/briefings/{id}   — institutional briefings
+//   workspaces/{wid}/projects/{pid}/watchlists/{id}  — instrument watchlists
+//   workspaces/{wid}/projects/{pid}/agentRuns/{id}   — agent execution log
+//   workspaces/{wid}/apiKeys/{provider}              — provider keys (SERVER-ONLY)
+//   memberships/{uid_wid}                            — user ↔ workspace pivot
+//   organizations/{wid}                              — alias of workspaces for
+//                                                      legacy membership lookups
+//   providerCache/{key}                              — gateway response cache
+//                                                      (SERVER-ONLY)
+//   auditLogs/{id}                                   — gateway audit (SERVER-ONLY)
+//
+// All artifact/briefing writes happen from the gateway / agents via the Admin
+// SDK, which bypasses these rules. Clients only ever read those documents.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() { return request.auth != null; }
+    function uid() { return request.auth.uid; }
+
+    function isMember(wid) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/memberships/$(uid() + '_' + wid));
+    }
+
+    function isWorkspaceOwner(wid) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/workspaces/$(wid)) &&
+        get(/databases/$(database)/documents/workspaces/$(wid)).data.ownerUid == uid();
+    }
+
+    // ─── Users ────────────────────────────────────────────────────────────
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && uid() == userId;
+      allow delete: if false;
+    }
+
+    // ─── Memberships ──────────────────────────────────────────────────────
+    match /memberships/{membershipId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.uid == uid();
+      allow update, delete: if isSignedIn() && (
+        resource.data.uid == uid() ||
+        isWorkspaceOwner(resource.data.workspaceId)
+      );
+    }
+
+    // ─── Workspaces ───────────────────────────────────────────────────────
+    match /workspaces/{wid} {
+      allow read: if isMember(wid) || isWorkspaceOwner(wid);
+      allow create: if isSignedIn() && request.resource.data.ownerUid == uid();
+      allow update, delete: if isWorkspaceOwner(wid);
+
+      match /projects/{pid} {
+        allow read: if isMember(wid) || isWorkspaceOwner(wid);
+        allow create, update, delete: if isMember(wid) || isWorkspaceOwner(wid);
+
+        match /watchlists/{watchlistId} {
+          allow read: if isMember(wid) || isWorkspaceOwner(wid);
+          allow create, update, delete: if isMember(wid) || isWorkspaceOwner(wid);
+        }
+
+        // Artifacts and briefings: server-written (Admin SDK), client-read only.
+        match /artifacts/{artifactId} {
+          allow read: if isMember(wid) || isWorkspaceOwner(wid);
+          allow write: if false;
+        }
+
+        match /briefings/{briefingId} {
+          allow read: if isMember(wid) || isWorkspaceOwner(wid);
+          allow write: if false;
+        }
+
+        match /agentRuns/{runId} {
+          allow read: if isMember(wid) || isWorkspaceOwner(wid);
+          allow write: if false;
+        }
+      }
+
+      // Provider API keys: SERVER-ONLY. No client access at all.
+      match /apiKeys/{provider} {
+        allow read, write: if false;
+      }
+    }
+
+    // ─── Server-only collections ──────────────────────────────────────────
+    match /providerCache/{key}  { allow read, write: if false; }
+    match /auditLogs/{logId}    { allow read, write: if false; }
+  }
+}

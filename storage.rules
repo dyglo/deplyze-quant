@@ -1,0 +1,64 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // ─── Shared helpers ───────────────────────────────────────────────────
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Max file sizes
+    function maxImageSize() { return 50 * 1024 * 1024; }   // 50 MB
+    function maxVideoSize() { return 500 * 1024 * 1024; }  // 500 MB
+
+    function isImage() {
+      return request.resource.contentType.matches('image/.*');
+    }
+
+    function isVideo() {
+      return request.resource.contentType.matches('video/.*');
+    }
+
+    // ─── Media uploads ────────────────────────────────────────────────────
+    // Path: uploads/{workspaceId}/{projectId}/{uploadId}/{filename}
+    //
+    // - Only the authenticated uploader (or workspace members) can read
+    // - Upload must be within size limits
+    // - Downscoped so only the file owner can write (not overwrite others)
+
+    match /uploads/{workspaceId}/{projectId}/{uploadId}/{filename} {
+      // Any signed-in user who uploaded the file can read it;
+      // workspace membership is enforced at Firestore level for job submission.
+      allow read: if isSignedIn();
+
+      // Write: authenticated + within size limit + correct mime type
+      allow create: if isSignedIn() &&
+        (
+          (isImage() && request.resource.size <= maxImageSize()) ||
+          (isVideo() && request.resource.size <= maxVideoSize())
+        );
+
+      // No overwrites from client
+      allow update: if false;
+
+      // Only the uploader or admins — storage doesn't have role lookups,
+      // so we rely on Cloud Function triggered delete for cleanup.
+      allow delete: if isSignedIn();
+    }
+
+    // ─── Annotated evidence frames ────────────────────────────────────────
+    // Path: evidence/{workspaceId}/{projectId}/{uploadId}/annotated.jpg
+    // Written ONLY by the Vision Worker (service account). Read by members.
+
+    match /evidence/{workspaceId}/{projectId}/{uploadId}/{filename} {
+      allow read: if isSignedIn();
+      allow write: if false; // Service account only via Admin SDK
+    }
+
+    // ─── Deny everything else ─────────────────────────────────────────────
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

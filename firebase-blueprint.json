@@ -1,0 +1,114 @@
+{
+  "entities": {
+    "Workspace": {
+      "title": "Workspace (Research Desk)",
+      "description": "Top-level tenant unit for Deplyze Quant. Maps conceptually to an institutional research desk.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "ownerUid": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "ownerUid", "createdAt"]
+    },
+    "Project": {
+      "title": "Project (Strategy / Portfolio)",
+      "description": "A research strategy bucket inside a workspace.",
+      "type": "object",
+      "properties": {
+        "workspaceId": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["workspaceId", "name", "createdAt"]
+    },
+    "Membership": {
+      "title": "Membership",
+      "description": "User ↔ workspace pivot. Doc ID = `${uid}_${workspaceId}`.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "workspaceId": { "type": "string" },
+        "role": { "type": "string", "enum": ["owner", "admin", "analyst", "viewer"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "workspaceId", "role", "createdAt"]
+    },
+    "IntelligenceArtifact": {
+      "title": "Intelligence Artifact",
+      "description": "An agent-generated insight surfaced in the Intelligence Terminal.",
+      "type": "object",
+      "properties": {
+        "workspaceId": { "type": "string" },
+        "projectId": { "type": "string" },
+        "category": { "type": "string", "enum": ["regime", "volatility", "correlation", "sentiment", "positioning", "anomaly", "macro", "opportunity", "risk", "earnings"] },
+        "title": { "type": "string" },
+        "narrative": { "type": "string" },
+        "symbols": { "type": "array", "items": { "type": "string" } },
+        "confidence": { "type": "number" },
+        "significance": { "type": "number" },
+        "evidence": { "type": "array" },
+        "agentId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "Briefing": {
+      "title": "Institutional Research Briefing",
+      "description": "Structured research report (daily macro, weekly regime, etc.).",
+      "type": "object",
+      "properties": {
+        "workspaceId": { "type": "string" },
+        "projectId": { "type": "string" },
+        "kind": { "type": "string", "enum": ["daily-macro", "weekly-regime", "volatility", "cross-asset", "positioning", "sector-rotation", "earnings", "risk", "trade-thesis", "market-stress"] },
+        "title": { "type": "string" },
+        "summary": { "type": "string" },
+        "body": { "type": "string" },
+        "highlights": { "type": "array", "items": { "type": "string" } },
+        "symbols": { "type": "array", "items": { "type": "string" } },
+        "source": { "type": "string", "enum": ["agent", "manual"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "Watchlist": {
+      "title": "Watchlist",
+      "description": "User-curated list of instruments.",
+      "type": "object",
+      "properties": {
+        "workspaceId": { "type": "string" },
+        "projectId": { "type": "string" },
+        "name": { "type": "string" },
+        "symbols": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "AgentRun": {
+      "title": "Agent Run Log",
+      "description": "Audit record of an autonomous research-agent execution.",
+      "type": "object",
+      "properties": {
+        "workspaceId": { "type": "string" },
+        "projectId": { "type": "string" },
+        "agentId": { "type": "string" },
+        "status": { "type": "string", "enum": ["running", "succeeded", "failed"] },
+        "startedAt": { "type": "string", "format": "date-time" },
+        "finishedAt": { "type": "string", "format": "date-time" },
+        "artifactsProduced": { "type": "integer" },
+        "errorMessage": { "type": "string" }
+      }
+    }
+  },
+  "collections": {
+    "users": "/users/{uid}",
+    "workspaces": "/workspaces/{wid}",
+    "projects": "/workspaces/{wid}/projects/{pid}",
+    "artifacts": "/workspaces/{wid}/projects/{pid}/artifacts/{artifactId}",
+    "briefings": "/workspaces/{wid}/projects/{pid}/briefings/{briefingId}",
+    "watchlists": "/workspaces/{wid}/projects/{pid}/watchlists/{watchlistId}",
+    "agentRuns": "/workspaces/{wid}/projects/{pid}/agentRuns/{runId}",
+    "memberships": "/memberships/{uid_wid}",
+    "apiKeys": "/workspaces/{wid}/apiKeys/{provider}  — SERVER-ONLY",
+    "providerCache": "/providerCache/{key}  — SERVER-ONLY",
+    "auditLogs": "/auditLogs/{logId}  — SERVER-ONLY"
+  }
+}

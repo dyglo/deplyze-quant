@@ -1,0 +1,755 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300;0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;1,14..32,400&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, monospace;
+
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+
+  --radius-sm: calc(var(--radius) * 0.5);
+  --radius-md: calc(var(--radius) * 0.75);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.5);
+  --radius-2xl: calc(var(--radius) * 2);
+}
+
+/* ─── Claude-Inspired Color System ───────────────────────────────── */
+:root {
+  /* Core surfaces */
+  --background:       #F4F3EE;  /* Pampas – warm white */
+  --foreground:       #1F1E1D;  /* Dark brown-gray */
+  --card:             #FAFAF7;  /* Slightly warmer white */
+  --card-foreground:  #1F1E1D;
+  --popover:          #FFFFFF;
+  --popover-foreground: #1F1E1D;
+
+  /* Brand */
+  --primary:          #C15F3C;  /* Crail – terracotta */
+  --primary-foreground: #F4F3EE;
+
+  /* UI */
+  --secondary:        #EDECD8;
+  --secondary-foreground: #1F1E1D;
+  --muted:            #E8E6DC;  /* Light gray */
+  --muted-foreground: #8A8680;  /* Between Cloudy and Dark */
+  --accent:           #E8E6DC;
+  --accent-foreground: #C15F3C;
+  --destructive:      #C15F3C;
+
+  /* Structural */
+  --border:           #E4E2D8;
+  --input:            #EDECE5;
+  --ring:             #C15F3C;
+
+  /* Charts */
+  --chart-1: #C15F3C;
+  --chart-2: #788C5D;
+  --chart-3: #6A9BCC;
+  --chart-4: #B1ADA1;
+  --chart-5: #1F1E1D;
+
+  /* Geometry */
+  --radius: 0.5rem;
+
+  /* Sidebar */
+  --sidebar:                  #EFEDE6;
+  --sidebar-foreground:       #1F1E1D;
+  --sidebar-primary:          #C15F3C;
+  --sidebar-primary-foreground: #F4F3EE;
+  --sidebar-accent:           #E4E2D8;
+  --sidebar-accent-foreground: #C15F3C;
+  --sidebar-border:           #DDD9CE;
+  --sidebar-ring:             #C15F3C;
+
+  /* Motion */
+  --ease-default: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-fast: 120ms;
+  --duration-normal: 200ms;
+  --duration-slow: 300ms;
+}
+
+.dark {
+  /* Core surfaces — Moonlit cozy charcoal dark */
+  --background:       #191919;  /* Cozy dark charcoal background */
+  --foreground:       #E6DFD5;  /* Soft warm off-white main text */
+  --card:             #222120;  /* Slightly lighter warm surface for cards/panels */
+  --card-foreground:  #E6DFD5;
+  --popover:          #262423;  /* Dropdowns and popovers */
+  --popover-foreground: #E6DFD5;
+
+  /* Brand / Primary — Soft warm clay / terracotta peach */
+  --primary:          #E28A5B;  /* Premium peach-terracotta brand color */
+  --primary-foreground: #191919;
+
+  /* UI */
+  --secondary:        #2B2A27;  /* Nested panels / recessed elements */
+  --secondary-foreground: #E6DFD5;
+  --muted:            #262423;  /* Subdued containers */
+  --muted-foreground: #9C9389;  /* Earthy warm gray for captions and secondary text */
+  --accent:           #32312E;  /* Selection, list hover, active state */
+  --accent-foreground: #E28A5B;
+  --destructive:      #E28A5B;
+
+  /* Structural */
+  --border:           #32312E;  /* Low-contrast border color */
+  --input:            #2B2A27;
+  --ring:             #E28A5B;
+
+  /* Charts - matching moonlit warmth */
+  --chart-1: #E28A5B;
+  --chart-2: #8FA479;
+  --chart-3: #7CAEDD;
+  --chart-4: #B1ADA1;
+  --chart-5: #E6DFD5;
+
+  /* Sidebar */
+  --sidebar:                  #141312;  /* Slightly deeper rich dark for sidebar */
+  --sidebar-foreground:       #E6DFD5;
+  --sidebar-primary:          #E28A5B;
+  --sidebar-primary-foreground: #191919;
+  --sidebar-accent:           #262423;
+  --sidebar-accent-foreground: #E28A5B;
+  --sidebar-border:           #222120;
+  --sidebar-ring:             #E28A5B;
+}
+
+/* ─── Base Resets ─────────────────────────────────────────────────── */
+@layer base {
+  * {
+    box-sizing: border-box;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  html {
+    font-size: 16px;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply font-sans text-foreground bg-background;
+    font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
+    font-optical-sizing: auto;
+    letter-spacing: -0.01em;
+    line-height: 1.5;
+  }
+
+  input, select, textarea, button, label, option {
+    font-family: "Inter", ui-sans-serif, system-ui, sans-serif !important;
+  }
+
+  /* Remove default focus rings, add custom ones */
+  :focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+  }
+
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--muted-foreground);
+  }
+
+  /* Selection */
+  ::selection {
+    background: var(--primary);
+    color: var(--primary-foreground);
+  }
+}
+
+/* ─── Typography Scale ────────────────────────────────────────────── */
+/* Page title — primary section header */
+.ds-title {
+  font-size: 1.25rem;       /* 20px */
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  color: var(--foreground);
+  line-height: 1.3;
+}
+
+/* Section heading within a page */
+.ds-heading {
+  font-size: 0.8125rem;     /* 13px */
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--foreground);
+  line-height: 1.4;
+}
+
+/* Body — primary readable content */
+.ds-body {
+  font-size: 0.8125rem;     /* 13px */
+  font-weight: 400;
+  color: var(--foreground);
+  line-height: 1.6;
+}
+
+/* Caption / metadata */
+.ds-caption {
+  font-size: 0.6875rem;     /* 11px */
+  font-weight: 400;
+  color: var(--muted-foreground);
+  line-height: 1.5;
+  letter-spacing: 0.005em;
+}
+
+/* Label — field labels, micro labels */
+.ds-label {
+  font-size: 0.6875rem;     /* 11px */
+  font-weight: 500;
+  color: var(--muted-foreground);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* Badge / status text */
+.ds-badge {
+  font-size: 0.625rem;      /* 10px */
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+/* ─── Surface / Container Utilities ─────────────────────────────── */
+/* Flat surface — no elevation, just border */
+.ds-surface {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+/* Inset surface — slightly recessed */
+.ds-surface-inset {
+  background: var(--secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+/* Ghost surface — minimal visual weight */
+.ds-surface-ghost {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+/* ─── Transition Utility ─────────────────────────────────────────── */
+.ds-transition {
+  transition-property: color, background-color, border-color, opacity, transform, box-shadow;
+  transition-duration: var(--duration-normal);
+  transition-timing-function: var(--ease-default);
+}
+
+.ds-transition-fast {
+  transition-property: color, background-color, border-color, opacity, transform, box-shadow;
+  transition-duration: var(--duration-fast);
+  transition-timing-function: var(--ease-default);
+}
+
+/* ─── Status Dot ─────────────────────────────────────────────────── */
+.ds-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.ds-dot-live {
+  background: var(--chart-2);
+  box-shadow: 0 0 0 3px rgba(120, 140, 93, 0.15);
+  animation: pulse-green 2s infinite;
+}
+
+.ds-dot-critical {
+  background: var(--primary);
+  animation: pulse-crail 2s infinite;
+}
+
+.ds-dot-warning {
+  background: #C9A227;
+}
+
+.ds-dot-muted {
+  background: var(--muted-foreground);
+}
+
+@keyframes pulse-green {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(120, 140, 93, 0.3); }
+  50%       { box-shadow: 0 0 0 4px rgba(120, 140, 93, 0.15); }
+}
+
+@keyframes pulse-crail {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(193, 95, 60, 0.3); }
+  50%       { box-shadow: 0 0 0 4px rgba(193, 95, 60, 0.15); }
+}
+
+/* ─── Divider ────────────────────────────────────────────────────── */
+.ds-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 0;
+}
+
+/* ─── Severity Indicators ────────────────────────────────────────── */
+.ds-sev-critical { color: var(--primary); }
+.ds-sev-high     { color: #B85C2A; }
+.ds-sev-medium   { color: #C9A227; }
+.ds-sev-low      { color: var(--chart-2); }
+
+.ds-pill-critical { background: rgba(193, 95, 60, 0.08); color: var(--primary); border: 1px solid rgba(193, 95, 60, 0.16); }
+.ds-pill-high     { background: rgba(184, 92, 42, 0.08); color: #B85C2A; border: 1px solid rgba(184, 92, 42, 0.16); }
+.ds-pill-medium   { background: rgba(201, 162, 39, 0.08); color: #9A7B1D; border: 1px solid rgba(201, 162, 39, 0.16); }
+.ds-pill-low      { background: rgba(120, 140, 93, 0.08); color: #4E6040; border: 1px solid rgba(120, 140, 93, 0.16); }
+.ds-pill-neutral  { background: rgba(177, 173, 161, 0.08); color: var(--muted-foreground); border: 1px solid rgba(177, 173, 161, 0.16); }
+.ds-pill-blue     { background: rgba(106, 155, 204, 0.08); color: #1C6BBB; border: 1px solid rgba(106, 155, 204, 0.16); }
+
+/* ─── Empty State ────────────────────────────────────────────────── */
+.ds-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 4rem 2rem;
+  gap: 0.75rem;
+}
+
+.ds-empty-icon {
+  width: 3rem;
+  height: 3rem;
+  background: var(--secondary);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted-foreground);
+  margin-bottom: 0.25rem;
+}
+
+/* ─── Interactive Row ────────────────────────────────────────────── */
+.ds-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.625rem 0.875rem;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-default);
+}
+
+.ds-row:hover {
+  background: var(--accent);
+}
+
+/* ─── Sidebar Nav ────────────────────────────────────────────────── */
+.ds-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.4375rem 0.75rem;
+  border-radius: var(--radius-md);
+  font-size: 0.8125rem;
+  font-weight: 450;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-default),
+              color var(--duration-fast) var(--ease-default);
+  user-select: none;
+}
+
+.ds-nav-item:hover {
+  background: var(--accent);
+  color: var(--foreground);
+}
+
+.ds-nav-item.active {
+  background: var(--background);
+  color: var(--primary);
+  font-weight: 500;
+  border: 1px solid var(--border);
+}
+
+/* ─── Section Header ─────────────────────────────────────────────── */
+.ds-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 0.875rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 1.25rem;
+}
+
+/* ─── Data Table ─────────────────────────────────────────────────── */
+.ds-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.ds-table thead th {
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+  padding: 0.5rem 0.875rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.ds-table tbody tr {
+  border-bottom: 1px solid var(--border);
+  transition: background-color var(--duration-fast) var(--ease-default);
+}
+
+.ds-table tbody tr:hover {
+  background: var(--accent);
+}
+
+.ds-table tbody td {
+  padding: 0.75rem 0.875rem;
+  color: var(--foreground);
+  vertical-align: middle;
+}
+
+/* ─── Input Field ────────────────────────────────────────────────── */
+.ds-input {
+  height: 2.25rem;
+  padding: 0 0.75rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: 0.8125rem;
+  color: var(--foreground) !important;
+  font-family: "Inter", ui-sans-serif, system-ui, sans-serif !important;
+  transition: border-color var(--duration-fast) var(--ease-default),
+              box-shadow var(--duration-fast) var(--ease-default);
+  width: 100%;
+}
+
+.ds-input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 15%, transparent);
+}
+
+.ds-input::placeholder {
+  color: var(--muted-foreground) !important;
+  opacity: 0.7;
+}
+
+.ds-input option {
+  background-color: var(--card) !important;
+  color: var(--foreground) !important;
+  font-family: "Inter", ui-sans-serif, system-ui, sans-serif !important;
+}
+
+/* ─── Button Primitives ──────────────────────────────────────────── */
+.ds-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  padding: 0 0.875rem;
+  height: 2.125rem;
+  border-radius: var(--radius-md);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: background-color var(--duration-fast) var(--ease-default),
+              color var(--duration-fast) var(--ease-default),
+              opacity var(--duration-fast) var(--ease-default);
+  user-select: none;
+  white-space: nowrap;
+}
+
+.ds-btn:active {
+  transform: scale(0.98);
+}
+
+.ds-btn-primary {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+.ds-btn-primary:hover {
+  background: color-mix(in srgb, var(--primary) 85%, black);
+}
+
+.ds-btn-secondary {
+  background: var(--secondary);
+  color: var(--secondary-foreground);
+}
+.ds-btn-secondary:hover {
+  background: color-mix(in srgb, var(--secondary) 85%, var(--foreground));
+}
+
+.ds-btn-ghost {
+  background: transparent;
+  color: var(--muted-foreground);
+}
+.ds-btn-ghost:hover {
+  background: var(--accent);
+  color: var(--foreground);
+}
+
+.ds-btn-outline {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--foreground);
+}
+.ds-btn-outline:hover {
+  background: var(--accent);
+  border-color: var(--muted-foreground);
+}
+
+/* ─── Panel / Sidebar Panels ─────────────────────────────────────── */
+.ds-panel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.ds-panel-header {
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* ─── Progress Bar ───────────────────────────────────────────────── */
+.ds-progress-track {
+  height: 3px;
+  background: var(--secondary);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.ds-progress-fill {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 2px;
+  transition: width var(--duration-slow) var(--ease-default);
+}
+
+/* ─── Badge Variants ─────────────────────────────────────────────── */
+.ds-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* ─── Loading Spinner ────────────────────────────────────────────── */
+.ds-spinner {
+  width: 1rem;
+  height: 1rem;
+  border: 1.5px solid var(--border);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ─── Page Loading Screen ────────────────────────────────────────── */
+.ds-loading-screen {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  background: var(--background);
+}
+
+/* ─── Drop Zone ──────────────────────────────────────────────────── */
+.ds-dropzone {
+  border: 1.5px dashed var(--border);
+  border-radius: var(--radius-xl);
+  background: var(--muted);
+  transition: border-color var(--duration-normal) var(--ease-default),
+              background var(--duration-normal) var(--ease-default);
+  cursor: pointer;
+}
+
+.ds-dropzone:hover,
+.ds-dropzone.drag-over {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 8%, var(--card));
+}
+
+/* ─── Chat Bubbles ───────────────────────────────────────────────── */
+.ds-bubble-assistant {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 0 0.75rem 0.75rem 0.75rem;
+  padding: 0.875rem 1rem;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--foreground);
+}
+
+.ds-bubble-user {
+  background: var(--primary);
+  border-radius: 0.75rem 0 0.75rem 0.75rem;
+  padding: 0.75rem 1rem;
+  font-size: 0.8125rem;
+  color: var(--primary-foreground);
+  line-height: 1.5;
+}
+
+/* ─── Fade-in Keyframe ───────────────────────────────────────────── */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.ds-fade-in {
+  animation: fadeIn 0.22s var(--ease-default) both;
+}
+
+/* ─── Suppress Tailwind ring on shadcn inputs ───────────────────── */
+[data-slot="input"],
+[data-slot="textarea"] {
+  @apply shadow-none;
+}
+
+/* ─── Modal Backdrop and Container ──────────────────────────────── */
+.ds-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  z-index: 9999;
+}
+
+.ds-modal-container {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  width: 100%;
+  max-width: 28rem;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.ds-modal-header {
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ds-modal-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--foreground);
+}
+
+.ds-modal-close {
+  background: transparent;
+  border: none;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color var(--duration-fast) var(--ease-default),
+              color var(--duration-fast) var(--ease-default);
+}
+
+.ds-modal-close:hover {
+  background: var(--accent);
+  color: var(--foreground);
+}
+
+.ds-modal-body {
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+/* ─── Form Controls ──────────────────────────────────────────────── */
+.ds-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.ds-form-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--muted-foreground);
+  text-transform: uppercase;
+}
+
+textarea.ds-input {
+  height: auto;
+  padding: 0.5rem 0.75rem;
+}

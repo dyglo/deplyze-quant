@@ -1,0 +1,14 @@
+{
+  "name": "Deplyze Sentinel",
+  "description": "AI-native construction safety and operational intelligence platform for site monitoring, incident detection, and compliance automation.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "AI Safety Monitoring",
+    "Incident Timeline",
+    "Autonomous Compliance Reporting",
+    "Multimodal AI Analysis"
+  ]
+}

@@ -1,0 +1,11 @@
+.git
+node_modules
+dist
+functions/node_modules
+cloud-run/gateway/node_modules
+cloud-run/vision-worker/venv
+cloud-run/vision-worker/__pycache__
+*.log
+.env*
+!cloud-run/vision-worker/.env.example
+!cloud-run/gateway/.env.example

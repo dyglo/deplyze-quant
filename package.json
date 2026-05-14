@@ -1,0 +1,46 @@
+{
+  "name": "deplyze-quant",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Deplyze Quant — AI-native quantitative research and market intelligence platform.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:all": "concurrently -n web,gateway -c blue,magenta \"npm:dev\" \"npm:gateway:dev\"",
+    "gateway:dev": "npm --prefix cloud-run/gateway run dev",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "lint": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@base-ui-components/react": "^1.0.0-alpha.16",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.1.0",
+    "firebase": "^11.0.2",
+    "lucide-react": "^0.468.0",
+    "motion": "^11.13.5",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-markdown": "^9.0.1",
+    "react-router-dom": "^6.28.0",
+    "recharts": "^2.13.3",
+    "sonner": "^1.7.1",
+    "tailwind-merge": "^2.5.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.0-beta.6",
+    "@types/node": "^22.10.2",
+    "@types/react": "^18.3.17",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.0",
+    "tailwindcss": "^4.0.0-beta.6",
+    "tsx": "^4.22.0",
+    "typescript": "~5.8.2",
+    "vite": "^5.4.11"
+  }
+}

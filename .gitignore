@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+
+# Build output
+build/
+dist/
+coverage/
+*.tsbuildinfo
+functions/lib/
+
+# Logs
+*.log
+
+# Environment variables — never commit real keys
+.env*
+!.env.example
+
+# Firebase credential files
+firebase-applet-config.json
+
+# Claude Code local settings (permissions, personal preferences)
+.claude/settings.local.json
+
+# OS
+.DS_Store
+Thumbs.db

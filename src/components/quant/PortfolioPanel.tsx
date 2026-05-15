@@ -533,7 +533,7 @@ export const PortfolioPanel: React.FC<PortfolioPanelProps> = ({ onSaveSession })
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
                 <XAxis type="number" tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} tickLine={false} axisLine={false} tickFormatter={v => `${v}%`} />
                 <YAxis type="category" dataKey="symbol" tick={{ fontSize: 11, fill: 'var(--foreground)', fontWeight: 600 }} tickLine={false} axisLine={false} width={48} />
-                <Tooltip formatter={(v: number) => [`${v.toFixed(2)}%`, 'Risk Contrib']} contentStyle={tooltipStyle} />
+                <Tooltip formatter={(v: any) => [`${v.toFixed(2)}%`, 'Risk Contrib']} contentStyle={tooltipStyle} />
                 <Bar dataKey="contrib" radius={[0, 4, 4, 0]} label={{ position: 'right', fontSize: 11, formatter: (v: number) => `${v.toFixed(1)}%` }}>
                   {result.assets.map((_, i) => (
                     <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
@@ -554,7 +554,7 @@ export const PortfolioPanel: React.FC<PortfolioPanelProps> = ({ onSaveSession })
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis dataKey="i" tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} tickLine={false} axisLine={false} />
                 <YAxis domain={['auto', 'auto']} tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} tickLine={false} axisLine={false} width={48} tickFormatter={v => v.toFixed(2)} />
-                <Tooltip formatter={(v: number) => [v.toFixed(4), 'Portfolio']} labelFormatter={l => `Bar ${l}`} contentStyle={tooltipStyle} />
+                <Tooltip formatter={(v: any) => [v.toFixed(4), 'Portfolio']} labelFormatter={l => `Bar ${l}`} contentStyle={tooltipStyle} />
                 <ReferenceLine y={1} stroke="var(--muted-foreground)" strokeDasharray="4 3" />
                 <Line type="monotone" dataKey="v" stroke="var(--chart-1)" strokeWidth={1.5} dot={false} isAnimationActive={false} />
               </LineChart>

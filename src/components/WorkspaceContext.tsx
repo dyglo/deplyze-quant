@@ -180,7 +180,7 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     // 1b. Sync Organizations where user is a member
     // Firebase 'in' query limit is officially 30, but we use 10 to be safe and avoid any SDK bugs
     const chunkArray = (arr: string[], size: number) => {
-      const chunks = [];
+      const chunks: string[][] = [];
       for (let i = 0; i < arr.length; i += size) {
         chunks.push(arr.slice(i, i + size));
       }

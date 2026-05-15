@@ -370,7 +370,7 @@ export const AlphaPanel: React.FC<AlphaPanelProps> = ({ defaultSymbol = 'SPY', o
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis dataKey="i" tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} tickLine={false} axisLine={false} />
                 <YAxis domain={['auto', 'auto']} tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} tickLine={false} axisLine={false} width={44} tickFormatter={v => `${v.toFixed(0)}%`} />
-                <Tooltip formatter={(v: number) => [`${v.toFixed(2)}%`, 'Ann. Vol']} labelFormatter={l => `Bar ${l}`} contentStyle={tooltipStyle} />
+                <Tooltip formatter={(v: any) => [`${v.toFixed(2)}%`, 'Ann. Vol']} labelFormatter={l => `Bar ${l}`} contentStyle={tooltipStyle} />
                 <Line type="monotone" dataKey="v" stroke="var(--chart-1)" strokeWidth={1.5} dot={false} isAnimationActive={false} />
               </LineChart>
             </ResponsiveContainer>
@@ -396,7 +396,7 @@ export const AlphaPanel: React.FC<AlphaPanelProps> = ({ defaultSymbol = 'SPY', o
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis dataKey="i" tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} tickLine={false} axisLine={false} />
                 <YAxis domain={['auto', 'auto']} tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} tickLine={false} axisLine={false} width={36} tickFormatter={v => v.toFixed(1)} />
-                <Tooltip formatter={(v: number) => [v.toFixed(3), 'Z-score']} labelFormatter={l => `Bar ${l}`} contentStyle={tooltipStyle} />
+                <Tooltip formatter={(v: any) => [v.toFixed(3), 'Z-score']} labelFormatter={l => `Bar ${l}`} contentStyle={tooltipStyle} />
                 <ReferenceLine y={2} stroke="#b04848" strokeDasharray="4 3" label={{ value: '+2σ', position: 'right', fontSize: 10, fill: '#b04848' }} />
                 <ReferenceLine y={1} stroke="rgba(176,72,72,0.4)" strokeDasharray="4 3" />
                 <ReferenceLine y={0} stroke="var(--border)" />
@@ -423,7 +423,7 @@ export const AlphaPanel: React.FC<AlphaPanelProps> = ({ defaultSymbol = 'SPY', o
                 <XAxis dataKey="i" tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} tickLine={false} axisLine={false} />
                 <YAxis domain={['auto', 'auto']} tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} tickLine={false} axisLine={false} width={52} tickFormatter={v => v.toFixed(0)} />
                 <Tooltip
-                  formatter={(v: number | null, name: string) => [v != null ? v.toFixed(2) : '—', name === 'price' ? 'Price' : name === 'fast' ? `SMA ${result.fastWindow}` : `SMA ${result.slowWindow}`]}
+                  formatter={(v: any, name: string) => [v != null ? v.toFixed(2) : '—', name === 'price' ? 'Price' : name === 'fast' ? `SMA ${result.fastWindow}` : `SMA ${result.slowWindow}`]}
                   labelFormatter={l => `Bar ${l}`}
                   contentStyle={tooltipStyle}
                 />
@@ -451,7 +451,7 @@ export const AlphaPanel: React.FC<AlphaPanelProps> = ({ defaultSymbol = 'SPY', o
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                   <XAxis dataKey="i" tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} tickLine={false} axisLine={false} />
                   <YAxis domain={[-1, 1]} tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} tickLine={false} axisLine={false} width={36} tickFormatter={v => v.toFixed(1)} />
-                  <Tooltip formatter={(v: number) => [v.toFixed(3), 'ρ']} labelFormatter={l => `Bar ${l}`} contentStyle={tooltipStyle} />
+                  <Tooltip formatter={(v: any) => [v.toFixed(3), 'ρ']} labelFormatter={l => `Bar ${l}`} contentStyle={tooltipStyle} />
                   <ReferenceLine y={0.5} stroke="rgba(193,95,60,0.35)" strokeDasharray="4 3" />
                   <ReferenceLine y={0} stroke="var(--border)" />
                   <ReferenceLine y={-0.5} stroke="rgba(106,155,204,0.35)" strokeDasharray="4 3" />

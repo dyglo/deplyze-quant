@@ -95,7 +95,7 @@ export const Settings: React.FC = () => {
           <div className="ds-surface" style={{ padding: 20, borderRadius: 12, display: 'grid', gap: 16 }}>
             <h2 className="ds-heading">Workspace (Research Desk)</h2>
             <Field label="Current workspace" value={currentWorkspace?.name ?? '—'} />
-            <Field label="Current project (strategy)" value={currentProject?.name ?? '—'} />
+            <Field label="Current asset (research strategy)" value={currentProject?.name ?? '—'} />
             <p className="ds-caption" style={{ color: 'var(--muted-foreground)' }}>
               Workspaces and projects map to the institutional concepts of research desk and strategy
               respectively. Use the sidebar to switch between them.

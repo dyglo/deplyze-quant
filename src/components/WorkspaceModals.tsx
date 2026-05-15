@@ -140,7 +140,7 @@ export const CreateProjectModal: React.FC<ModalProps> = ({ isOpen, onClose }) =>
   const { createNewProject } = useWorkspace();
   const [name, setName] = useState('');
   const [location, setLocation] = useState('');
-  const [type, setType] = useState('Tower Crane Tower');
+  const [type, setType] = useState('Systematic Alpha Strategy');
   const [desc, setDesc] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -169,22 +169,22 @@ export const CreateProjectModal: React.FC<ModalProps> = ({ isOpen, onClose }) =>
         <div className="ds-modal-header">
           <div className="flex items-center gap-2">
             <MapPin size={16} style={{ color: 'var(--primary)' }} />
-            <h2 className="ds-modal-title">New Operational Project</h2>
+            <h2 className="ds-modal-title">Initialize Research Asset</h2>
           </div>
           <button className="ds-modal-close" onClick={onClose}><X size={15} /></button>
         </div>
 
         <form onSubmit={handleSubmit} className="ds-modal-body">
           <p className="ds-caption mb-4" style={{ lineHeight: 1.4 }}>
-            Register a strategy / portfolio bucket inside this research desk. Watchlists, briefings, and intelligence artifacts live here.
+            Register a quantitative research environment or institutional project. Strategies, alpha signals, and portfolio intelligence live here.
           </p>
 
           <div className="ds-form-group">
-            <label className="ds-form-label">PROJECT NAME</label>
+            <label className="ds-form-label">INSTITUTIONAL PROJECT NAME</label>
             <input 
               type="text" 
               className="ds-input" 
-              placeholder="e.g. Skyline Towers Phase II"
+              placeholder="e.g. Q2 Systematic Alpha Fund"
               value={name}
               onChange={e => setName(e.target.value)}
               required
@@ -193,11 +193,11 @@ export const CreateProjectModal: React.FC<ModalProps> = ({ isOpen, onClose }) =>
           </div>
 
           <div className="ds-form-group">
-            <label className="ds-form-label">GEOGRAPHIC LOCATION</label>
+            <label className="ds-form-label">PRIMARY MARKET / JURISDICTION</label>
             <input 
               type="text" 
               className="ds-input" 
-              placeholder="e.g. Chicago, IL or London, UK"
+              placeholder="e.g. Global Equities or London, UK"
               value={location}
               onChange={e => setLocation(e.target.value)}
               required
@@ -205,25 +205,25 @@ export const CreateProjectModal: React.FC<ModalProps> = ({ isOpen, onClose }) =>
           </div>
 
           <div className="ds-form-group">
-            <label className="ds-form-label">SITE CONFIGURATION TYPE</label>
+            <label className="ds-form-label">ASSET CLASSIFICATION</label>
             <select 
               className="ds-input" 
               value={type}
               onChange={e => setType(e.target.value)}
             >
-              <option value="Tower Crane Tower">High-rise Tower Crane Area</option>
-              <option value="Excavation Zone">Heavy Excavation Pit</option>
-              <option value="Facade Perimeter">Facade & Scaffolding Perimeter</option>
-              <option value="Structural Concrete">Structural Concrete Deck</option>
-              <option value="Entry Gate Center">Logistics Entry/Exit Gate</option>
+              <option value="Systematic Alpha Strategy">Systematic Alpha Strategy</option>
+              <option value="Risk Management Framework">Risk Management Framework</option>
+              <option value="Execution & Order Flow">Execution & Order Flow</option>
+              <option value="Macro Portfolio Allocation">Macro Portfolio Allocation</option>
+              <option value="Data Ingestion & ETL">Data Ingestion & ETL</option>
             </select>
           </div>
 
           <div className="ds-form-group">
-            <label className="ds-form-label">DESCRIPTION (OPTIONAL)</label>
+            <label className="ds-form-label">RESEARCH SCOPE & OBJECTIVES (OPTIONAL)</label>
             <textarea 
               className="ds-input" 
-              placeholder="Provide a short description of site boundaries or camera focus details..."
+              placeholder="Define the scope of research, backtesting parameters, or strategy objectives..."
               style={{ minHeight: '4.5rem', resize: 'vertical' }}
               value={desc}
               onChange={e => setDesc(e.target.value)}
@@ -235,7 +235,7 @@ export const CreateProjectModal: React.FC<ModalProps> = ({ isOpen, onClose }) =>
             className="ds-btn ds-btn-primary w-full mt-2"
             disabled={submitting}
           >
-            {submitting ? 'REGISTERING SITE...' : 'REGISTER SITE'}
+            {submitting ? 'INITIALIZING ASSET...' : 'INITIALIZE RESEARCH ASSET'}
           </button>
         </form>
       </div>
@@ -258,7 +258,7 @@ export const WorkspaceSettingsModal: React.FC<ModalProps> = ({ isOpen, onClose }
     deleteWorkspace
   } = useWorkspace();
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<'members' | 'sites' | 'billing' | 'danger'>('members');
+  const [activeTab, setActiveTab] = useState<'members' | 'assets' | 'billing' | 'danger'>('members');
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<'admin' | 'manager' | 'viewer'>('viewer');
   const [inviting, setInviting] = useState(false);
@@ -305,7 +305,7 @@ export const WorkspaceSettingsModal: React.FC<ModalProps> = ({ isOpen, onClose }
           borderBottom: '1px solid var(--border)',
           background: 'var(--card)'
         }}>
-          {(['members', 'sites', 'billing', 'danger'] as const).map(tab => (
+          {(['members', 'assets', 'billing', 'danger'] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -325,7 +325,7 @@ export const WorkspaceSettingsModal: React.FC<ModalProps> = ({ isOpen, onClose }
               }}
             >
               {tab === 'members' && <span className="flex items-center gap-1.5"><Users size={12} /> Team Members</span>}
-              {tab === 'sites' && <span className="flex items-center gap-1.5"><Layers size={12} /> Sites ({projects.length})</span>}
+              {tab === 'assets' && <span className="flex items-center gap-1.5"><Layers size={12} /> Research Assets ({projects.length})</span>}
               {tab === 'billing' && <span className="flex items-center gap-1.5"><CreditCard size={12} /> Billing & Plan</span>}
               {tab === 'danger' && <span className="flex items-center gap-1.5"><AlertTriangle size={12} style={{ color: activeTab === 'danger' ? '#FF6B6B' : 'inherit' }} /> Danger Zone</span>}
             </button>
@@ -477,11 +477,11 @@ export const WorkspaceSettingsModal: React.FC<ModalProps> = ({ isOpen, onClose }
             </div>
           )}
 
-          {/* TAB 2: SITES */}
-          {activeTab === 'sites' && (
+          {/* TAB 2: RESEARCH ASSETS */}
+          {activeTab === 'assets' && (
             <div className="flex flex-col gap-4">
               <div className="flex justify-between items-center">
-                <p className="ds-caption" style={{ fontWeight: 600 }}>OPERATIONAL ENVIRONMENTS</p>
+                <p className="ds-caption" style={{ fontWeight: 600 }}>RESEARCH ASSETS & ENVIRONMENTS</p>
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
@@ -581,11 +581,11 @@ export const WorkspaceSettingsModal: React.FC<ModalProps> = ({ isOpen, onClose }
                     </div>
                   </div>
 
-                  {/* Sites capacity */}
+                  {/* Assets capacity */}
                   <div>
                     <div className="flex justify-between items-center text-xs font-mono mb-1">
-                      <span style={{ fontWeight: 600, color: 'var(--foreground)' }}>Active Sites / Projects</span>
-                      <span className="text-muted-foreground">{projects.length} / 10 sites ({((projects.length/10)*100).toFixed(0)}%)</span>
+                      <span style={{ fontWeight: 600, color: 'var(--foreground)' }}>Institutional Research Assets</span>
+                      <span className="text-muted-foreground">{projects.length} / 10 assets ({((projects.length/10)*100).toFixed(0)}%)</span>
                     </div>
                     <div style={{ height: '4px', background: 'var(--secondary)', borderRadius: '2px', overflow: 'hidden' }}>
                       <div style={{ height: '100%', width: `${(projects.length / 10) * 100}%`, background: 'var(--text-success, #788C5D)', borderRadius: '2px' }} />
@@ -632,7 +632,7 @@ export const WorkspaceSettingsModal: React.FC<ModalProps> = ({ isOpen, onClose }
                   <div className="flex-1">
                     <h3 style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--foreground)' }}>Delete Workspace</h3>
                     <p className="ds-caption mt-1" style={{ fontSize: '0.75rem', lineHeight: 1.4 }}>
-                      Permanently remove this workspace and all associated data, including sites, projects, media uploads, and AI reports. 
+                      Permanently remove this workspace and all associated data, including institutional projects, research assets, strategy logs, and intelligence reports. 
                       This action is irreversible.
                     </p>
                     
@@ -641,7 +641,7 @@ export const WorkspaceSettingsModal: React.FC<ModalProps> = ({ isOpen, onClose }
                         WARNING: CRITICAL DESTRUCTION
                       </p>
                       <p style={{ fontSize: '0.75rem', color: 'var(--muted-foreground)', marginTop: '0.25rem' }}>
-                        All <strong>{projects.length} sites</strong> and <strong>{members.length} member</strong> permissions will be revoked immediately.
+                        All <strong>{projects.length} research assets</strong> and <strong>{members.length} member</strong> permissions will be revoked immediately.
                       </p>
                     </div>
 

@@ -507,7 +507,7 @@ export const RiskPanel: React.FC<RiskPanelProps> = ({ defaultSymbol = 'SPY', onS
                   tickFormatter={v => v.toFixed(2)}
                 />
                 <Tooltip
-                  formatter={(val: number) => [val.toFixed(4), 'Value']}
+                  formatter={(val: any) => [val.toFixed(4), 'Value']}
                   labelFormatter={l => `Bar ${l}`}
                   contentStyle={{
                     background: 'var(--card)',

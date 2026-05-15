@@ -201,9 +201,9 @@ export const ArtifactDetailDrawerBody: React.FC<Props> = ({
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           {/* Confidence */}
           <div>
-            <Progress value={confidenceScore * 100}>
+            <Progress value={confidenceScore * 100 as any}>
               <ProgressLabel>Confidence</ProgressLabel>
-              <ProgressValue>{Math.round(confidenceScore * 100)}%</ProgressValue>
+              <ProgressValue>{() => `${Math.round(confidenceScore * 100)}%`}</ProgressValue>
               <ProgressTrack>
                 <ProgressIndicator />
               </ProgressTrack>
@@ -212,9 +212,9 @@ export const ArtifactDetailDrawerBody: React.FC<Props> = ({
           {/* Completeness */}
           {completenessScore != null && (
             <div>
-              <Progress value={completenessScore * 100}>
+              <Progress value={completenessScore * 100 as any}>
                 <ProgressLabel>Completeness</ProgressLabel>
-                <ProgressValue>{Math.round(completenessScore * 100)}%</ProgressValue>
+                <ProgressValue>{() => `${Math.round(completenessScore * 100)}%`}</ProgressValue>
                 <ProgressTrack>
                   <ProgressIndicator />
                 </ProgressTrack>

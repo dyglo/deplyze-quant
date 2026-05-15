@@ -15,7 +15,14 @@ import { InstrumentDrawerBody } from '../components/quant/InstrumentDrawerBody';
 import { HeadlineDrawerBody } from '../components/quant/HeadlineDrawerBody';
 import { RefreshCw } from 'lucide-react';
 
-const DEFAULT_WATCH = ['SPY', 'QQQ', 'GLD', 'TLT', 'UUP', 'BTC/USD'];
+// Grouped by asset class for breadth of market coverage
+const DEFAULT_WATCH = [
+  'SPY', 'QQQ', 'IWM',          // US Equities — broad market
+  'TLT', 'UUP',                  // Fixed income + USD
+  'XAU/USD', 'WTI/USD',          // Commodities
+  'EUR/USD', 'USD/JPY',          // FX
+  'BTC/USD', 'ETH/USD',          // Crypto
+];
 
 /** Tile with its own (cached) sparkline fetch — small extra round-trip per tile,
  *  but each is cached for 6h and dedup'd by the shared client cache. */
@@ -90,7 +97,7 @@ export const IntelligenceTerminal: React.FC = () => {
             </button>
           </div>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 10 }}>
           {DEFAULT_WATCH.map((sym) => {
             const row = quotes.data?.find((q) => q.symbol === sym);
             return (

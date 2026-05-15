@@ -30,11 +30,11 @@ export const CorrelationHeatmap: React.FC<{
     );
 
   return (
-    <div style={{ overflowX: 'auto' }}>
-      <table style={{ borderCollapse: 'collapse', fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>
+    <div style={{ overflowX: 'auto', width: '100%' }}>
+      <table style={{ borderCollapse: 'collapse', fontSize: 12, fontVariantNumeric: 'tabular-nums', width: '100%' }}>
         <thead>
           <tr>
-            <th />
+            <th style={{ minWidth: 90 }} />
             {symbols.map((s) => {
               const out = insufficient?.has(s);
               return (
@@ -43,9 +43,13 @@ export const CorrelationHeatmap: React.FC<{
                   className="ds-label"
                   title={out ? 'Insufficient data for this symbol' : undefined}
                   style={{
-                    padding: '4px 6px',
+                    padding: '8px 10px',
                     color: 'var(--muted-foreground)',
                     opacity: out ? 0.45 : 1,
+                    fontSize: 11,
+                    letterSpacing: '0.02em',
+                    minWidth: 80,
+                    textAlign: 'center',
                   }}
                 >
                   {s}
@@ -63,10 +67,13 @@ export const CorrelationHeatmap: React.FC<{
                   className="ds-label"
                   title={rowOut ? 'Insufficient data' : undefined}
                   style={{
-                    padding: '4px 6px',
+                    padding: '10px 14px 10px 6px',
                     textAlign: 'right',
                     color: 'var(--muted-foreground)',
                     opacity: rowOut ? 0.45 : 1,
+                    fontSize: 11,
+                    whiteSpace: 'nowrap',
+                    minWidth: 90,
                   }}
                 >
                   {row}
@@ -80,12 +87,13 @@ export const CorrelationHeatmap: React.FC<{
                   const cellStyle: React.CSSProperties = {
                     background: v == null ? 'var(--muted)' : colorFor(v),
                     color: 'var(--foreground)',
-                    border: hl ? '1px solid var(--primary)' : '1px solid var(--border)',
-                    padding: '6px 10px',
+                    border: hl ? '2px solid var(--primary)' : '1px solid var(--border)',
+                    padding: '10px 14px',
                     textAlign: 'center',
-                    minWidth: 48,
+                    minWidth: 80,
                     opacity: dim && !same ? 0.4 : 1,
-                    fontWeight: hl ? 700 : 400,
+                    fontWeight: hl ? 700 : same ? 600 : 400,
+                    fontSize: 13,
                   };
                   const display = v == null ? '—' : v.toFixed(2);
                   if (same || !onCellClick || dim || v == null) {

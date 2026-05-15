@@ -47,10 +47,17 @@ service cloud.firestore {
         match /artifacts/{artifactId} {
           allow read: if isSignedIn();
           allow create: if isSignedIn();
-          allow update: if isSignedIn()
-            && resource.data.createdBy == request.auth.uid;
+          // Any workspace member may update the mutable user-facing fields
+          // (saved state, tags, title, body). Full updates are restricted to the
+          // original creator. Agent-written artifacts have no createdBy so the
+          // field-scoped branch is the primary path for client updates.
+          allow update: if isSignedIn() && (
+            resource.data.get('createdBy', null) == request.auth.uid
+            || request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(['saved', 'tags', 'title', 'body', 'updatedAt'])
+          );
           allow delete: if isSignedIn()
-            && resource.data.createdBy == request.auth.uid
+            && resource.data.get('createdBy', null) == request.auth.uid
             && resource.data.source == 'user';
         }
         match /briefings/{briefingId} { allow read: if isSignedIn(); }

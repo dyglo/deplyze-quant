@@ -22,6 +22,7 @@ import { WarehouseExplorer } from './pages/WarehouseExplorer';
 import { Briefings } from './pages/Briefings';
 import { BriefingDetail } from './pages/BriefingDetail';
 import { ResearchLibrary } from './pages/ResearchLibrary';
+import { ArtifactPage } from './pages/ArtifactPage';
 
 const LoadingScreen: React.FC = () => (
   <div className="ds-loading-screen" style={{
@@ -75,6 +76,7 @@ export default function App() {
             <Route path="/briefings"            element={<ProtectedRoute><Briefings /></ProtectedRoute>} />
             <Route path="/briefings/:id"        element={<ProtectedRoute><BriefingDetail /></ProtectedRoute>} />
             <Route path="/library"              element={<ProtectedRoute><ResearchLibrary /></ProtectedRoute>} />
+            <Route path="/artifacts/:id"        element={<ProtectedRoute><ArtifactPage /></ProtectedRoute>} />
             <Route path="/settings"             element={<ProtectedRoute><Settings /></ProtectedRoute>} />
             <Route path="*"                     element={<Navigate to="/" replace />} />
           </Routes>

@@ -53,11 +53,16 @@ const SERIES = {
   CPI:        { fn: 'CPI', interval: 'monthly', name: 'Consumer Price Index', unit: 'index' },
   INFLATION:  { fn: 'INFLATION', interval: undefined, name: 'US Inflation (annual)', unit: '%' },
   FEDFUNDS:   { fn: 'FEDERAL_FUNDS_RATE', interval: 'monthly', name: 'Federal Funds Rate', unit: '%' },
-  DGS10:      { fn: 'TREASURY_YIELD', interval: 'monthly', maturity: '10year', name: '10Y Treasury Yield', unit: '%' },
   DGS2:       { fn: 'TREASURY_YIELD', interval: 'monthly', maturity: '2year', name: '2Y Treasury Yield', unit: '%' },
   DGS3M:      { fn: 'TREASURY_YIELD', interval: 'monthly', maturity: '3month', name: '3M Treasury Yield', unit: '%' },
-  GDP:        { fn: 'REAL_GDP', interval: 'quarterly', name: 'Real GDP', unit: 'B USD' },
+  DGS5:       { fn: 'TREASURY_YIELD', interval: 'monthly', maturity: '5year', name: '5Y Treasury Yield', unit: '%' },
+  DGS10:      { fn: 'TREASURY_YIELD', interval: 'monthly', maturity: '10year', name: '10Y Treasury Yield', unit: '%' },
+  DGS20:      { fn: 'TREASURY_YIELD', interval: 'monthly', maturity: '20year', name: '20Y Treasury Yield', unit: '%' },
+  DGS30:      { fn: 'TREASURY_YIELD', interval: 'monthly', maturity: '30year', name: '30Y Treasury Yield', unit: '%' },
+  T5YIE:      { fn: 'INFLATION_EXPECTATION', interval: undefined, name: '5Y Breakeven Inflation', unit: '%' },
+  UNRATE:     { fn: 'UNEMPLOYMENT', interval: undefined, name: 'Unemployment Rate', unit: '%' },
   UNEMP:      { fn: 'UNEMPLOYMENT', interval: undefined, name: 'Unemployment Rate', unit: '%' },
+  GDP:        { fn: 'REAL_GDP', interval: 'quarterly', name: 'Real GDP', unit: 'B USD' },
   RETAILSALES:{ fn: 'RETAIL_SALES', interval: undefined, name: 'Retail Sales', unit: 'M USD' },
 } as const;
 

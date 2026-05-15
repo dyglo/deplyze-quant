@@ -56,7 +56,7 @@ export const IntelligenceTerminal: React.FC = () => {
     currentProject?.id ?? null,
   );
   const timeline = useTimeline(currentWorkspace?.id ?? null, currentProject?.id ?? null);
-  const { pinMap } = usePins(currentWorkspace?.id ?? null, currentProject?.id ?? null);
+  const { pinMap, pin, unpin } = usePins(currentWorkspace?.id ?? null, currentProject?.id ?? null);
   const pinnedIds = useMemo(() => new Set(pinMap.keys()), [pinMap]);
   const [activeTab, setActiveTab] = useState<'feed' | 'timeline'>('feed');
 
@@ -169,6 +169,8 @@ export const IntelligenceTerminal: React.FC = () => {
               loading={timeline.loading}
               onOpenArtifact={handleOpenArtifact}
               pinnedIds={pinnedIds}
+              onPin={pin}
+              onUnpin={unpin}
             />
           )}
         </section>

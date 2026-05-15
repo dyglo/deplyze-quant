@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { useMacroSeries } from '../hooks/useMacro';
 import { useWebResearch } from '../hooks/useResearch';
 import { useDrawer } from '../components/quant/DataDrawer';
@@ -7,9 +7,11 @@ import { MacroMultiChart, type MacroRange, type MacroScale, type MacroSeriesEntr
 import { FreshnessBadge, SourceBadge } from '../components/quant/FreshnessBadge';
 import { Disclaimer } from '../components/quant/Disclaimer';
 import { Sparkline } from '../components/quant/Sparkline';
+import { ArtifactDetailDrawerBody } from '../components/quant/ArtifactDetailDrawerBody';
 import { RotateCcw, Save, Loader2 } from 'lucide-react';
 import type { MacroSeries } from '../types';
 import { createMacroShiftArtifact } from '../services/artifactService';
+import { useArtifacts, useBriefings } from '../hooks/useArtifacts';
 import { useWorkspace } from '../components/WorkspaceContext';
 import { useAuth } from '../components/AuthProvider';
 import { toast } from 'sonner';
@@ -62,6 +64,8 @@ export const MacroRegimeDesk: React.FC = () => {
   const drawer = useDrawer();
   const { currentWorkspace, currentProject } = useWorkspace();
   const { user } = useAuth();
+  const artifacts = useArtifacts(currentWorkspace?.id ?? null, currentProject?.id ?? null);
+  const briefings = useBriefings(currentWorkspace?.id ?? null, currentProject?.id ?? null);
   const [active, setActive] = useState<string[]>(['FEDFUNDS', 'DGS10', 'CPI']);
   const [range, setRange] = useState<MacroRange>('5Y');
   const [scale, setScale] = useState<MacroScale>('indexed');
@@ -129,6 +133,29 @@ export const MacroRegimeDesk: React.FC = () => {
       })
       .filter((x): x is string => x !== null)
       .join('\n');
+
+  const handleOpenArtifact = useCallback((id: string) => {
+    const artifact = artifacts.items.find((a) => a.id === id);
+    if (!artifact) return;
+    drawer.open({
+      title: artifact.title,
+      subtitle: artifact.artifactType ?? artifact.category,
+      width: 560,
+      body: <ArtifactDetailDrawerBody artifact={artifact} relatedArtifacts={artifacts.items} onOpenArtifact={handleOpenArtifact} />,
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [artifacts.items, drawer]);
+
+  const macroArtifacts = useMemo(() =>
+    artifacts.items
+      .filter((a) =>
+        a.artifactType === 'macro_shift' ||
+        a.tags?.includes('macro') ||
+        a.relatedMacroIndicators?.some((m) => active.includes(m)),
+      )
+      .slice(0, 4),
+    [artifacts.items, active],
+  );
 
   const handleSaveMacroContext = async () => {
     if (!currentWorkspace?.id || !currentProject?.id || !user) return;
@@ -400,6 +427,40 @@ export const MacroRegimeDesk: React.FC = () => {
           ))}
         </ul>
       </section>
+
+      {/* Related Macro Research */}
+      {macroArtifacts.length > 0 && (
+        <section style={{ marginBottom: 24 }}>
+          <h4 className="ds-label" style={{ margin: '0 0 10px', color: 'var(--muted-foreground)' }}>
+            Related Macro Research
+          </h4>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 8 }}>
+            {macroArtifacts.map((a) => (
+              <button
+                key={a.id}
+                onClick={() => handleOpenArtifact(a.id)}
+                className="ds-surface ds-transition"
+                style={{ padding: '10px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', textAlign: 'left', display: 'grid', gap: 4 }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'space-between' }}>
+                  <span className="ds-label" style={{ color: 'var(--muted-foreground)', textTransform: 'capitalize' }}>
+                    {(a.artifactType ?? a.category).replace(/_/g, ' ')}
+                  </span>
+                  <span className="ds-caption" style={{ color: 'var(--muted-foreground)' }}>
+                    {new Date(a.createdAt).toLocaleDateString()}
+                  </span>
+                </div>
+                <span className="ds-body" style={{ fontWeight: 600, fontSize: 13 }}>{a.title}</span>
+                {a.relatedMacroIndicators?.length ? (
+                  <span className="ds-caption" style={{ color: 'var(--muted-foreground)' }}>
+                    {a.relatedMacroIndicators.slice(0, 3).join(' · ')}
+                  </span>
+                ) : null}
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
 
       <Disclaimer />
     </div>

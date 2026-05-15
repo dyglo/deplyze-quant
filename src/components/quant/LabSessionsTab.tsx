@@ -1,7 +1,7 @@
 import React, { useCallback } from 'react';
 import { Trash2, RotateCcw } from 'lucide-react';
 import { LineChart, Line, ResponsiveContainer, Tooltip } from 'recharts';
-import type { LabSession } from '../../types';
+import type { LabSession, LabSessionAssetSnapshot } from '../../types';
 
 interface Props {
   sessions: LabSession[];
@@ -54,7 +54,7 @@ const WeightBar: React.FC<{ assets: Array<{ symbol: string; weight?: number }> }
 };
 
 // Alpha metrics ranked list
-const AlphaRankList: React.FC<{ metrics: LabSession['rawSnapshot'] extends { alphaMetrics?: infer M } ? M : never }> = ({ metrics }) => {
+const AlphaRankList: React.FC<{ metrics: LabSessionAssetSnapshot[] | undefined }> = ({ metrics }) => {
   if (!metrics?.length) return null;
   const sorted = [...metrics].sort((a, b) => b.annReturn - a.annReturn);
   return (

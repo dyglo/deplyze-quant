@@ -122,6 +122,7 @@ export const AlphaPanel: React.FC<AlphaPanelProps> = ({ defaultSymbol = 'SPY', o
   const [running, setRunning] = useState(false);
   const [results, setResults] = useState<AssetResult[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [failedSymbols, setFailedSymbols] = useState<string[]>([]);
   const [copied, setCopied] = useState(false);
 
   const addRow = useCallback(() => {
@@ -144,7 +145,7 @@ export const AlphaPanel: React.FC<AlphaPanelProps> = ({ defaultSymbol = 'SPY', o
   const run = useCallback(async () => {
     const validRows = rows.filter(r => r.symbol.trim());
     if (!validRows.length) return;
-    setRunning(true); setError(null);
+    setRunning(true); setError(null); setFailedSymbols([]);
     try {
       const ppy = PPY_MAP[timeframe] ?? 252;
       const outputsize = SIZE_MAP[timeframe] ?? 250;
@@ -161,11 +162,13 @@ export const AlphaPanel: React.FC<AlphaPanelProps> = ({ defaultSymbol = 'SPY', o
         ? (Math.exp(mean(benchLr) * ppy) - 1)
         : null;
 
+      const newFailed: string[] = [];
       const computed: AssetResult[] = settled.map((res, i) => {
         const row = validRows[i];
-        if (res.status === 'rejected') return null;
+        const sym = row.symbol.trim().toUpperCase();
+        if (res.status === 'rejected') { newFailed.push(sym); return null; }
         const { bars } = res.value;
-        if (bars.length < 5) return null;
+        if (bars.length < 5) { newFailed.push(sym); return null; }
         const cs = closes(bars);
         const lr = logReturns(cs);
         const annVol = annualisedVol(lr, ppy) * 100;
@@ -185,9 +188,10 @@ export const AlphaPanel: React.FC<AlphaPanelProps> = ({ defaultSymbol = 'SPY', o
             ir = informationRatio(annReturn, benchAnnReturn, te);
           }
         }
-        return { symbol: row.symbol.trim().toUpperCase(), isBenchmark: row.isBenchmark, bars, lr, annVol, annReturn, sharpe, beta: b, alpha, infoRatio: ir, trackingError: te, rebased };
+        return { symbol: sym, isBenchmark: row.isBenchmark, bars, lr, annVol, annReturn, sharpe, beta: b, alpha, infoRatio: ir, trackingError: te, rebased };
       }).filter((x): x is AssetResult => x !== null);
 
+      setFailedSymbols(newFailed);
       setResults(computed);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -321,6 +325,12 @@ export const AlphaPanel: React.FC<AlphaPanelProps> = ({ defaultSymbol = 'SPY', o
           )}
         </div>
         {error && <p style={{ color: 'var(--chart-1)', fontSize: 12, marginTop: 8, display: 'flex', alignItems: 'center', gap: 6 }}><AlertTriangle size={13} />{error}</p>}
+        {failedSymbols.length > 0 && (
+          <p style={{ color: 'var(--chart-1)', fontSize: 12, marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <AlertTriangle size={13} />
+            Could not load: <strong>{failedSymbols.join(', ')}</strong> — check symbols or retry (may be rate-limited).
+          </p>
+        )}
       </section>
 
       {results.length === 0 && !running && (

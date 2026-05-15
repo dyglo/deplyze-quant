@@ -502,7 +502,7 @@ export function efficientFrontierPoints(
   const annReturns = returnSeries.map(lr =>
     lr.length >= 2 ? (Math.exp(mean(lr) * ppy) - 1) : 0
   );
-  const points = [];
+  const points: Array<{ vol: number; ret: number; sharpe: number; weights: number[] }> = [];
   for (let i = 0; i < n; i++) {
     // Random Dirichlet weights
     const raw = Array.from({ length: k }, () => -Math.log(Math.random() + 1e-10));

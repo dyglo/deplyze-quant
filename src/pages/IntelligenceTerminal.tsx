@@ -1,11 +1,14 @@
-import React from 'react';
+import React, { useCallback, useState } from 'react';
 import { useBatchQuotes, useHeadlines, useOHLCV } from '../hooks/useMarket';
 import { useArtifacts } from '../hooks/useArtifacts';
+import { useTimeline } from '../hooks/useTimeline';
 import { useWorkspace } from '../components/WorkspaceContext';
 import { useDrawer } from '../components/quant/DataDrawer';
 import { PageHeader } from '../components/quant/PageHeader';
 import { MarketTile } from '../components/quant/MarketTile';
 import { IntelligenceFeed } from '../components/quant/IntelligenceFeed';
+import { ResearchTimeline } from '../components/quant/ResearchTimeline';
+import { ArtifactDetailDrawerBody } from '../components/quant/ArtifactDetailDrawerBody';
 import { Disclaimer } from '../components/quant/Disclaimer';
 import { FreshnessBadge } from '../components/quant/FreshnessBadge';
 import { InstrumentDrawerBody } from '../components/quant/InstrumentDrawerBody';
@@ -44,6 +47,19 @@ export const IntelligenceTerminal: React.FC = () => {
     currentWorkspace?.id ?? null,
     currentProject?.id ?? null,
   );
+  const timeline = useTimeline(currentWorkspace?.id ?? null, currentProject?.id ?? null);
+  const [activeTab, setActiveTab] = useState<'feed' | 'timeline'>('feed');
+
+  const handleOpenArtifact = useCallback((id: string) => {
+    const artifact = artifacts.items.find((a) => a.id === id);
+    if (!artifact) return;
+    drawer.open({
+      title: artifact.title,
+      subtitle: artifact.category,
+      width: 560,
+      body: <ArtifactDetailDrawerBody artifact={artifact} />,
+    });
+  }, [artifacts.items, drawer]);
 
   return (
     <div style={{ padding: '0 24px 32px', maxWidth: 1280, margin: '0 auto' }}>
@@ -97,15 +113,47 @@ export const IntelligenceTerminal: React.FC = () => {
       </section>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 24 }}>
-        {/* Agent artifacts */}
+        {/* Intelligence Feed / Research Timeline */}
         <section>
-          <h2 className="ds-heading" style={{ marginBottom: 10 }}>Intelligence Feed</h2>
-          <IntelligenceFeed
-            items={artifacts.items}
-            loading={artifacts.loading}
-            emptyTitle="No intelligence artifacts yet"
-            emptyHint="Autonomous research agents start producing artifacts in Phase 5. Until then the feed will be empty; the Research Copilot is available for on-demand analysis."
-          />
+          {/* Tab bar */}
+          <nav style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--border)', marginBottom: 14 }}>
+            {(['feed', 'timeline'] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                style={{
+                  padding: '7px 14px',
+                  border: 'none',
+                  borderBottom: activeTab === tab ? '2px solid var(--primary)' : '2px solid transparent',
+                  background: 'transparent',
+                  cursor: 'pointer',
+                  fontSize: 13,
+                  fontWeight: activeTab === tab ? 700 : 500,
+                  color: activeTab === tab ? 'var(--primary)' : 'var(--muted-foreground)',
+                  marginBottom: -1,
+                  transition: 'color 0.12s, border-color 0.12s',
+                }}
+              >
+                {tab === 'feed' ? 'Intelligence Feed' : 'Research Timeline'}
+              </button>
+            ))}
+          </nav>
+
+          {activeTab === 'feed' ? (
+            <IntelligenceFeed
+              items={artifacts.items}
+              loading={artifacts.loading}
+              emptyTitle="No intelligence artifacts yet"
+              emptyHint="Autonomous research agents start producing artifacts in Phase 5. Until then the feed will be empty; the Research Copilot is available for on-demand analysis."
+              onOpen={handleOpenArtifact}
+            />
+          ) : (
+            <ResearchTimeline
+              events={timeline.events}
+              loading={timeline.loading}
+              onOpenArtifact={handleOpenArtifact}
+            />
+          )}
         </section>
 
         {/* Headlines */}

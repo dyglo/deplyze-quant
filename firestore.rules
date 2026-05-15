@@ -37,6 +37,13 @@ service cloud.firestore {
         get(/databases/$(database)/documents/workspaces/$(wid)).data.ownerUid == uid();
     }
 
+    // Legacy alias: WorkspaceContext writes to 'organizations' with field 'ownerId'
+    function isOrgOwner(orgId) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/organizations/$(orgId)) &&
+        get(/databases/$(database)/documents/organizations/$(orgId)).data.ownerId == uid();
+    }
+
     // ─── Users ────────────────────────────────────────────────────────────
     match /users/{userId} {
       allow read: if isSignedIn();
@@ -120,6 +127,29 @@ service cloud.firestore {
       match /apiKeys/{provider} {
         allow read, write: if false;
       }
+    }
+
+    // ─── Legacy: organizations (alias of workspaces used by WorkspaceContext) ──
+    // WorkspaceContext.tsx writes here with ownerId (not ownerUid)
+    match /organizations/{orgId} {
+      allow read: if isMember(orgId) || isOrgOwner(orgId);
+      allow create: if isSignedIn() && request.resource.data.ownerId == uid();
+      allow update: if isOrgOwner(orgId);
+      allow delete: if isOrgOwner(orgId);
+    }
+
+    // ─── Legacy: sites (projects used by firestoreService) ────────────────
+    // firestoreService.ts writes projects to /sites with orgId field
+    match /sites/{siteId} {
+      allow read: if isSignedIn() && (
+        isMember(resource.data.orgId) || isOrgOwner(resource.data.orgId)
+      );
+      allow create: if isSignedIn() && (
+        isMember(request.resource.data.orgId) || isOrgOwner(request.resource.data.orgId)
+      );
+      allow update, delete: if isSignedIn() && (
+        isMember(resource.data.orgId) || isOrgOwner(resource.data.orgId)
+      );
     }
 
     // ─── Server-only collections ──────────────────────────────────────────

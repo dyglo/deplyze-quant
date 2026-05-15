@@ -122,17 +122,22 @@ app.get('/health', (_req, res) => {
 });
 
 // All /v1 routes require a verified Firebase ID token + per-user rate limit.
-app.use('/v1', authenticate, userRateLimiter);
-app.use('/v1/market', marketRouter);
-app.use('/v1/macro', macroRouter);
-app.use('/v1/research', researchRouter);
-app.use('/v1/copilot', copilotRouter);
-app.use('/v1/instruments', instrumentsRouter);
-app.use('/v1/providers', providersRouter);
-app.use('/v1/briefings', briefingsRouter);
-app.use('/v1/fundamentals', fundamentalsRouter);
-app.use('/v1/earnings', earningsRouter);
-app.use('/v1/edgar', edgarRouter);
+// Support both /v1 and /api/v1 (prod proxy)
+const router = express.Router();
+router.use(authenticate, userRateLimiter);
+router.use('/market', marketRouter);
+router.use('/macro', macroRouter);
+router.use('/research', researchRouter);
+router.use('/copilot', copilotRouter);
+router.use('/instruments', instrumentsRouter);
+router.use('/providers', providersRouter);
+router.use('/briefings', briefingsRouter);
+router.use('/fundamentals', fundamentalsRouter);
+router.use('/earnings', earningsRouter);
+router.use('/edgar', edgarRouter);
+
+app.use('/v1', router);
+app.use('/api/v1', router);
 
 app.use((_req, res) => {
   res.status(404).json({ error: 'Not Found', code: 'NOT_FOUND' });

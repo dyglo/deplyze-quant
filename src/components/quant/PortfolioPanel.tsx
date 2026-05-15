@@ -104,7 +104,7 @@ const SaveSessionInline: React.FC<{ onSave: (name: string) => Promise<void> }> =
         onKeyDown={(e) => { if (e.key === 'Escape') setOpen(false); }}
       />
       <button
-        onClick={async () => { setSaving(true); try { await onSave(name || defaultName); setOpen(false); } finally { setSaving(false); } }}
+        onClick={async () => { setSaving(true); try { await onSave(name || defaultName); setOpen(false); } catch { toast.error('Failed to save session'); } finally { setSaving(false); } }}
         disabled={saving}
         style={{ padding: '4px 10px', borderRadius: 6, border: 'none', background: 'var(--primary)', color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
       >

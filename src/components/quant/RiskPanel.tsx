@@ -81,6 +81,7 @@ const SaveSessionInline: React.FC<{ onSave: (name: string) => Promise<void> }> =
         onClick={async () => {
           setSaving(true);
           try { await onSave(name || defaultName); setOpen(false); }
+          catch { toast.error('Failed to save session'); }
           finally { setSaving(false); }
         }}
         disabled={saving}

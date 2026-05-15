@@ -56,19 +56,16 @@ export const QuantLab: React.FC = () => {
   const handleSaveSession = async (payload: PanelSavePayload) => {
     if (!currentWorkspace?.id || !currentProject?.id || !user) {
       toast.error('No workspace selected');
-      return;
+      throw new Error('No workspace selected');
     }
-    try {
-      const sessionPayload: Omit<LabSession, 'id' | 'createdAt'> = {
-        ...payload,
-        workspaceId: currentWorkspace.id,
-        projectId: currentProject.id,
-        savedBy: user.uid,
-      };
-      await saveSession(sessionPayload);
-    } catch {
-      toast.error('Failed to save session');
-    }
+    const sessionPayload: Omit<LabSession, 'id' | 'createdAt'> = {
+      ...payload,
+      workspaceId: currentWorkspace.id,
+      projectId: currentProject.id,
+      savedBy: user.uid,
+    };
+    await saveSession(sessionPayload);
+    // Throws propagate to the panel's onSave — success toast only fires when this resolves
   };
 
   return (

@@ -1,7 +1,7 @@
 /**
- * artifactService — Firestore reads for agent-generated intelligence artifacts
- * and institutional briefings. Writes are server-side only (gateway / agents
- * via Admin SDK), so this module is read-only.
+ * artifactService — Firestore reads and writes for agent-generated intelligence artifacts
+ * and institutional briefings. Supports both client-side writes and server-side writes
+ * (gateway / agents via Admin SDK).
  *
  * In Phase 1 these collections are empty until the agentic layer (Phase 5)
  * starts producing artifacts. UI components handle the empty-state path.
@@ -79,7 +79,7 @@ export async function updateArtifact(
   workspaceId: string,
   projectId: string,
   artifactId: string,
-  updates: Partial<IntelligenceArtifact>,
+  updates: Partial<Omit<IntelligenceArtifact, 'id' | 'workspaceId' | 'projectId' | 'createdAt'>>,
 ): Promise<void> {
   await updateDoc(
     doc(db, 'workspaces', workspaceId, 'projects', projectId, 'artifacts', artifactId),
@@ -97,12 +97,12 @@ export async function deleteArtifact(
   );
 }
 
-export function saveArtifact(wid: string, pid: string, id: string): Promise<void> {
-  return updateArtifact(wid, pid, id, { saved: true } as Partial<IntelligenceArtifact>);
+export function saveArtifact(workspaceId: string, projectId: string, artifactId: string): Promise<void> {
+  return updateArtifact(workspaceId, projectId, artifactId, { saved: true } as Partial<IntelligenceArtifact>);
 }
 
-export function unsaveArtifact(wid: string, pid: string, id: string): Promise<void> {
-  return updateArtifact(wid, pid, id, { saved: false } as Partial<IntelligenceArtifact>);
+export function unsaveArtifact(workspaceId: string, projectId: string, artifactId: string): Promise<void> {
+  return updateArtifact(workspaceId, projectId, artifactId, { saved: false } as Partial<IntelligenceArtifact>);
 }
 
 // ─── Related intelligence query ──────────────────────────────────────────────
@@ -211,6 +211,7 @@ export function createArtifactFromCopilot(
     tags: ['copilot'],
     confidence: 0.7,
     confidenceScore: 0.7,
+    completenessScore: 0.7,
     significance: 0.5,
     evidence: [],
     createdBy: uid,

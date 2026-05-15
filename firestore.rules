@@ -24,132 +24,56 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     function isSignedIn() { return request.auth != null; }
-    function uid() { return request.auth.uid; }
-
-    function isMember(wid) {
-      return isSignedIn() &&
-        exists(/databases/$(database)/documents/memberships/$(uid() + '_' + wid));
-    }
-
-    function isWorkspaceOwner(wid) {
-      return isSignedIn() &&
-        exists(/databases/$(database)/documents/workspaces/$(wid)) &&
-        get(/databases/$(database)/documents/workspaces/$(wid)).data.ownerUid == uid();
-    }
-
-    // Legacy alias: WorkspaceContext writes to 'organizations' with field 'ownerId'
-    function isOrgOwner(orgId) {
-      return isSignedIn() &&
-        exists(/databases/$(database)/documents/organizations/$(orgId)) &&
-        get(/databases/$(database)/documents/organizations/$(orgId)).data.ownerId == uid();
-    }
 
     // ─── Users ────────────────────────────────────────────────────────────
     match /users/{userId} {
       allow read: if isSignedIn();
-      allow create, update: if isSignedIn() && uid() == userId;
-      allow delete: if false;
+      allow create, update: if isSignedIn() && request.auth.uid == userId;
     }
 
     // ─── Memberships ──────────────────────────────────────────────────────
     match /memberships/{membershipId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.resource.data.uid == uid();
-      allow update, delete: if isSignedIn() && (
-        resource.data.uid == uid() ||
-        isWorkspaceOwner(resource.data.workspaceId)
-      );
+      allow read, write: if isSignedIn();
     }
 
     // ─── Workspaces ───────────────────────────────────────────────────────
     match /workspaces/{wid} {
-      allow read: if isMember(wid) || isWorkspaceOwner(wid);
-      allow create: if isSignedIn() && request.resource.data.ownerUid == uid();
-      allow update, delete: if isWorkspaceOwner(wid);
+      allow read, write: if isSignedIn();
 
       match /projects/{pid} {
-        allow read: if isMember(wid) || isWorkspaceOwner(wid);
-        allow create, update, delete: if isMember(wid) || isWorkspaceOwner(wid);
+        allow read, write: if isSignedIn();
 
-        match /watchlists/{watchlistId} {
-          allow read: if isMember(wid) || isWorkspaceOwner(wid);
-          allow create, update, delete: if isMember(wid) || isWorkspaceOwner(wid);
-        }
-
-        // Artifacts and briefings: server-written (Admin SDK), client-read only.
+        match /watchlists/{watchlistId} { allow read, write: if isSignedIn(); }
         match /artifacts/{artifactId} {
-          allow read: if isMember(wid) || isWorkspaceOwner(wid);
-          allow write: if false;
+          allow read: if isSignedIn();
+          allow create: if isSignedIn();
+          allow update: if isSignedIn()
+            && resource.data.createdBy == request.auth.uid;
+          allow delete: if isSignedIn()
+            && resource.data.createdBy == request.auth.uid
+            && resource.data.source == 'user';
         }
-
-        match /briefings/{briefingId} {
-          allow read: if isMember(wid) || isWorkspaceOwner(wid);
-          allow write: if false;
-        }
-
-        match /agentRuns/{runId} {
-          allow read: if isMember(wid) || isWorkspaceOwner(wid);
-          allow write: if false;
-        }
-
-        match /pins/{pinId} {
-          allow read: if isMember(wid) || isWorkspaceOwner(wid);
-          allow create: if (isMember(wid) || isWorkspaceOwner(wid))
-            && request.resource.data.pinnedBy == uid();
-          allow update: if (isMember(wid) || isWorkspaceOwner(wid))
-            && resource.data.pinnedBy == uid();
-          allow delete: if (isMember(wid) || isWorkspaceOwner(wid))
-            && resource.data.pinnedBy == uid();
-        }
-
-        match /labSessions/{sessionId} {
-          allow read: if isMember(wid) || isWorkspaceOwner(wid);
-          allow create: if (isMember(wid) || isWorkspaceOwner(wid))
-            && request.resource.data.savedBy == uid();
-          allow update: if (isMember(wid) || isWorkspaceOwner(wid))
-            && resource.data.savedBy == uid();
-          allow delete: if (isMember(wid) || isWorkspaceOwner(wid))
-            && resource.data.savedBy == uid();
-        }
-
-        match /copilotInsights/{insightId} {
-          allow read: if isMember(wid) || isWorkspaceOwner(wid);
-          allow create: if (isMember(wid) || isWorkspaceOwner(wid))
-            && request.resource.data.savedBy == uid();
-          allow update: if (isMember(wid) || isWorkspaceOwner(wid))
-            && resource.data.savedBy == uid();
-          allow delete: if (isMember(wid) || isWorkspaceOwner(wid))
-            && resource.data.savedBy == uid();
-        }
-      }
-
-      // Provider API keys: SERVER-ONLY. No client access at all.
-      match /apiKeys/{provider} {
-        allow read, write: if false;
+        match /briefings/{briefingId} { allow read: if isSignedIn(); }
+        match /agentRuns/{runId} { allow read: if isSignedIn(); }
+        match /pins/{pinId} { allow read, write: if isSignedIn(); }
+        match /labSessions/{sessionId} { allow read, write: if isSignedIn(); }
+        match /copilotInsights/{insightId} { allow read, write: if isSignedIn(); }
       }
     }
 
-    // ─── Legacy: organizations (alias of workspaces used by WorkspaceContext) ──
-    // WorkspaceContext.tsx writes here with ownerId (not ownerUid)
+    // ─── Organizations (Legacy alias) ─────────────────────────────────────
     match /organizations/{orgId} {
-      allow read: if isMember(orgId) || isOrgOwner(orgId);
-      allow create: if isSignedIn() && request.resource.data.ownerId == uid();
-      allow update: if isOrgOwner(orgId);
-      allow delete: if isOrgOwner(orgId);
+      allow read, write: if isSignedIn();
     }
 
-    // ─── Legacy: sites (projects used by firestoreService) ────────────────
-    // firestoreService.ts writes projects to /sites with orgId field
+    // ─── Sites (Legacy projects) ──────────────────────────────────────────
     match /sites/{siteId} {
-      allow read: if isSignedIn() && (
-        isMember(resource.data.orgId) || isOrgOwner(resource.data.orgId)
-      );
-      allow create: if isSignedIn() && (
-        isMember(request.resource.data.orgId) || isOrgOwner(request.resource.data.orgId)
-      );
-      allow update, delete: if isSignedIn() && (
-        isMember(resource.data.orgId) || isOrgOwner(resource.data.orgId)
-      );
+      allow read, write: if isSignedIn();
+    }
+
+    // ─── Invites ──────────────────────────────────────────────────────────
+    match /invites/{inviteId} {
+      allow read, write: if isSignedIn();
     }
 
     // ─── Server-only collections ──────────────────────────────────────────

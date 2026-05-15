@@ -159,3 +159,204 @@ export function interpretCorrelation(r: number): { strength: string; direction: 
     : `${strength} ${direction} co-movement — pairs tend to move ${r > 0 ? 'together' : 'opposite each other'} in this window.`;
   return { strength, direction, phrase };
 }
+
+// ─── Analytics V0.5 additions ───────────────────────────────────────────────
+
+/** Downside deviation: RMS of returns falling below MAR. Semi-standard deviation used in Sortino. */
+export function downsideDeviation(returns: number[], mar = 0): number {
+  if (returns.length < 2) return 0;
+  let sum = 0;
+  for (const r of returns) {
+    const shortfall = Math.min(r - mar, 0);
+    sum += shortfall * shortfall;
+  }
+  return Math.sqrt(sum / returns.length);
+}
+
+/** Historical VaR at a given confidence level. Returns a positive loss fraction.
+ *  e.g. confidence=0.95 → worst 5th-percentile daily loss. */
+export function historicalVaR(returns: number[], confidence = 0.95): number {
+  if (returns.length < 10) return 0;
+  const sorted = [...returns].sort((a, b) => a - b);
+  const idx = Math.floor((1 - confidence) * sorted.length);
+  return -sorted[Math.max(0, idx)];
+}
+
+/** Parametric VaR assuming normally distributed returns. Positive = loss. */
+export function parametricVaR(returns: number[], confidence = 0.95): number {
+  if (returns.length < 10) return 0;
+  const m = mean(returns);
+  const s = stdev(returns);
+  const zMap: Record<number, number> = { 0.9: 1.282, 0.95: 1.645, 0.99: 2.326 };
+  const z = zMap[confidence] ?? 1.645;
+  return Math.max(0, -(m - z * s));
+}
+
+/** Simple moving average. Returns array of length max(0, n − window + 1). */
+export function sma(values: number[], window: number): number[] {
+  if (values.length < window || window < 1) return [];
+  const out: number[] = [];
+  let sum = 0;
+  for (let i = 0; i < window; i++) sum += values[i];
+  out.push(sum / window);
+  for (let i = window; i < values.length; i++) {
+    sum += values[i] - values[i - window];
+    out.push(sum / window);
+  }
+  return out;
+}
+
+/** Rolling mean (alias of sma). */
+export function rollingMean(values: number[], window: number): number[] {
+  return sma(values, window);
+}
+
+/** Rolling sample stdev. Returns array of length max(0, n − window + 1). */
+export function rollingStdev(values: number[], window: number): number[] {
+  if (values.length < window || window < 2) return [];
+  const out: number[] = [];
+  for (let i = window; i <= values.length; i++) {
+    out.push(stdev(values.slice(i - window, i)));
+  }
+  return out;
+}
+
+/** Rolling annualised volatility (%) from a log-return series. */
+export function rollingAnnualisedVol(returns: number[], window: number, ppy = 252): number[] {
+  return rollingStdev(returns, window).map((s) => s * Math.sqrt(ppy) * 100);
+}
+
+/** Rolling z-score: (value[t] − rolling_mean) / rolling_stdev — mean-reversion signal. */
+export function rollingZScore(values: number[], window: number): number[] {
+  if (values.length < window || window < 2) return [];
+  const out: number[] = [];
+  for (let i = window; i <= values.length; i++) {
+    const slice = values.slice(i - window, i);
+    const m = mean(slice);
+    const s = stdev(slice);
+    out.push(s === 0 ? 0 : (values[i - 1] - m) / s);
+  }
+  return out;
+}
+
+export type SmaCrossState = 'bullish' | 'bearish' | 'neutral' | 'insufficient';
+
+/** SMA crossover analysis. fast < slow required. */
+export function smaCross(
+  values: number[],
+  fast = 20,
+  slow = 50,
+): { state: SmaCrossState; fastSma: number[]; slowSma: number[]; lastFast: number; lastSlow: number } {
+  if (values.length < slow || fast >= slow) {
+    return { state: 'insufficient', fastSma: [], slowSma: [], lastFast: 0, lastSlow: 0 };
+  }
+  const fastSma = sma(values, fast);
+  const slowSma = sma(values, slow);
+  const lastFast = fastSma[fastSma.length - 1];
+  const lastSlow = slowSma[slowSma.length - 1];
+  const diff = (lastFast - lastSlow) / lastSlow;
+  const state: SmaCrossState = Math.abs(diff) < 0.001 ? 'neutral' : lastFast > lastSlow ? 'bullish' : 'bearish';
+  return { state, fastSma, slowSma, lastFast, lastSlow };
+}
+
+/** Annualised Sharpe ratio from log returns. */
+export function sharpeRatio(returns: number[], riskFreePerPeriod = 0, periodsPerYear = 252): number {
+  if (returns.length < 2) return 0;
+  const excess = returns.map((r) => r - riskFreePerPeriod);
+  const m = mean(excess);
+  const s = stdev(excess);
+  return s === 0 ? 0 : (m / s) * Math.sqrt(periodsPerYear);
+}
+
+/** Annualised Sortino ratio — only penalises returns below MAR. */
+export function sortinoRatio(returns: number[], mar = 0, periodsPerYear = 252): number {
+  if (returns.length < 2) return 0;
+  const m = mean(returns);
+  const dd = downsideDeviation(returns, mar);
+  if (dd === 0) return m > mar ? Infinity : 0;
+  return ((m - mar) / dd) * Math.sqrt(periodsPerYear);
+}
+
+/** Calmar ratio: annualised return / max drawdown magnitude. */
+export function calmarRatio(annualisedReturn: number, mddFraction: number): number {
+  return mddFraction <= 0 ? 0 : annualisedReturn / mddFraction;
+}
+
+/** Full NxN covariance matrix from N aligned log-return series. */
+export function covarianceMatrix(returnSeries: number[][]): number[][] {
+  const n = returnSeries.length;
+  if (n === 0) return [];
+  const minLen = Math.min(...returnSeries.map((s) => s.length));
+  const aligned = returnSeries.map((s) => s.slice(-minLen));
+  const means = aligned.map(mean);
+  const cov: number[][] = Array.from({ length: n }, () => new Array(n).fill(0));
+  for (let i = 0; i < n; i++) {
+    for (let j = i; j < n; j++) {
+      let s = 0;
+      for (let k = 0; k < minLen; k++) {
+        s += (aligned[i][k] - means[i]) * (aligned[j][k] - means[j]);
+      }
+      cov[i][j] = cov[j][i] = minLen > 1 ? s / (minLen - 1) : 0;
+    }
+  }
+  return cov;
+}
+
+/** Portfolio variance: wᵀΣw. */
+export function portfolioVariance(weights: number[], covMatrix: number[][]): number {
+  const n = weights.length;
+  let v = 0;
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) {
+      v += weights[i] * weights[j] * (covMatrix[i]?.[j] ?? 0);
+    }
+  }
+  return Math.max(0, v);
+}
+
+/** Annualised portfolio volatility (as fraction, not %). */
+export function portfolioVol(weights: number[], covMatrix: number[][], periodsPerYear = 252): number {
+  return Math.sqrt(portfolioVariance(weights, covMatrix) * periodsPerYear);
+}
+
+/** Marginal risk contributions summing to 1: RC_i = w_i * (Σw)_i / σ_p². */
+export function riskContributions(weights: number[], covMatrix: number[][]): number[] {
+  const n = weights.length;
+  const variance = portfolioVariance(weights, covMatrix);
+  if (variance <= 0) return weights.map(() => 1 / n);
+  const sigmaW = weights.map((_, i) =>
+    weights.reduce((s, wj, j) => s + (covMatrix[i]?.[j] ?? 0) * wj, 0),
+  );
+  return weights.map((wi, i) => (wi * sigmaW[i]) / variance);
+}
+
+/** Annualised portfolio return from aligned log-return series. */
+export function portfolioAnnualisedReturn(returnSeries: number[][], weights: number[], periodsPerYear = 252): number {
+  if (returnSeries.length === 0) return 0;
+  const minLen = Math.min(...returnSeries.map((s) => s.length));
+  if (minLen < 2) return 0;
+  const aligned = returnSeries.map((s) => s.slice(-minLen));
+  let totalLogReturn = 0;
+  for (let t = 0; t < minLen; t++) {
+    for (let i = 0; i < weights.length; i++) {
+      totalLogReturn += weights[i] * (aligned[i][t] ?? 0);
+    }
+  }
+  return Math.exp((totalLogReturn / minLen) * periodsPerYear) - 1;
+}
+
+/** Period-by-period weighted portfolio log returns (for equity curve). */
+export function portfolioReturnSeries(returnSeries: number[][], weights: number[]): number[] {
+  if (returnSeries.length === 0) return [];
+  const minLen = Math.min(...returnSeries.map((s) => s.length));
+  const aligned = returnSeries.map((s) => s.slice(-minLen));
+  return Array.from({ length: minLen }, (_, t) =>
+    weights.reduce((s, wi, i) => s + wi * (aligned[i][t] ?? 0), 0),
+  );
+}
+
+/** Build an equity curve (starting at 1) from a log-return series. */
+export function equityCurve(returns: number[]): number[] {
+  let eq = 1;
+  return [eq, ...returns.map((r) => { eq *= Math.exp(r); return eq; })];
+}

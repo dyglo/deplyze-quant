@@ -34,3 +34,6 @@ export * from './seasonality';
 export * from './artifacts';
 export * from './regimes';
 export * from './anomalies';
+export * from './analog';
+export * from './crossAsset';
+export * from './benchmarkIntel';

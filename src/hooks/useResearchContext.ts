@@ -34,8 +34,10 @@ export function useResearchContext(activeSymbol?: string | null): ResearchContex
       .sort((a, b) => getTimestampMillis(b.createdAt) - getTimestampMillis(a.createdAt))
       .slice(0, 5);
 
-    // Filter artifacts where isPinned is true
-    const pinnedArtifacts = artifacts.items.filter(a => isPinned(a.id));
+    // Filter and sort pinned artifacts by createdAt descending
+    const pinnedArtifacts = [...artifacts.items]
+      .filter(a => isPinned(a.id))
+      .sort((a, b) => getTimestampMillis(b.createdAt) - getTimestampMillis(a.createdAt));
 
     // Sort briefings by createdAt descending, take first 3
     const latestBriefings = [...briefings.items]

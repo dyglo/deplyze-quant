@@ -1,9 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Send, Sparkles, Play, ChevronRight } from 'lucide-react';
+import { Send, Sparkles, Play, ChevronRight, Bookmark } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
+import { toast } from 'sonner';
 import { useCopilotSession } from '../hooks/useCopilotSession';
 import { useBatchQuotes } from '../hooks/useMarket';
 import { useMacroSeries } from '../hooks/useMacro';
+import { useArtifacts, useBriefings } from '../hooks/useArtifacts';
+import { useInsights } from '../hooks/useInsights';
+import { useWorkspace } from '../components/WorkspaceContext';
+import { useAuth } from '../components/AuthProvider';
 import { PageHeader } from '../components/quant/PageHeader';
 import { Disclaimer } from '../components/quant/Disclaimer';
 import { FreshnessBadge } from '../components/quant/FreshnessBadge';
@@ -20,12 +25,19 @@ const MACRO_HIGHLIGHTS = ['FEDFUNDS', 'DGS10', 'CPI'] as const;
 
 export const ResearchCopilot: React.FC = () => {
   const location = useLocation();
+  const { currentWorkspace, currentProject } = useWorkspace();
+  const { user } = useAuth();
 
   // Live snapshots to feed Copilot context.
   const pulse = useBatchQuotes(PULSE_SYMBOLS);
   const fedFunds = useMacroSeries('FEDFUNDS');
   const dgs10 = useMacroSeries('DGS10');
   const cpi = useMacroSeries('CPI');
+
+  // Workspace research context.
+  const artifacts = useArtifacts(currentWorkspace?.id ?? null, currentProject?.id ?? null);
+  const briefings = useBriefings(currentWorkspace?.id ?? null, currentProject?.id ?? null);
+  const { save: saveInsight } = useInsights(currentWorkspace?.id ?? null, currentProject?.id ?? null);
 
   const buildSnapshot = useCallback(() => {
     const lines: string[] = [
@@ -53,9 +65,24 @@ export const ResearchCopilot: React.FC = () => {
       lines.push('Latest macro values (alpha_vantage):');
       lines.push(...macroRows);
     }
+    // Workspace research context
+    const recentArtifacts = artifacts.items.slice(0, 5);
+    if (recentArtifacts.length) {
+      lines.push('Recent workspace intelligence artifacts:');
+      for (const a of recentArtifacts) {
+        lines.push(`  - [${a.category}] ${a.title} (symbols: ${a.symbols?.join(', ') ?? 'none'}, confidence: ${(a.confidence * 100).toFixed(0)}%)`);
+      }
+    }
+    const recentBriefings = briefings.items.slice(0, 3);
+    if (recentBriefings.length) {
+      lines.push('Recent workspace briefings:');
+      for (const b of recentBriefings) {
+        lines.push(`  - [${b.kind}] ${b.title}`);
+      }
+    }
     lines.push('Use this snapshot as grounding evidence. Cite values explicitly. Probabilistic language only.');
     return lines.join('\n');
-  }, [location.pathname, pulse.data, fedFunds.data, dgs10.data, cpi.data]);
+  }, [location.pathname, pulse.data, fedFunds.data, dgs10.data, cpi.data, artifacts.items, briefings.items]);
 
   const contextResolver = useCallback(() => ({
     context: {
@@ -83,6 +110,25 @@ export const ResearchCopilot: React.FC = () => {
     const top3 = (pulse.data ?? []).filter((r) => r.ok && r.data).slice(0, 3);
     return top3.map((r) => r.symbol);
   }, [pulse.data]);
+
+  const handleSaveInsight = useCallback(async (content: string) => {
+    if (!currentWorkspace?.id || !currentProject?.id || !user) {
+      toast.error('No workspace selected');
+      return;
+    }
+    try {
+      await saveInsight({
+        workspaceId: currentWorkspace.id,
+        projectId: currentProject.id,
+        content,
+        savedBy: user.uid,
+        symbols: contextChips,
+      });
+      toast.success('Insight saved to workspace');
+    } catch {
+      toast.error('Failed to save insight');
+    }
+  }, [currentWorkspace, currentProject, user, saveInsight, contextChips]);
 
   return (
     <div style={{ padding: '0 24px 24px', maxWidth: 920, margin: '0 auto', display: 'flex', flexDirection: 'column', height: 'calc(100vh - 80px)' }}>
@@ -115,6 +161,14 @@ export const ResearchCopilot: React.FC = () => {
             border: '1px solid var(--border)',
           }}>{id}</span>
         ))}
+        {artifacts.items.length > 0 && (
+          <span style={{
+            padding: '2px 8px', borderRadius: 999, fontSize: 10, fontWeight: 600,
+            background: 'rgba(78,96,64,0.08)',
+            color: 'var(--muted-foreground)',
+            border: '1px solid var(--border)',
+          }}>{artifacts.items.length} artifact{artifacts.items.length !== 1 ? 's' : ''}</span>
+        )}
       </section>
 
       <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '6px 0', display: 'grid', gap: 12, alignContent: 'start' }}>
@@ -180,6 +234,25 @@ export const ResearchCopilot: React.FC = () => {
             border: '1px solid var(--border)',
           }}>
             <p className="ds-body" style={{ margin: 0, whiteSpace: 'pre-wrap', lineHeight: 1.55 }}>{m.content}</p>
+            {m.role === 'assistant' && (
+              <div style={{ marginTop: 8, display: 'flex', justifyContent: 'flex-end' }}>
+                <button
+                  onClick={() => handleSaveInsight(m.content)}
+                  title="Save as insight"
+                  style={{
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    color: 'var(--muted-foreground)', padding: 4, display: 'flex',
+                    alignItems: 'center', gap: 4, fontSize: 11,
+                    borderRadius: 4,
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--muted)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+                >
+                  <Bookmark size={12} />
+                  Save
+                </button>
+              </div>
+            )}
           </article>
         ))}
 

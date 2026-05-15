@@ -8,11 +8,14 @@ import { useBatchQuotes } from '../hooks/useMarket';
 import { useMacroSeries } from '../hooks/useMacro';
 import { useArtifacts, useBriefings } from '../hooks/useArtifacts';
 import { useInsights } from '../hooks/useInsights';
+import { useResearchContext } from '../hooks/useResearchContext';
 import { useWorkspace } from '../components/WorkspaceContext';
 import { useAuth } from '../components/AuthProvider';
 import { PageHeader } from '../components/quant/PageHeader';
 import { Disclaimer } from '../components/quant/Disclaimer';
 import { FreshnessBadge } from '../components/quant/FreshnessBadge';
+import { createArtifactFromCopilot } from '../services/artifactService';
+import type { CopilotInsight } from '../types';
 
 const SUGGESTIONS = [
   'Summarise the current macro regime in one paragraph with confidence band.',
@@ -39,6 +42,14 @@ export const ResearchCopilot: React.FC = () => {
   const artifacts = useArtifacts(currentWorkspace?.id ?? null, currentProject?.id ?? null);
   const briefings = useBriefings(currentWorkspace?.id ?? null, currentProject?.id ?? null);
   const { save: saveInsight } = useInsights(currentWorkspace?.id ?? null, currentProject?.id ?? null);
+
+  // Calculate active symbol for research context
+  const activeSymbol = useMemo(() => {
+    const top1 = (pulse.data ?? []).filter((r) => r.ok && r.data).slice(0, 1);
+    return top1.length ? top1[0].symbol : null;
+  }, [pulse.data]);
+
+  const ctx = useResearchContext(activeSymbol);
 
   const buildSnapshot = useCallback(() => {
     const lines: string[] = [
@@ -81,9 +92,15 @@ export const ResearchCopilot: React.FC = () => {
         lines.push(`  - [${b.kind}] ${b.title}`);
       }
     }
+    if (ctx.pinnedArtifacts.length) {
+      lines.push('Pinned research artifacts:');
+      for (const a of ctx.pinnedArtifacts.slice(0, 3)) {
+        lines.push(`  - Pinned: ${a.title} (${a.category})`);
+      }
+    }
     lines.push('Use this snapshot as grounding evidence. Cite values explicitly. Probabilistic language only.');
     return lines.join('\n');
-  }, [location.pathname, pulse.data, fedFunds.data, dgs10.data, cpi.data, artifacts.items, briefings.items]);
+  }, [location.pathname, pulse.data, fedFunds.data, dgs10.data, cpi.data, artifacts.items, briefings.items, ctx.pinnedArtifacts]);
 
   const contextResolver = useCallback(() => ({
     context: {
@@ -118,14 +135,24 @@ export const ResearchCopilot: React.FC = () => {
       return;
     }
     try {
-      await saveInsight({
+      const insightPayload = {
         workspaceId: currentWorkspace.id,
         projectId: currentProject.id,
         content,
         savedBy: user.uid,
         symbols: contextChips,
-      });
+      };
+      const docId = await saveInsight(insightPayload);
       toast.success('Insight saved to workspace');
+      // Co-create artifact (fire-and-forget; failure does not block)
+      const savedInsight: CopilotInsight = {
+        id: docId,
+        createdAt: Date.now(),
+        ...insightPayload,
+      };
+      createArtifactFromCopilot(
+        currentWorkspace.id, currentProject.id, savedInsight, user.uid
+      ).catch(console.error);
     } catch {
       toast.error('Failed to save insight');
     }

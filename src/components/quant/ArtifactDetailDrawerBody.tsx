@@ -29,8 +29,9 @@ function resolveTimestamp(ts: number | { toMillis: () => number } | undefined): 
 
 function relativeTime(ts: number): string {
   const diffMs = Date.now() - ts;
+  const m = Math.floor(diffMs / (1000 * 60));
   const h = Math.floor(diffMs / (1000 * 60 * 60));
-  if (h < 2) return `${h}h ago`;
+  if (m < 60) return `${m}m ago`;
   if (h < 24) return `${h}h ago`;
   return new Date(ts).toLocaleDateString();
 }

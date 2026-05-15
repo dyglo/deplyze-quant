@@ -428,12 +428,21 @@ export interface CopilotMessage {
 // ─── Providers ──────────────────────────────────────────────────────────────
 
 export type ProviderId =
+  // V1 providers
   | 'finnhub'
   | 'alpha_vantage'
   | 'twelve_data'
   | 'tavily'
   | 'serper'
-  | 'gemini';
+  | 'gemini'
+  // V2 institutional providers
+  | 'polygon'
+  | 'fmp'
+  | 'eodhd'
+  | 'edgar'
+  // Derived/computed
+  | 'derived'
+  | 'firestore';
 
 export interface ProviderHealth {
   id: ProviderId;
@@ -441,5 +450,179 @@ export interface ProviderHealth {
   lastSuccessAt?: number;
   lastFailureAt?: number;
   lastFailureMessage?: string;
-  quotaRemaining?: number;
+  latencyMs?: number;
+  consecutiveFailures?: number;
+}
+
+// ─── V2: Prediction & Model Output Infrastructure ────────────────────────────
+// Schemas prepare the platform for institutional model outputs without
+// generating fake predictions. Real model outputs flow through these contracts.
+
+export type PredictionHorizon = '1d' | '5d' | '1w' | '1m' | '3m' | '6m' | '1y';
+export type ConfidenceLevel = 'low' | 'medium' | 'high' | 'very-high';
+export type ModelOutputType = 'regime' | 'volatility' | 'directional' | 'correlation' | 'anomaly' | 'factor';
+
+export interface PredictionArtifact {
+  id: string;
+  workspaceId: string;
+  projectId: string;
+  modelId: string;
+  modelVersion?: string;
+  outputType: ModelOutputType;
+  symbol?: string;
+  symbols?: string[];
+  horizon: PredictionHorizon;
+  generatedAt: number;          // unix ms
+  validUntil?: number;          // unix ms — when prediction expires
+  // Prediction output
+  prediction: string | number;  // model output value or label
+  confidence: number;           // 0..1
+  confidenceLevel: ConfidenceLevel;
+  // Explainability
+  features?: Array<{
+    name: string;
+    value: number;
+    contribution: number;    // SHAP-style attribution; -1..1
+    direction: 'positive' | 'negative';
+  }>;
+  explanation?: string;        // narrative explanation
+  // Benchmark comparison
+  benchmarkPrediction?: string | number;
+  benchmarkModelId?: string;
+  // Outcome tracking (filled in after horizon elapses)
+  outcome?: {
+    actualValue?: string | number;
+    resolvedAt?: number;
+    error?: number;            // |predicted - actual|
+    accuracy?: number;         // 0..1
+    notes?: string;
+  };
+  tags?: string[];
+  source: 'model' | 'agent' | 'research';
+  createdBy?: string;
+}
+
+// ─── V2: Company Profile (normalised across providers) ───────────────────────
+
+export interface CompanyProfile {
+  symbol: string;
+  name: string;
+  sector?: string;
+  industry?: string;
+  country?: string;
+  exchange?: string;
+  currency?: string;
+  marketCap?: number;
+  beta?: number;
+  cik?: string;
+  isin?: string;
+  ceo?: string;
+  employees?: number;
+  description?: string;
+  website?: string;
+  logo?: string;
+  ipoDate?: string;
+  isEtf?: boolean;
+  isActivelyTrading?: boolean;
+  providerId: string;
+  fetchedAt: number;
+}
+
+// ─── V2: Fundamental Snapshot (normalised) ───────────────────────────────────
+
+export interface FundamentalMetrics {
+  symbol: string;
+  date: string;
+  period?: string;
+  // Valuation
+  peRatio?: number;
+  pbRatio?: number;
+  evToEbitda?: number;
+  evToSales?: number;
+  priceToSales?: number;
+  // Profitability
+  roe?: number;
+  roic?: number;
+  roa?: number;
+  operatingMargin?: number;
+  netMargin?: number;
+  grossMargin?: number;
+  // Growth
+  revenueGrowthYoY?: number;
+  earningsGrowthYoY?: number;
+  // Financial health
+  debtToEquity?: number;
+  currentRatio?: number;
+  interestCoverage?: number;
+  netDebtToEbitda?: number;
+  // Returns / yield
+  dividendYield?: number;
+  earningsYield?: number;
+  fcfYield?: number;
+  // Technical
+  beta?: number;
+  week52High?: number;
+  week52Low?: number;
+  ma50?: number;
+  ma200?: number;
+  // Raw
+  revenue?: number;
+  netIncome?: number;
+  ebitda?: number;
+  eps?: number;
+  marketCap?: number;
+  enterpriseValue?: number;
+  providerId: string;
+  fetchedAt: number;
+}
+
+// ─── V2: Earnings Event (normalised) ─────────────────────────────────────────
+
+export interface EarningsEvent {
+  date: string;
+  symbol: string;
+  epsActual?: number | null;
+  epsEstimate?: number | null;
+  surpriseAbs?: number | null;
+  surprisePct?: number | null;
+  revenue?: number | null;
+  revenueEstimate?: number | null;
+  time?: string;
+  fiscalDateEnding?: string;
+}
+
+// ─── V2: SEC Filing (normalised) ─────────────────────────────────────────────
+
+export interface SecFiling {
+  accessionNumber: string;
+  filingDate: string;
+  reportDate: string;
+  form: string;
+  description: string;
+  viewUrl: string;
+}
+
+// ─── V2: Intelligence Archive entry ──────────────────────────────────────────
+
+export type ArchiveEntryKind =
+  | 'artifact'
+  | 'briefing'
+  | 'labSession'
+  | 'insight'
+  | 'prediction'
+  | 'regime_snapshot'
+  | 'anomaly'
+  | 'earnings_event';
+
+export interface IntelligenceArchiveEntry {
+  kind: ArchiveEntryKind;
+  id: string;
+  createdAt: number;
+  title: string;
+  summary?: string;
+  symbols?: string[];
+  tags?: string[];
+  confidence?: number;
+  significance?: number;
+  providerId?: string;
 }

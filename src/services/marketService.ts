@@ -70,3 +70,23 @@ export async function fetchHeadlines(q = 'global markets'): Promise<Array<{
   );
   return r.items;
 }
+
+export interface MarketMoverItem {
+  ticker?: string;
+  symbol?: string;
+  name?: string;
+  price: number;
+  change: number;
+  changesPercentage?: number;
+  changePercent?: number;
+  companyName?: string;
+}
+
+export type MoverType = 'gainers' | 'losers' | 'active';
+
+export async function fetchMarketMovers(type: MoverType = 'gainers'): Promise<MarketMoverItem[]> {
+  const r = await gatewayGet<{ type: string; movers: MarketMoverItem[] }>(
+    '/market/movers', { type }, ClientTTL.quote * 5,
+  );
+  return r.movers ?? [];
+}

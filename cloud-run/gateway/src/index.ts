@@ -15,6 +15,12 @@
  *   SERPER_API_KEY
  *   ALLOWED_ORIGINS       (comma-separated, optional)
  *   PORT                  (defaults to 8080)
+ *
+ * V2 providers (optional — routes degrade gracefully when absent):
+ *   POLYGON_API_KEY
+ *   FMP_API_KEY
+ *   EODHD_API_KEY
+ *   SEC_EDGAR_USER_AGENT  ("AppName contact@email.com" format)
  */
 
 // Load .env.local when running locally (cwd = cloud-run/gateway or repo root).
@@ -64,6 +70,9 @@ import copilotRouter from './routes/copilot';
 import instrumentsRouter from './routes/instruments';
 import providersRouter from './routes/providers';
 import briefingsRouter from './routes/briefings';
+import fundamentalsRouter from './routes/fundamentals';
+import earningsRouter from './routes/earnings';
+import edgarRouter from './routes/edgar';
 
 // ─── Firebase Admin init (idempotent) ──────────────────────────────────────
 
@@ -91,6 +100,13 @@ if (missing.length > 0) {
   process.exit(1);
 }
 
+// V2 optional providers — warn but don't block startup.
+const V2_OPTIONAL = ['POLYGON_API_KEY', 'FMP_API_KEY', 'EODHD_API_KEY', 'SEC_EDGAR_USER_AGENT'];
+const missingOptional = V2_OPTIONAL.filter((k) => !process.env[k]);
+if (missingOptional.length > 0) {
+  console.warn(`[Gateway] V2 optional providers not configured: ${missingOptional.join(', ')} — these routes will use fallback providers.`);
+}
+
 // ─── App setup ─────────────────────────────────────────────────────────────
 
 const app = express();
@@ -114,6 +130,9 @@ app.use('/v1/copilot', copilotRouter);
 app.use('/v1/instruments', instrumentsRouter);
 app.use('/v1/providers', providersRouter);
 app.use('/v1/briefings', briefingsRouter);
+app.use('/v1/fundamentals', fundamentalsRouter);
+app.use('/v1/earnings', earningsRouter);
+app.use('/v1/edgar', edgarRouter);
 
 app.use((_req, res) => {
   res.status(404).json({ error: 'Not Found', code: 'NOT_FOUND' });

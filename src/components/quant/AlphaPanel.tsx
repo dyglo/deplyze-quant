@@ -4,6 +4,7 @@ import {
   ResponsiveContainer, ReferenceLine, Legend, BarChart, Bar,
 } from 'recharts';
 import { Play, Loader2, Copy, Check, Plus, Trash2, AlertTriangle } from 'lucide-react';
+import { ChartDownloadButton, useChartExport } from './ChartDownloadButton';
 import { toast } from 'sonner';
 
 import {
@@ -124,6 +125,10 @@ export const AlphaPanel: React.FC<AlphaPanelProps> = ({ defaultSymbol = 'SPY', o
   const [error, setError] = useState<string | null>(null);
   const [failedSymbols, setFailedSymbols] = useState<string[]>([]);
   const [copied, setCopied] = useState(false);
+
+  const rebasedExport  = useChartExport('alpha-rebased-equity.png');
+  const zscoreExport   = useChartExport('alpha-zscore.png');
+  const smaExport      = useChartExport('alpha-sma-crossover.png');
 
   const addRow = useCallback(() => {
     if (rows.length >= MAX_ASSETS) return;
@@ -355,10 +360,14 @@ export const AlphaPanel: React.FC<AlphaPanelProps> = ({ defaultSymbol = 'SPY', o
 
           {/* ── Indexed Performance Chart ─────────────────────────────────── */}
           <section className="ds-surface" style={{ padding: 14, borderRadius: 10, marginBottom: 16 }}>
-            <p className="ds-label" style={{ margin: '0 0 10px', color: 'var(--muted-foreground)' }}>
-              Indexed Performance (rebased to 100)
-              {results.length > 1 && <span style={{ color: 'var(--muted-foreground)', fontWeight: 400 }}> — {results.length} assets</span>}
-            </p>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <p className="ds-label" style={{ margin: 0, color: 'var(--muted-foreground)' }}>
+                Indexed Performance (rebased to 100)
+                {results.length > 1 && <span style={{ fontWeight: 400 }}> — {results.length} assets</span>}
+              </p>
+              <ChartDownloadButton onDownload={rebasedExport.download} downloading={rebasedExport.downloading} position="inline" />
+            </div>
+            <div ref={rebasedExport.chartRef}>
             <ResponsiveContainer width="100%" height={220}>
               <LineChart data={indexedData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
                 <CartesianGrid {...GRID} />
@@ -376,6 +385,7 @@ export const AlphaPanel: React.FC<AlphaPanelProps> = ({ defaultSymbol = 'SPY', o
                 ))}
               </LineChart>
             </ResponsiveContainer>
+            </div>
             <FreshnessBadge status="cached" fetchedAt={results[0] ? Date.now() : null} compact />
           </section>
 
@@ -435,9 +445,13 @@ export const AlphaPanel: React.FC<AlphaPanelProps> = ({ defaultSymbol = 'SPY', o
           {/* ── Z-score ───────────────────────────────────────────────────── */}
           {zData.length > 0 && (
             <section className="ds-surface" style={{ padding: 14, borderRadius: 10, marginBottom: 16 }}>
-              <p className="ds-label" style={{ margin: '0 0 10px', color: 'var(--muted-foreground)' }}>
-                Rolling Z-Score · {primary?.symbol} <span style={{ fontWeight: 400 }}>(30-bar window)</span>
-              </p>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                <p className="ds-label" style={{ margin: 0, color: 'var(--muted-foreground)' }}>
+                  Rolling Z-Score · {primary?.symbol} <span style={{ fontWeight: 400 }}>(30-bar window)</span>
+                </p>
+                <ChartDownloadButton onDownload={zscoreExport.download} downloading={zscoreExport.downloading} position="inline" />
+              </div>
+              <div ref={zscoreExport.chartRef}>
               <ResponsiveContainer width="100%" height={130}>
                 <LineChart data={zData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
                   <CartesianGrid {...GRID} />
@@ -450,18 +464,23 @@ export const AlphaPanel: React.FC<AlphaPanelProps> = ({ defaultSymbol = 'SPY', o
                   <Line type="monotone" dataKey="z" stroke="var(--chart-2)" strokeWidth={1.5} dot={false} />
                 </LineChart>
               </ResponsiveContainer>
+              </div>
             </section>
           )}
 
           {/* ── SMA Cross (primary) ───────────────────────────────────────── */}
           {smaResult && smaResult.state !== 'insufficient' && (
             <section className="ds-surface" style={{ padding: 14, borderRadius: 10, marginBottom: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-                <p className="ds-label" style={{ margin: 0, color: 'var(--muted-foreground)' }}>SMA Cross · {primary?.symbol}</p>
-                <span style={{ fontSize: 12, fontWeight: 700, color: SMA_STATE_COLOR[smaResult.state] }}>
-                  {SMA_STATE_LABEL[smaResult.state]}
-                </span>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <p className="ds-label" style={{ margin: 0, color: 'var(--muted-foreground)' }}>SMA Cross · {primary?.symbol}</p>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: SMA_STATE_COLOR[smaResult.state] }}>
+                    {SMA_STATE_LABEL[smaResult.state]}
+                  </span>
+                </div>
+                <ChartDownloadButton onDownload={smaExport.download} downloading={smaExport.downloading} position="inline" />
               </div>
+              <div ref={smaExport.chartRef}>
               <ResponsiveContainer width="100%" height={130}>
                 <LineChart data={closes(primary!.bars).map((p, i) => ({
                   i, price: p,
@@ -477,6 +496,7 @@ export const AlphaPanel: React.FC<AlphaPanelProps> = ({ defaultSymbol = 'SPY', o
                   <Legend wrapperStyle={{ fontSize: 10 }} />
                 </LineChart>
               </ResponsiveContainer>
+              </div>
             </section>
           )}
         </>

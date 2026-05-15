@@ -11,6 +11,7 @@ import {
   type ModelDef,
   type ModelStatus,
 } from '../components/quant/ModelDrawerBody';
+import { capabilityLabel } from '../lib/providerLabels';
 import { Stethoscope, AlertTriangle, CheckCircle2 } from 'lucide-react';
 
 const MODELS: ModelDef[] = [
@@ -74,9 +75,9 @@ const MODELS: ModelDef[] = [
     expectedOutput: '{ symbol, score, stance, source_diversity, narrative }.',
     features: ['headline_embedding', 'source_reputation', 'tone_class'],
     requiredProviders: ['tavily', 'serper', 'finnhub', 'gemini'],
-    requiredDatasets: ['dq_raw.tavily_results', 'dq_raw.serper_results', 'dq_raw.finnhub_news'],
+    requiredDatasets: ['dq_raw.web_research', 'dq_raw.news_feed'],
     validation: ['Inter-annotator agreement', 'Backtest sentiment vs forward returns'],
-    nextStep: 'Currently shipped as a keyword proxy on the Positioning & Sentiment page. Upgrade path: Gemini classifier with structured output.',
+    nextStep: 'Currently shipped as a keyword proxy on the Positioning & Sentiment page. Upgrade path: AI classifier with structured output.',
     status: 'data-ready',
   },
   {
@@ -214,11 +215,11 @@ export const ModelObservatory: React.FC = () => {
                     <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
                       {avail.allOk ? (
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#4E6040', fontSize: 11, fontWeight: 600 }}>
-                          <CheckCircle2 size={12} /> all configured
+                          <CheckCircle2 size={12} /> all connected
                         </span>
                       ) : (
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#9e7e3a', fontSize: 11, fontWeight: 600 }}>
-                          <AlertTriangle size={12} /> missing: {avail.providersMissing.join(', ')}
+                          <AlertTriangle size={12} /> needs: {avail.providersMissing.map(capabilityLabel).join(', ')}
                         </span>
                       )}
                     </div>

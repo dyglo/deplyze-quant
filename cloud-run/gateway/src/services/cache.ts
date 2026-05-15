@@ -12,6 +12,7 @@
  * truth across instances.
  */
 
+import { createHash } from 'crypto';
 import { db } from './firestoreAdmin';
 
 interface CacheEntry<T = unknown> {
@@ -31,13 +32,19 @@ function memorySet<T>(key: string, entry: CacheEntry<T>) {
   memory.set(key, entry);
 }
 
+/** Hashes a key to be a safe Firestore document ID (no slashes allowed). */
+function hashKey(key: string): string {
+  return createHash('sha256').update(key).digest('hex');
+}
+
 export async function cacheGet<T>(key: string): Promise<T | null> {
   const now = Date.now();
   const hot = memory.get(key);
   if (hot && hot.expiresAt > now) return hot.value as T;
 
   try {
-    const snap = await db.collection('providerCache').doc(key).get();
+    const docId = hashKey(key);
+    const snap = await db.collection('providerCache').doc(docId).get();
     if (!snap.exists) return null;
     const entry = snap.data() as CacheEntry<T>;
     if (entry.expiresAt <= now) return null;
@@ -53,7 +60,8 @@ export async function cacheSet<T>(key: string, value: T, ttlMs: number): Promise
   const entry: CacheEntry<T> = { value, expiresAt: Date.now() + ttlMs };
   memorySet(key, entry);
   try {
-    await db.collection('providerCache').doc(key).set(entry);
+    const docId = hashKey(key);
+    await db.collection('providerCache').doc(docId).set(entry);
   } catch (err) {
     console.warn('[cache] write failed', key, err);
   }

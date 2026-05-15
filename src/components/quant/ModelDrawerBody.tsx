@@ -1,6 +1,7 @@
 import React from 'react';
 import { CheckCircle2, XCircle, Circle } from 'lucide-react';
 import type { ProviderStatus } from '../../services/providerService';
+import { capabilityLabel } from '../../lib/providerLabels';
 
 export type ModelStatus = 'planned' | 'data-ready' | 'disabled' | 'needs-dataset' | 'needs-training';
 
@@ -28,9 +29,17 @@ const STATUS_COLOR: Record<ModelStatus, string> = {
 
 function checkAvailability(
   m: ModelDef,
-  providers: ProviderStatus[] | null,
+  providers: ProviderStatus[] | null | unknown,
 ): { providersOk: string[]; providersMissing: string[]; allOk: boolean } {
-  const byId = new Map<string, boolean>((providers ?? []).map((p) => [p.id as string, p.configured]));
+  // Defensively normalise: the cache may transiently hold the raw gateway
+  // object { providers: [...], routing: {...} } before the fetcher processes it.
+  let arr: ProviderStatus[] = [];
+  if (Array.isArray(providers)) {
+    arr = providers as ProviderStatus[];
+  } else if (providers && typeof providers === 'object' && Array.isArray((providers as Record<string, unknown>).providers)) {
+    arr = (providers as Record<string, unknown>).providers as ProviderStatus[];
+  }
+  const byId = new Map<string, boolean>(arr.map((p) => [p.id as string, p.configured]));
   const ok: string[] = [];
   const missing: string[] = [];
   for (const p of m.requiredProviders) {
@@ -39,7 +48,7 @@ function checkAvailability(
   return { providersOk: ok, providersMissing: missing, allOk: missing.length === 0 };
 }
 
-export const ModelDrawerBody: React.FC<{ model: ModelDef; providers: ProviderStatus[] | null }> = ({ model, providers }) => {
+export const ModelDrawerBody: React.FC<{ model: ModelDef; providers: ProviderStatus[] | null | unknown }> = ({ model, providers }) => {
   const avail = checkAvailability(model, providers);
   return (
     <div style={{ display: 'grid', gap: 14 }}>
@@ -74,9 +83,9 @@ export const ModelDrawerBody: React.FC<{ model: ModelDef; providers: ProviderSta
             return (
               <li key={p} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 {ok ? <CheckCircle2 size={13} color="#4E6040" /> : <XCircle size={13} color="var(--primary)" />}
-                <span className="ds-body" style={{ fontFamily: 'ui-monospace, monospace', fontSize: 12 }}>{p}</span>
+                <span className="ds-body" style={{ fontSize: 12 }}>{capabilityLabel(p)}</span>
                 <span className="ds-caption" style={{ color: ok ? '#4E6040' : 'var(--primary)' }}>
-                  {ok ? 'configured' : 'missing'}
+                  {ok ? 'connected' : 'not connected'}
                 </span>
               </li>
             );

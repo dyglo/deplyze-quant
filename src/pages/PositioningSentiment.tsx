@@ -99,7 +99,7 @@ export const PositioningSentiment: React.FC = () => {
     <div style={{ padding: '0 24px 32px', maxWidth: 1200, margin: '0 auto' }}>
       <PageHeader
         title="Positioning & Sentiment"
-        subtitle="Headline-mood proxy across Tavily, Serper, and Finnhub. COT positioning ingestion is pending — CFTC data is not yet wired."
+        subtitle="Headline sentiment scored across news and web research feeds. COT positioning ingestion is pending — CFTC data is not yet wired."
         actions={<FreshnessBadge status={status} fetchedAt={finn.fetchedAt} compact />}
       />
 
@@ -180,7 +180,7 @@ export const PositioningSentiment: React.FC = () => {
       {/* Tavily narrative */}
       {tavily.data?.answer && (
         <section className="ds-surface" style={{ padding: 12, borderRadius: 10, marginBottom: 18 }}>
-          <div className="ds-label" style={{ color: 'var(--muted-foreground)', marginBottom: 4 }}>Web-research synthesis (Tavily)</div>
+          <div className="ds-label" style={{ color: 'var(--muted-foreground)', marginBottom: 4 }}>Web research synthesis</div>
           <p className="ds-body" style={{ margin: 0, lineHeight: 1.55 }}>{tavily.data.answer}</p>
         </section>
       )}

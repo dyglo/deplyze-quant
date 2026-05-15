@@ -209,7 +209,7 @@ export const InstrumentDetail: React.FC = () => {
             </div>
             {intel.loading ? (
               <p className="ds-caption" style={{ color: 'var(--muted-foreground)' }}>
-                Synthesising — pulling fundamentals, news, and running Gemini analysis…
+                Synthesising — pulling fundamentals, news, and generating intelligence…
               </p>
             ) : intel.error ? (
               <p className="ds-caption" style={{ color: 'var(--primary)' }}>

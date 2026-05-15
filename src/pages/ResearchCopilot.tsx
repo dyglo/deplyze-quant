@@ -57,7 +57,7 @@ export const ResearchCopilot: React.FC = () => {
     ];
     const ok = (pulse.data ?? []).filter((r) => r.ok && r.data);
     if (ok.length) {
-      lines.push('Latest market pulse (twelve_data):');
+      lines.push('Latest market pulse:');
       for (const r of ok) {
         if (!r.data) continue;
         lines.push(`  - ${r.symbol}: ${r.data.price.toFixed(2)} (${r.data.changePercent >= 0 ? '+' : ''}${r.data.changePercent.toFixed(2)}%)`);
@@ -74,7 +74,7 @@ export const ResearchCopilot: React.FC = () => {
       if (last) macroRows.push(`  - ${id}: ${last.value} on ${new Date(last.ts).toISOString().slice(0, 10)}`);
     }
     if (macroRows.length) {
-      lines.push('Latest macro values (alpha_vantage):');
+      lines.push('Latest macro values:');
       lines.push(...macroRows);
     }
     // Workspace research context

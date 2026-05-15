@@ -1,5 +1,8 @@
-import React from 'react';
+import React, { useCallback, useState } from 'react';
+import { Camera, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 import type { CorrelationSnapshot } from '../../types';
+import { exportHeatmapAsPng } from '../../lib/chartExport';
 
 function colorFor(v: number): string {
   // -1 (terracotta) … 0 (muted) … +1 (sage)
@@ -13,13 +16,16 @@ function colorFor(v: number): string {
 
 export const CorrelationHeatmap: React.FC<{
   snapshot: CorrelationSnapshot;
-  /** If provided, every off-diagonal cell becomes a button. */
   onCellClick?: (pair: { a: string; b: string; value: number }) => void;
   highlight?: { a: string; b: string } | null;
-  /** Symbols with insufficient bars — rendered with reduced opacity + tooltip. */
   insufficient?: Set<string>;
-}> = ({ snapshot, onCellClick, highlight, insufficient }) => {
+  /** If provided, a download button appears above the heatmap. */
+  downloadTitle?: string;
+  downloadFilename?: string;
+}> = ({ snapshot, onCellClick, highlight, insufficient, downloadTitle, downloadFilename }) => {
   const { symbols, cells } = snapshot;
+  const [downloading, setDownloading] = useState(false);
+
   const lookup = new Map<string, number>();
   for (const c of cells) lookup.set(`${c.rowSymbol}|${c.colSymbol}`, c.value);
 
@@ -29,8 +35,45 @@ export const CorrelationHeatmap: React.FC<{
       (highlight.a === col && highlight.b === row)
     );
 
+  const handleDownload = useCallback(async () => {
+    if (downloading) return;
+    setDownloading(true);
+    try {
+      exportHeatmapAsPng(
+        snapshot,
+        downloadTitle ?? 'Correlation Matrix',
+        downloadFilename ?? 'correlation-heatmap.png',
+      );
+      toast.success('Heatmap exported');
+    } catch {
+      toast.error('Export failed');
+    } finally {
+      setDownloading(false);
+    }
+  }, [snapshot, downloadTitle, downloadFilename, downloading]);
+
   return (
-    <div style={{ overflowX: 'auto', width: '100%' }}>
+    <div style={{ overflowX: 'auto', width: '100%', position: 'relative' }}>
+      {/* Download button — only shown when downloadTitle or downloadFilename is provided */}
+      {(downloadTitle || downloadFilename) && (
+        <button
+          onClick={handleDownload}
+          disabled={downloading}
+          title="Download heatmap as PNG"
+          style={{
+            position: 'absolute', top: 0, right: 0, zIndex: 10,
+            display: 'inline-flex', alignItems: 'center', gap: 4,
+            padding: '5px', borderRadius: 6,
+            border: '1px solid var(--border)', background: 'var(--card)',
+            color: 'var(--foreground)', cursor: downloading ? 'not-allowed' : 'pointer',
+            opacity: downloading ? 0.6 : 1,
+          }}
+        >
+          {downloading
+            ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} />
+            : <Camera size={13} />}
+        </button>
+      )}
       <table style={{ borderCollapse: 'collapse', fontSize: 12, fontVariantNumeric: 'tabular-nums', width: '100%' }}>
         <thead>
           <tr>

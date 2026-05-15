@@ -7,12 +7,16 @@ import { Sun, Moon, Monitor, Check, LogOut } from 'lucide-react';
 type TabId = 'profile' | 'workspace' | 'providers' | 'appearance';
 
 const PROVIDERS = [
-  { id: 'finnhub',      label: 'Finnhub',       hint: 'Equities quotes, fundamentals, market news' },
-  { id: 'alpha_vantage',label: 'Alpha Vantage', hint: 'Macro time series (CPI, FED, yields, GDP)' },
-  { id: 'twelve_data',  label: 'Twelve Data',   hint: 'OHLCV across equities, FX, commodities' },
-  { id: 'tavily',       label: 'Tavily',        hint: 'AI-curated web research' },
-  { id: 'serper',       label: 'Serper',        hint: 'Google news & web search' },
-  { id: 'gemini',       label: 'Gemini',        hint: 'Research synthesis & Copilot' },
+  { id: 'polygon',       label: 'Real-time Quotes',   hint: 'Equities quotes, snapshots, market data' },
+  { id: 'fmp',           label: 'Fundamentals',        hint: 'Company profiles, key metrics, earnings' },
+  { id: 'eodhd',         label: 'Historical Data',     hint: 'Adjusted OHLCV across equities, FX, indices' },
+  { id: 'finnhub',       label: 'Market Data',         hint: 'Quote fallback, news, company profiles' },
+  { id: 'alpha_vantage', label: 'Macro Series',        hint: 'CPI, Fed funds, treasury yields, GDP' },
+  { id: 'twelve_data',   label: 'Price & OHLCV',       hint: 'Intraday and daily price data fallback' },
+  { id: 'tavily',        label: 'Web Research',        hint: 'AI-curated research for Copilot context' },
+  { id: 'serper',        label: 'News Search',         hint: 'Real-time news and headline search' },
+  { id: 'gemini',        label: 'AI Synthesis',        hint: 'Intelligence synthesis and Copilot' },
+  { id: 'edgar',         label: 'Public Filings',      hint: 'SEC regulatory filings and XBRL data' },
 ] as const;
 
 export const Settings: React.FC = () => {

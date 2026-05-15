@@ -1,4 +1,5 @@
 export { ConfidenceBadge } from './ConfidenceBadge';
+export { ChartDownloadButton, ChartFrame, useChartExport } from './ChartDownloadButton';
 export { RegimeBadge } from './RegimeBadge';
 export { SignificanceMeter } from './SignificanceMeter';
 export { ArtifactCard } from './ArtifactCard';

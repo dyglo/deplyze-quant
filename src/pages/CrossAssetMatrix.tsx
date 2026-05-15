@@ -164,6 +164,8 @@ export const CrossAssetMatrix: React.FC = () => {
             <CorrelationHeatmap
               snapshot={snapshot}
               insufficient={insufficient}
+              downloadTitle={`${universe.label} · ${windowDays}d Correlation Matrix`}
+              downloadFilename={`correlation-${universe.label.toLowerCase().replace(/\s+/g, '-')}-${windowDays}d.png`}
               onCellClick={(p) => drawer.open({
                 title: `${p.a} ↔ ${p.b}`,
                 subtitle: `Pearson ${p.value.toFixed(2)} · ${windowDays}-day window`,

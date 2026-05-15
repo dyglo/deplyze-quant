@@ -1,9 +1,10 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine, ReferenceArea, Legend,
 } from 'recharts';
 import { Play, Loader2, Copy, Check, AlertTriangle } from 'lucide-react';
+import { ChartDownloadButton, useChartExport } from './ChartDownloadButton';
 import { toast } from 'sonner';
 
 import {
@@ -136,6 +137,11 @@ export const RiskPanel: React.FC<RiskPanelProps> = ({ defaultSymbol = 'SPY', onS
   const [result, setResult] = useState<RiskResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+
+  const equityCurveExport  = useChartExport('risk-equity-curve.png');
+  const drawdownExport     = useChartExport('risk-drawdown.png');
+  const rollingSharpeExport= useChartExport('risk-rolling-sharpe.png');
+  const monteCarloExport   = useChartExport('risk-monte-carlo.png');
 
   const run = useCallback(async () => {
     const sym = symbol.trim().toUpperCase();
@@ -501,7 +507,11 @@ export const RiskPanel: React.FC<RiskPanelProps> = ({ defaultSymbol = 'SPY', onS
 
           {/* Section 3 — Equity curve */}
           <section className="ds-surface" style={{ padding: 14, borderRadius: 10, marginBottom: 16 }}>
-            <h2 className="ds-heading" style={{ margin: '0 0 10px' }}>Equity Curve (normalized)</h2>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <h2 className="ds-heading" style={{ margin: 0 }}>Equity Curve (normalized)</h2>
+              <ChartDownloadButton onDownload={equityCurveExport.download} downloading={equityCurveExport.downloading} position="inline" />
+            </div>
+            <div ref={equityCurveExport.chartRef}>
             <ResponsiveContainer width="100%" height={200}>
               <LineChart
                 data={result.curve.map((v, i) => ({ i, v }))}
@@ -544,6 +554,7 @@ export const RiskPanel: React.FC<RiskPanelProps> = ({ defaultSymbol = 'SPY', onS
                 />
               </LineChart>
             </ResponsiveContainer>
+            </div>
           </section>
 
           {/* Section 3b — Drawdown Detail */}
@@ -552,7 +563,11 @@ export const RiskPanel: React.FC<RiskPanelProps> = ({ defaultSymbol = 'SPY', onS
             const chartData = result.curve.map((v, i) => ({ i, v }));
             return (
               <section className="ds-surface" style={{ padding: 14, borderRadius: 10, marginBottom: 16 }}>
-                <h2 className="ds-heading" style={{ margin: '0 0 10px' }}>Drawdown Periods</h2>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                  <h2 className="ds-heading" style={{ margin: 0 }}>Drawdown Periods</h2>
+                  <ChartDownloadButton onDownload={drawdownExport.download} downloading={drawdownExport.downloading} position="inline" />
+                </div>
+                <div ref={drawdownExport.chartRef}>
                 <ResponsiveContainer width="100%" height={180}>
                   <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
@@ -574,6 +589,7 @@ export const RiskPanel: React.FC<RiskPanelProps> = ({ defaultSymbol = 'SPY', onS
                     {dds.length} drawdown period{dds.length > 1 ? 's' : ''} detected. Worst: -{(Math.max(...dds.map(d => d.depth)) * 100).toFixed(1)}%. Shading opacity scales with depth.
                   </p>
                 )}
+                </div>
               </section>
             );
           })()}
@@ -587,7 +603,11 @@ export const RiskPanel: React.FC<RiskPanelProps> = ({ defaultSymbol = 'SPY', onS
             const chartData = rs.map((s, i) => ({ i: i + window, s }));
             return (
               <section className="ds-surface" style={{ padding: 14, borderRadius: 10, marginBottom: 16 }}>
-                <h2 className="ds-heading" style={{ margin: '0 0 10px' }}>Rolling {window}-Period Sharpe</h2>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                  <h2 className="ds-heading" style={{ margin: 0 }}>Rolling {window}-Period Sharpe</h2>
+                  <ChartDownloadButton onDownload={rollingSharpeExport.download} downloading={rollingSharpeExport.downloading} position="inline" />
+                </div>
+                <div ref={rollingSharpeExport.chartRef}>
                 <ResponsiveContainer width="100%" height={150}>
                   <LineChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
@@ -599,6 +619,7 @@ export const RiskPanel: React.FC<RiskPanelProps> = ({ defaultSymbol = 'SPY', onS
                     <Line type="monotone" dataKey="s" stroke="var(--chart-2)" strokeWidth={1.5} dot={false} isAnimationActive={false} />
                   </LineChart>
                 </ResponsiveContainer>
+                </div>
                 <p className="ds-caption" style={{ margin: '4px 0 0', color: 'var(--muted-foreground)', fontSize: 10 }}>
                   Rising Sharpe = improving risk-adjusted performance. Sustained above 1.0 is institutional grade.
                 </p>

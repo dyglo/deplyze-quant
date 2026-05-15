@@ -1,5 +1,6 @@
 import React from 'react';
 import type { FreshnessStatus } from '../../services/gatewayClient';
+import { providerLabel } from '../../lib/providerLabels';
 
 function relTime(ts: number | null | undefined): string {
   if (!ts) return '—';
@@ -68,6 +69,6 @@ export const SourceBadge: React.FC<{ source: string }> = ({ source }) => (
       background: 'var(--muted)',
     }}
   >
-    {source.replace('_', ' ')}
+    {providerLabel(source)}
   </span>
 );

@@ -4,12 +4,25 @@ Add these at **Settings → Secrets and variables → Actions → New repository
 
 ---
 
-## GCP / Firebase Infrastructure
+## GCP Service Account Key
 
-| Secret | Description | How to obtain |
-|--------|-------------|---------------|
-| `GCP_SA_KEY` | Service account JSON key for Cloud Run deploys | GCP Console → IAM → Service Accounts → Create key (JSON). Required roles: `Cloud Run Admin`, `Artifact Registry Writer`, `Service Account User` |
-| `FIREBASE_TOKEN` | Firebase CI token (hosting + Firestore deploys) | Run `firebase login:ci` locally, copy the printed token |
+| Secret | Description |
+|--------|-------------|
+| `GCP_SA_KEY` | Full JSON of a GCP service account key. Used for **all** GCP and Firebase operations — no `FIREBASE_TOKEN` needed. |
+
+### Required IAM roles for the service account
+
+Grant these at **GCP Console → IAM → Add principal**:
+
+| Role | Why |
+|------|-----|
+| `roles/run.admin` | Deploy and manage Cloud Run services |
+| `roles/iam.serviceAccountUser` | Act as service accounts during deploy |
+| `roles/artifactregistry.writer` | Push Docker images to Artifact Registry |
+| `roles/firebase.admin` | Deploy Firebase Hosting + Firestore rules |
+
+> **How to create the key**: GCP Console → IAM → Service Accounts → select your SA → Keys → Add Key → JSON.  
+> Copy the entire JSON and paste it as the value of `GCP_SA_KEY`.
 
 ---
 
@@ -23,10 +36,10 @@ Find all values at **Firebase Console → Project Settings → Your apps**.
 | `VITE_FIREBASE_AUTH_DOMAIN` | `deplyze-quant.firebaseapp.com` |
 | `VITE_FIREBASE_PROJECT_ID` | `deplyze-quant` |
 | `VITE_FIREBASE_STORAGE_BUCKET` | `deplyze-quant.firebasestorage.app` |
-| `VITE_FIREBASE_MESSAGING_SENDER_ID` | Sender ID from console |
-| `VITE_FIREBASE_APP_ID` | App ID from console |
-| `VITE_FIREBASE_MEASUREMENT_ID` | Measurement ID from console |
-| `VITE_GATEWAY_URL` | Deployed Cloud Run URL e.g. `https://deplyze-gateway-xxx.run.app` |
+| `VITE_FIREBASE_MESSAGING_SENDER_ID` | Sender ID |
+| `VITE_FIREBASE_APP_ID` | App ID |
+| `VITE_FIREBASE_MEASUREMENT_ID` | Measurement ID |
+| `VITE_GATEWAY_URL` | Cloud Run service URL — e.g. `https://deplyze-gateway-xxx.run.app` |
 
 ---
 
@@ -47,19 +60,14 @@ Find all values at **Firebase Console → Project Settings → Your apps**.
 
 ---
 
-## One-time GCP setup (run once before first deploy)
+## Important notes
 
-```bash
-# Enable required APIs
-gcloud services enable run.googleapis.com artifactregistry.googleapis.com \
-  --project=deplyze-quant
+**`FIREBASE_TOKEN` is NOT required.** `firebase-tools` v13+ removed the `--token` flag.
+All Firebase deployments (Hosting + Firestore) now authenticate via `GCP_SA_KEY` through
+`GOOGLE_APPLICATION_CREDENTIALS`, set automatically by the `google-github-actions/auth` action.
 
-# Create Artifact Registry repository for Docker images
-gcloud artifacts repositories create services \
-  --repository-format=docker \
-  --location=us-central1 \
-  --project=deplyze-quant
-```
+**Artifact Registry** is created automatically on first deploy if it does not exist.
+The workflow runs `gcloud artifacts repositories create` idempotently before every push.
 
 ---
 
@@ -67,6 +75,6 @@ gcloud artifacts repositories create services \
 
 | Workflow | Trigger | What it does |
 |----------|---------|-------------|
-| `ci.yml` | Every push + every PR → `main` | TypeScript checks + Vite build + Docker build validation |
-| `deploy.yml` | Push to `main` | Build & push Docker image → Cloud Run deploy → Firestore rules → Firebase Hosting |
-| `deploy.yml` | Manual (`workflow_dispatch`) | Can skip gateway or hosting independently |
+| `ci.yml` | Every push + PRs → `main` | TypeScript checks + Vite build + Docker build validation |
+| `deploy.yml` | Push to `main` | Gateway (Cloud Run) → Firestore rules → Firebase Hosting |
+| `deploy.yml` | `workflow_dispatch` | Manual deploy with `skip_gateway` / `skip_hosting` toggle flags |

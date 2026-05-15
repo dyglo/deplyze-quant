@@ -40,9 +40,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Authenticate with GCP.
-      # Secret: GCP_SA_KEY — full JSON of a service account key with roles:
-      #   roles/run.admin  ·  roles/iam.serviceAccountUser  ·  roles/artifactregistry.writer
+      # Auth: GCP_SA_KEY must have roles:
+      #   run.admin · iam.serviceAccountUser · artifactregistry.writer · firebase.admin
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
@@ -50,6 +49,22 @@ jobs:
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
+
+      # Create the Artifact Registry repo if it doesn't exist yet.
+      # This is idempotent — safe to run on every deploy.
+      - name: Ensure Artifact Registry repository exists
+        run: |
+          gcloud artifacts repositories describe ${{ env.AR_REPOSITORY }} \
+            --location=${{ env.GCP_REGION }} \
+            --project=${{ env.GCP_PROJECT_ID }} \
+            --quiet 2>/dev/null \
+          || gcloud artifacts repositories create ${{ env.AR_REPOSITORY }} \
+            --repository-format=docker \
+            --location=${{ env.GCP_REGION }} \
+            --project=${{ env.GCP_PROJECT_ID }} \
+            --description="Docker images for Deplyze Quant services" \
+            --quiet
+          echo "Artifact Registry repository: ${{ env.AR_REPOSITORY }} ✓"
 
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
@@ -105,15 +120,26 @@ jobs:
             if [ "$STATUS" = "200" ]; then echo "Gateway healthy ✓"; exit 0; fi
             sleep 5
           done
-          echo "Gateway health check failed after 60s" && exit 1
+          echo "Gateway health check timed out" && exit 1
 
   # ─── 2. Deploy Firestore Rules & Indexes ─────────────────────────────────
 
   deploy-firestore:
     name: Deploy · Firestore
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
+
+      # firebase-tools v13+ removed the --token flag.
+      # Authenticate via GCP_SA_KEY — the auth action sets GOOGLE_APPLICATION_CREDENTIALS
+      # which firebase-tools picks up automatically.
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - uses: actions/setup-node@v4
         with:
@@ -126,7 +152,6 @@ jobs:
         run: |
           firebase deploy --only firestore \
             --project ${{ env.FIREBASE_PROJECT_ID }} \
-            --token "${{ secrets.FIREBASE_TOKEN }}" \
             --non-interactive
 
   # ─── 3. Build & Deploy Firebase Hosting ──────────────────────────────────
@@ -139,6 +164,9 @@ jobs:
       always() &&
       (needs.deploy-gateway.result == 'success' || needs.deploy-gateway.result == 'skipped') &&
       github.event.inputs.skip_hosting != 'true'
+    permissions:
+      contents: read
+      id-token: write
     env:
       VITE_FIREBASE_API_KEY:             ${{ secrets.VITE_FIREBASE_API_KEY }}
       VITE_FIREBASE_AUTH_DOMAIN:         ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
@@ -152,6 +180,12 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      # Same auth pattern as deploy-firestore — no FIREBASE_TOKEN needed.
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - uses: actions/setup-node@v4
         with:
@@ -171,8 +205,7 @@ jobs:
         run: |
           firebase deploy --only hosting \
             --project ${{ env.FIREBASE_PROJECT_ID }} \
-            --token "${{ secrets.FIREBASE_TOKEN }}" \
             --non-interactive
 
-      - name: Print live URL
-        run: echo "Live at https://${{ env.FIREBASE_PROJECT_ID }}.web.app"
+      - name: Live URL
+        run: echo "Deployed to https://${{ env.FIREBASE_PROJECT_ID }}.web.app ✓"

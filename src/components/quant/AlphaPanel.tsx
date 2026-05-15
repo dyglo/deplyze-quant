@@ -4,6 +4,7 @@ import {
   ResponsiveContainer, ReferenceLine, Legend,
 } from 'recharts';
 import { Play, Loader2, Copy, Check, AlertTriangle } from 'lucide-react';
+import { toast } from 'sonner';
 
 import {
   closes, logReturns, annualisedVol, rollingAnnualisedVol,
@@ -45,7 +46,46 @@ interface AlphaResult {
 
 interface AlphaPanelProps {
   defaultSymbol?: string;
+  onSaveSession?: (payload: { name: string; panel: 'alpha'; symbols: string[]; timeframe: string; summary: Record<string, string | number> }) => Promise<void>;
 }
+
+const SaveSessionInline: React.FC<{ onSave: (name: string) => Promise<void> }> = ({ onSave }) => {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [saving, setSaving] = useState(false);
+  const defaultName = `Alpha session ${new Date().toLocaleDateString()}`;
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => { setName(defaultName); setOpen(true); }}
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--foreground)', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+      >
+        Save Session
+      </button>
+    );
+  }
+  return (
+    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+      <input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Session name"
+        style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--foreground)', width: 180 }}
+        autoFocus
+        onKeyDown={(e) => { if (e.key === 'Escape') setOpen(false); }}
+      />
+      <button
+        onClick={async () => { setSaving(true); try { await onSave(name || defaultName); setOpen(false); } finally { setSaving(false); } }}
+        disabled={saving}
+        style={{ padding: '4px 10px', borderRadius: 6, border: 'none', background: 'var(--primary)', color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+      >
+        {saving ? 'Saving…' : 'Save'}
+      </button>
+      <button onClick={() => setOpen(false)} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--foreground)', fontSize: 11, cursor: 'pointer' }}>Cancel</button>
+    </div>
+  );
+};
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -72,7 +112,7 @@ const SMA_STATE_LABEL: Record<SmaCrossState, string> = {
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export const AlphaPanel: React.FC<AlphaPanelProps> = ({ defaultSymbol = 'SPY' }) => {
+export const AlphaPanel: React.FC<AlphaPanelProps> = ({ defaultSymbol = 'SPY', onSaveSession }) => {
   const [symbol, setSymbol] = useState(defaultSymbol);
   const [benchmark, setBenchmark] = useState('');
   const [timeframe, setTimeframe] = useState<Timeframe>('1day');
@@ -260,10 +300,32 @@ export const AlphaPanel: React.FC<AlphaPanelProps> = ({ defaultSymbol = 'SPY' })
               {result.benchmarkSymbol && <span className="ds-caption" style={{ color: 'var(--muted-foreground)' }}>vs {result.benchmarkSymbol}</span>}
               <FreshnessBadge status="live" fetchedAt={result.fetchedAt} />
             </div>
-            <button onClick={copyJSON} style={copyBtnStyle}>
-              {copied ? <Check size={12} style={{ color: '#4E6040' }} /> : <Copy size={12} />}
-              {copied ? 'Copied!' : 'Copy JSON'}
-            </button>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              {onSaveSession && (
+                <SaveSessionInline
+                  onSave={async (name) => {
+                    const syms = [result.symbol, ...(result.benchmarkSymbol ? [result.benchmarkSymbol] : [])];
+                    await onSaveSession({
+                      name,
+                      panel: 'alpha',
+                      symbols: syms,
+                      timeframe: result.timeframe,
+                      summary: {
+                        annVol: +result.annVol.toFixed(2),
+                        currentZ: +result.currentZ.toFixed(2),
+                        totalReturn: +result.totalReturn.toFixed(2),
+                        ...(result.benchCorr != null ? { benchCorr: +result.benchCorr.toFixed(2) } : {}),
+                      },
+                    });
+                    toast.success('Session saved');
+                  }}
+                />
+              )}
+              <button onClick={copyJSON} style={copyBtnStyle}>
+                {copied ? <Check size={12} style={{ color: '#4E6040' }} /> : <Copy size={12} />}
+                {copied ? 'Copied!' : 'Copy JSON'}
+              </button>
+            </div>
           </div>
 
           {/* Section 1 — Stats */}

@@ -84,6 +84,36 @@ service cloud.firestore {
           allow read: if isMember(wid) || isWorkspaceOwner(wid);
           allow write: if false;
         }
+
+        match /pins/{pinId} {
+          allow read: if isMember(wid) || isWorkspaceOwner(wid);
+          allow create: if (isMember(wid) || isWorkspaceOwner(wid))
+            && request.resource.data.pinnedBy == uid();
+          allow update: if (isMember(wid) || isWorkspaceOwner(wid))
+            && resource.data.pinnedBy == uid();
+          allow delete: if (isMember(wid) || isWorkspaceOwner(wid))
+            && resource.data.pinnedBy == uid();
+        }
+
+        match /labSessions/{sessionId} {
+          allow read: if isMember(wid) || isWorkspaceOwner(wid);
+          allow create: if (isMember(wid) || isWorkspaceOwner(wid))
+            && request.resource.data.savedBy == uid();
+          allow update: if (isMember(wid) || isWorkspaceOwner(wid))
+            && resource.data.savedBy == uid();
+          allow delete: if (isMember(wid) || isWorkspaceOwner(wid))
+            && resource.data.savedBy == uid();
+        }
+
+        match /copilotInsights/{insightId} {
+          allow read: if isMember(wid) || isWorkspaceOwner(wid);
+          allow create: if (isMember(wid) || isWorkspaceOwner(wid))
+            && request.resource.data.savedBy == uid();
+          allow update: if (isMember(wid) || isWorkspaceOwner(wid))
+            && resource.data.savedBy == uid();
+          allow delete: if (isMember(wid) || isWorkspaceOwner(wid))
+            && resource.data.savedBy == uid();
+        }
       }
 
       // Provider API keys: SERVER-ONLY. No client access at all.

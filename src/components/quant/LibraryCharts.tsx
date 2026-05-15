@@ -137,15 +137,50 @@ const QualityPanel: React.FC<{ stats: LibraryStats }> = ({ stats }) => {
 
 // ─── Composed grid ────────────────────────────────────────────────────────────
 
-interface Props {
-  stats: LibraryStats;
+export interface ChartSelection {
+  date?: string;       // from activity bar click
+  symbol?: string;     // from coverage bar click
+  type?: string;       // from donut slice click
 }
 
-export const LibraryCharts: React.FC<Props> = ({ stats }) => (
-  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
-    <ActivityPanel stats={stats} />
-    <CoveragePanel stats={stats} />
-    <TypePanel stats={stats} />
-    <QualityPanel stats={stats} />
-  </div>
-);
+interface Props {
+  stats: LibraryStats;
+  selection?: ChartSelection;
+  onSelect?: (sel: ChartSelection | null) => void;
+}
+
+export const LibraryCharts: React.FC<Props> = ({ stats, selection, onSelect }) => {
+  const handleActivity = (data: any) => {
+    if (!onSelect) return;
+    const date = data?.activeLabel;
+    if (!date) return;
+    onSelect(selection?.date === date ? null : { date });
+  };
+  const handleCoverage = (data: any) => {
+    if (!onSelect) return;
+    const symbol = data?.activeLabel;
+    if (!symbol) return;
+    onSelect(selection?.symbol === symbol ? null : { symbol });
+  };
+  const handleType = (data: any) => {
+    if (!onSelect) return;
+    const type = data?.name;
+    if (!type) return;
+    onSelect(selection?.type === type ? null : { type });
+  };
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
+      <div onClick={handleActivity} style={{ cursor: onSelect ? 'pointer' : undefined, outline: selection?.date ? '2px solid var(--primary)' : undefined, borderRadius: 8 }}>
+        <ActivityPanel stats={stats} />
+      </div>
+      <div onClick={handleCoverage} style={{ cursor: onSelect ? 'pointer' : undefined, outline: selection?.symbol ? '2px solid var(--primary)' : undefined, borderRadius: 8 }}>
+        <CoveragePanel stats={stats} />
+      </div>
+      <div onClick={handleType} style={{ cursor: onSelect ? 'pointer' : undefined, outline: selection?.type ? '2px solid var(--primary)' : undefined, borderRadius: 8 }}>
+        <TypePanel stats={stats} />
+      </div>
+      <QualityPanel stats={stats} />
+    </div>
+  );
+};

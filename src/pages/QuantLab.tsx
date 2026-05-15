@@ -5,7 +5,7 @@ import { Disclaimer } from '../components/quant/Disclaimer';
 import { RiskPanel } from '../components/quant/RiskPanel';
 import { AlphaPanel } from '../components/quant/AlphaPanel';
 import { PortfolioPanel } from '../components/quant/PortfolioPanel';
-import { LabSessionCard } from '../components/quant/LabSessionCard';
+import { LabSessionsTab } from '../components/quant/LabSessionsTab';
 import { useWorkspace } from '../components/WorkspaceContext';
 import { useAuth } from '../components/AuthProvider';
 import { useLabSessions } from '../hooks/useLabSessions';
@@ -211,31 +211,21 @@ export const QuantLab: React.FC = () => {
         />
       </div>
 
-      {/* Saved Sessions tab */}
+      {/* Saved Sessions tab — rich cards */}
       <div style={{ display: activeTab === 'sessions' ? 'block' : 'none' }}>
-        {sessionsLoading ? (
-          <p className="ds-caption" style={{ color: 'var(--muted-foreground)' }}>Loading sessions…</p>
-        ) : sessions.length === 0 ? (
-          <div className="ds-empty" style={{ minHeight: 200 }}>
-            <p className="ds-heading">No saved sessions yet</p>
-            <p className="ds-caption" style={{ maxWidth: 320, textAlign: 'center' }}>
-              Run any analysis in Risk, Alpha, or Portfolio tabs and click "Save Session" to persist results here.
-            </p>
-          </div>
-        ) : (
-          <div style={{ display: 'grid', gap: 12 }}>
-            {sessions.map((s) => (
-              <LabSessionCard
-                key={s.id}
-                session={s}
-                onDelete={async (id) => {
-                  try { await deleteSession(id); toast.success('Session deleted'); }
-                  catch { toast.error('Failed to delete session'); }
-                }}
-              />
-            ))}
-          </div>
-        )}
+        <LabSessionsTab
+          sessions={sessions}
+          loading={sessionsLoading}
+          onDelete={async (id) => {
+            try { await deleteSession(id); toast.success('Session deleted'); }
+            catch { toast.error('Failed to delete session'); }
+          }}
+          onRestore={(s) => {
+            // Switch to the relevant panel tab
+            const tab = s.panel as LabTab;
+            if (tab !== 'sessions') { setActiveTab(tab); toast.info(`Switched to ${s.panel} tab — parameters restored from session`); }
+          }}
+        />
       </div>
 
       <Disclaimer />

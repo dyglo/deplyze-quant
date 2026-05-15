@@ -111,7 +111,14 @@ export const ResearchCopilot: React.FC = () => {
   }), [pulse.data, buildSnapshot]);
 
   const { messages, sending, error, send } = useCopilotSession([], contextResolver);
-  const [input, setInput] = useState('');
+
+  // Pre-fill input when navigated from an artifact "Ask Copilot" action
+  const artifactContext = (location.state as { artifactContext?: { title: string; summary?: string; symbols?: string[] } } | null)?.artifactContext;
+  const [input, setInput] = useState(() => {
+    if (!artifactContext) return '';
+    const sym = artifactContext.symbols?.length ? ` [${artifactContext.symbols.join(', ')}]` : '';
+    return `Analyze this research artifact${sym} — "${artifactContext.title}": ${artifactContext.summary ?? ''}`.trim();
+  });
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {

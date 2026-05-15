@@ -9,7 +9,7 @@
 
 import {
   collection, query, orderBy, limit, onSnapshot, Unsubscribe,
-  addDoc, updateDoc, deleteDoc, doc, serverTimestamp, getDocs, where,
+  addDoc, updateDoc, deleteDoc, doc, serverTimestamp, getDocs, getDoc, where,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import type { IntelligenceArtifact, Briefing, LabSession, CopilotInsight, Quote } from '../types';
@@ -59,6 +59,18 @@ export function subscribeToBriefings(
   return onSnapshot(q, (snap) =>
     callback(map<Briefing>(snap.docs as { id: string; data: () => Record<string, unknown> }[])),
   );
+}
+
+export async function getArtifact(
+  workspaceId: string,
+  projectId: string,
+  artifactId: string,
+): Promise<IntelligenceArtifact | null> {
+  const snap = await getDoc(
+    doc(db, 'workspaces', workspaceId, 'projects', projectId, 'artifacts', artifactId),
+  );
+  if (!snap.exists()) return null;
+  return { id: snap.id, ...normalizeTimestamps(snap.data() as Record<string, unknown>) } as IntelligenceArtifact;
 }
 
 // ─── Write operations ────────────────────────────────────────────────────────

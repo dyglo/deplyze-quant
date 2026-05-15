@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { useMacroSeries } from '../hooks/useMacro';
 import { useWebResearch } from '../hooks/useResearch';
 import { useDrawer } from '../components/quant/DataDrawer';
@@ -7,12 +7,17 @@ import { MacroMultiChart, type MacroRange, type MacroScale, type MacroSeriesEntr
 import { FreshnessBadge, SourceBadge } from '../components/quant/FreshnessBadge';
 import { Disclaimer } from '../components/quant/Disclaimer';
 import { Sparkline } from '../components/quant/Sparkline';
+import { ArtifactDetailDrawerBody } from '../components/quant/ArtifactDetailDrawerBody';
 import { RotateCcw, Save, Loader2 } from 'lucide-react';
 import type { MacroSeries } from '../types';
 import { createMacroShiftArtifact } from '../services/artifactService';
+import { useArtifacts, useBriefings } from '../hooks/useArtifacts';
 import { useWorkspace } from '../components/WorkspaceContext';
 import { useAuth } from '../components/AuthProvider';
 import { toast } from 'sonner';
+import { MacroYieldCurvePanel } from '../components/quant/MacroYieldCurvePanel';
+import { MacroRegimeQuadrant } from '../components/quant/MacroRegimeQuadrant';
+import { MacroRealRatesPanel } from '../components/quant/MacroRealRatesPanel';
 
 interface SeriesMeta {
   id: string;
@@ -28,7 +33,12 @@ const SERIES_META: SeriesMeta[] = [
   { id: 'CPI',      name: 'Consumer Price Index',  unit: '',  color: '#4e6eaf', description: 'All-items urban CPI; the headline inflation gauge.' },
   { id: 'DGS10',    name: '10Y Treasury Yield',    unit: '%', color: '#4E6040', description: 'Constant-maturity 10-year nominal Treasury yield — the long-end risk-free anchor.' },
   { id: 'DGS2',     name: '2Y Treasury Yield',     unit: '%', color: '#9e7e3a', description: '2Y Treasury yield — closely tracks expected near-term Fed policy.' },
-  { id: 'UNEMP',    name: 'Unemployment Rate',     unit: '%', color: '#6a4e7c', description: 'U-3 unemployment rate — primary labour-market slack indicator.' },
+  { id: 'DGS5',     name: '5Y Treasury Yield',     unit: '%', color: '#7c9c6e', description: '5Y constant-maturity Treasury yield — mid-curve anchor.' },
+  { id: 'DGS20',    name: '20Y Treasury Yield',    unit: '%', color: '#5a7a8a', description: '20Y Treasury yield — ultra-long anchor used in pension/insurance duration matching.' },
+  { id: 'DGS30',    name: '30Y Treasury Yield',    unit: '%', color: '#3a6070', description: '30Y Treasury yield — the long bond; key for mortgage rates and long-duration assets.' },
+  { id: 'T10Y2Y',   name: '10Y–2Y Spread',         unit: '%', color: '#a0522d', description: 'Yield curve slope: 10Y minus 2Y. Negative = inverted curve, historically a recession predictor.' },
+  { id: 'T5YIE',    name: '5Y Breakeven Inflation', unit: '%', color: '#8b7355', description: 'Market-implied 5Y inflation expectation from TIPS. Nominal − Breakeven = Real Rate.' },
+  { id: 'UNRATE',   name: 'Unemployment Rate',     unit: '%', color: '#6a4e7c', description: 'U-3 unemployment rate — primary labour-market slack indicator.' },
   { id: 'GDP',      name: 'Real GDP',              unit: 'B', color: '#3a8085', description: 'Real (chain-weighted) GDP in billions of dollars.' },
 ];
 
@@ -54,6 +64,8 @@ export const MacroRegimeDesk: React.FC = () => {
   const drawer = useDrawer();
   const { currentWorkspace, currentProject } = useWorkspace();
   const { user } = useAuth();
+  const artifacts = useArtifacts(currentWorkspace?.id ?? null, currentProject?.id ?? null);
+  const briefings = useBriefings(currentWorkspace?.id ?? null, currentProject?.id ?? null);
   const [active, setActive] = useState<string[]>(['FEDFUNDS', 'DGS10', 'CPI']);
   const [range, setRange] = useState<MacroRange>('5Y');
   const [scale, setScale] = useState<MacroScale>('indexed');
@@ -121,6 +133,29 @@ export const MacroRegimeDesk: React.FC = () => {
       })
       .filter((x): x is string => x !== null)
       .join('\n');
+
+  const handleOpenArtifact = useCallback((id: string) => {
+    const artifact = artifacts.items.find((a) => a.id === id);
+    if (!artifact) return;
+    drawer.open({
+      title: artifact.title,
+      subtitle: artifact.artifactType ?? artifact.category,
+      width: 560,
+      body: <ArtifactDetailDrawerBody artifact={artifact} relatedArtifacts={artifacts.items} onOpenArtifact={handleOpenArtifact} />,
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [artifacts.items, drawer]);
+
+  const macroArtifacts = useMemo(() =>
+    artifacts.items
+      .filter((a) =>
+        a.artifactType === 'macro_shift' ||
+        a.tags?.includes('macro') ||
+        a.relatedMacroIndicators?.some((m) => active.includes(m)),
+      )
+      .slice(0, 4),
+    [artifacts.items, active],
+  );
 
   const handleSaveMacroContext = async () => {
     if (!currentWorkspace?.id || !currentProject?.id || !user) return;
@@ -332,6 +367,41 @@ export const MacroRegimeDesk: React.FC = () => {
         </p>
       </section>
 
+      {/* ── Yield Curve Analysis ─────────────────────────────────────────────── */}
+      <section style={{ marginBottom: 28 }}>
+        <h2 className="ds-heading" style={{ margin: '0 0 12px' }}>Yield Curve Analysis</h2>
+        <MacroYieldCurvePanel loaded={{
+          DGS2:   loaded.DGS2?.data,
+          DGS5:   loaded.DGS5?.data,
+          DGS10:  loaded.DGS10?.data,
+          DGS20:  loaded.DGS20?.data,
+          DGS30:  loaded.DGS30?.data,
+          T10Y2Y: loaded.T10Y2Y?.data,
+        }} />
+        <p className="ds-caption" style={{ margin: '8px 0 0', color: 'var(--muted-foreground)', fontSize: 10 }}>
+          Enable DGS2, DGS5, DGS10, DGS20, DGS30, T10Y2Y above to populate these charts.
+        </p>
+      </section>
+
+      {/* ── Regime Quadrant + Real Rates ────────────────────────────────────── */}
+      <section style={{ marginBottom: 28 }}>
+        <h2 className="ds-heading" style={{ margin: '0 0 12px' }}>Regime & Real Rates</h2>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.6fr', gap: 16, marginBottom: 16 }}>
+          <MacroRegimeQuadrant
+            cpi={loaded.CPI?.data}
+            gdp={loaded.GDP?.data}
+          />
+          <MacroRealRatesPanel
+            dgs10={loaded.DGS10?.data}
+            t5yie={loaded.T5YIE?.data}
+            unrate={loaded.UNRATE?.data}
+          />
+        </div>
+        <p className="ds-caption" style={{ color: 'var(--muted-foreground)', fontSize: 10 }}>
+          Regime quadrant requires CPI + GDP. Real rates panel requires 10Y Treasury + 5Y Breakeven. Enable UNRATE for labour-market overlay.
+        </p>
+      </section>
+
       {/* Macro web research */}
       <section>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
@@ -357,6 +427,40 @@ export const MacroRegimeDesk: React.FC = () => {
           ))}
         </ul>
       </section>
+
+      {/* Related Macro Research */}
+      {macroArtifacts.length > 0 && (
+        <section style={{ marginBottom: 24 }}>
+          <h4 className="ds-label" style={{ margin: '0 0 10px', color: 'var(--muted-foreground)' }}>
+            Related Macro Research
+          </h4>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 8 }}>
+            {macroArtifacts.map((a) => (
+              <button
+                key={a.id}
+                onClick={() => handleOpenArtifact(a.id)}
+                className="ds-surface ds-transition"
+                style={{ padding: '10px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', textAlign: 'left', display: 'grid', gap: 4 }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'space-between' }}>
+                  <span className="ds-label" style={{ color: 'var(--muted-foreground)', textTransform: 'capitalize' }}>
+                    {(a.artifactType ?? a.category).replace(/_/g, ' ')}
+                  </span>
+                  <span className="ds-caption" style={{ color: 'var(--muted-foreground)' }}>
+                    {new Date(a.createdAt).toLocaleDateString()}
+                  </span>
+                </div>
+                <span className="ds-body" style={{ fontWeight: 600, fontSize: 13 }}>{a.title}</span>
+                {a.relatedMacroIndicators?.length ? (
+                  <span className="ds-caption" style={{ color: 'var(--muted-foreground)' }}>
+                    {a.relatedMacroIndicators.slice(0, 3).join(' · ')}
+                  </span>
+                ) : null}
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
 
       <Disclaimer />
     </div>

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { useSWR } from '../hooks/useSWR';
 import { fetchOHLCV } from '../services/marketService';
 import { PageHeader } from '../components/quant/PageHeader';
@@ -7,6 +7,10 @@ import { Disclaimer } from '../components/quant/Disclaimer';
 import { FreshnessBadge } from '../components/quant/FreshnessBadge';
 import { useDrawer } from '../components/quant/DataDrawer';
 import { CorrelationDrawerBody } from '../components/quant/CorrelationDrawerBody';
+import { RelatedIntelligencePanel } from '../components/quant/RelatedIntelligencePanel';
+import { ArtifactDetailDrawerBody } from '../components/quant/ArtifactDetailDrawerBody';
+import { useArtifacts, useBriefings } from '../hooks/useArtifacts';
+import { useWorkspace } from '../components/WorkspaceContext';
 import { logReturns, pearson } from '../lib/quant';
 import type { CorrelationCell, CorrelationSnapshot, OHLCVBar } from '../types';
 
@@ -22,8 +26,23 @@ const MIN_BARS = 20;
 
 export const CrossAssetMatrix: React.FC = () => {
   const drawer = useDrawer();
+  const { currentWorkspace, currentProject } = useWorkspace();
+  const artifacts = useArtifacts(currentWorkspace?.id ?? null, currentProject?.id ?? null);
+  const briefings = useBriefings(currentWorkspace?.id ?? null, currentProject?.id ?? null);
   const [universe, setUniverse] = useState(UNIVERSES[0]);
   const [windowDays, setWindowDays] = useState<typeof WINDOWS[number]>(60);
+
+  const handleOpenArtifact = useCallback((id: string) => {
+    const artifact = artifacts.items.find((a) => a.id === id);
+    if (!artifact) return;
+    drawer.open({
+      title: artifact.title,
+      subtitle: artifact.artifactType ?? artifact.category,
+      width: 560,
+      body: <ArtifactDetailDrawerBody artifact={artifact} relatedArtifacts={artifacts.items} onOpenArtifact={handleOpenArtifact} />,
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [artifacts.items, drawer]);
 
   const bundle = useSWR(
     async () => {
@@ -158,6 +177,16 @@ export const CrossAssetMatrix: React.FC = () => {
             {' '}{MIN_BARS} aligned bars are dimmed; cells touching them are omitted rather than zero-padded.
           </p>
         </section>
+      )}
+
+      {(artifacts.items.length > 0 || briefings.items.length > 0) && (
+        <RelatedIntelligencePanel
+          symbols={universe.symbols}
+          artifacts={artifacts.items}
+          briefings={briefings.items}
+          onOpenArtifact={handleOpenArtifact}
+          maxItems={4}
+        />
       )}
 
       <Disclaimer />

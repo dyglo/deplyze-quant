@@ -15,9 +15,11 @@ interface Props {
   loading: boolean;
   onOpenArtifact?: (id: string) => void;
   pinnedIds?: Set<string>;
+  onPin?: (id: string) => Promise<void>;
+  onUnpin?: (id: string) => Promise<void>;
 }
 
-export const ResearchTimeline: React.FC<Props> = ({ events, loading, onOpenArtifact, pinnedIds }) => {
+export const ResearchTimeline: React.FC<Props> = ({ events, loading, onOpenArtifact, pinnedIds, onPin, onUnpin }) => {
   const [search, setSearch] = useState('');
   const [filterKind, setFilterKind] = useState<'all' | TimelineEvent['kind']>('all');
   const [filterSymbol, setFilterSymbol] = useState('');
@@ -196,7 +198,7 @@ export const ResearchTimeline: React.FC<Props> = ({ events, loading, onOpenArtif
                     width: 10, height: 10, borderRadius: '50%',
                     background: cfg.color, border: '2px solid var(--background)',
                   }} />
-                  <TimelineRow event={event} cfg={cfg} Icon={Icon} onOpenArtifact={onOpenArtifact} pinnedIds={pinnedIds} />
+                  <TimelineRow event={event} cfg={cfg} Icon={Icon} onOpenArtifact={onOpenArtifact} pinnedIds={pinnedIds} onPin={onPin} onUnpin={onUnpin} />
                 </div>
               );
             })}
@@ -213,34 +215,53 @@ const TimelineRow: React.FC<{
   Icon: React.ElementType;
   onOpenArtifact?: (id: string) => void;
   pinnedIds?: Set<string>;
-}> = ({ event, cfg, Icon, onOpenArtifact, pinnedIds }) => {
+  onPin?: (id: string) => Promise<void>;
+  onUnpin?: (id: string) => Promise<void>;
+}> = ({ event, cfg, Icon, onOpenArtifact, pinnedIds, onPin, onUnpin }) => {
   const timestamp = new Date(event.createdAt).toLocaleString();
 
   if (event.kind === 'artifact') {
     const a = event.data;
     const isPinned = pinnedIds?.has(event.id);
     return (
-      <button
-        onClick={() => onOpenArtifact?.(a.id)}
-        className="ds-surface ds-transition"
-        style={{ padding: '10px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', width: '100%', textAlign: 'left' }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+      <div className="ds-surface ds-transition" style={{ padding: '10px 12px', borderRadius: 8, display: 'grid', gap: 4 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <Icon size={12} style={{ color: cfg.color }} />
           <span className="ds-label" style={{ color: 'var(--muted-foreground)' }}>{cfg.label} · {a.category}</span>
           <span className="ds-caption" style={{ color: 'var(--muted-foreground)', marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4 }}>
-            {isPinned && <Pin size={10} style={{ color: 'var(--primary)' }} />}
             {timestamp}
           </span>
+          {(onPin || onUnpin) && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                if (isPinned) onUnpin?.(event.id).catch(console.error);
+                else onPin?.(event.id).catch(console.error);
+              }}
+              title={isPinned ? 'Unpin' : 'Pin'}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer', padding: 2,
+                color: isPinned ? 'var(--primary)' : 'var(--muted-foreground)',
+                display: 'flex', alignItems: 'center',
+              }}
+            >
+              <Pin size={11} style={{ fill: isPinned ? 'var(--primary)' : 'none' }} />
+            </button>
+          )}
         </div>
-        <p className="ds-body" style={{ margin: 0, fontWeight: 600, fontSize: 13, display: 'flex', alignItems: 'center', gap: 4 }}>
-          {a.saved && <Bookmark size={10} style={{ color: 'var(--primary)', flexShrink: 0 }} />}
-          {a.title}
-        </p>
-        {a.symbols?.length ? (
-          <p className="ds-caption" style={{ margin: '4px 0 0', color: 'var(--muted-foreground)' }}>{a.symbols.join(', ')}</p>
-        ) : null}
-      </button>
+        <button
+          onClick={() => onOpenArtifact?.(a.id)}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: 0 }}
+        >
+          <p className="ds-body" style={{ margin: 0, fontWeight: 600, fontSize: 13, display: 'flex', alignItems: 'center', gap: 4 }}>
+            {a.saved && <Bookmark size={10} style={{ color: 'var(--primary)', flexShrink: 0 }} />}
+            {a.title}
+          </p>
+          {a.symbols?.length ? (
+            <p className="ds-caption" style={{ margin: '4px 0 0', color: 'var(--muted-foreground)' }}>{a.symbols.join(', ')}</p>
+          ) : null}
+        </button>
+      </div>
     );
   }
 

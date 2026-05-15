@@ -2,6 +2,7 @@ import React, { useState, useCallback, useId } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, LineChart, Line, ReferenceLine, Cell,
+  ScatterChart, Scatter, ZAxis, Legend,
 } from 'recharts';
 import { Play, Loader2, Plus, Trash2, Copy, Check, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
@@ -10,6 +11,7 @@ import {
   closes, logReturns, annualisedVol, maxDrawdown, equityCurve,
   pearson, covarianceMatrix, portfolioVol, riskContributions,
   portfolioAnnualisedReturn, portfolioReturnSeries, sharpeRatio,
+  efficientFrontierPoints, rebase100,
 } from '../../lib/quant';
 import { fetchOHLCV } from '../../services/marketService';
 import type { OHLCVBar, Timeframe } from '../../types';
@@ -134,7 +136,7 @@ export const PortfolioPanel: React.FC<PortfolioPanelProps> = ({ onSaveSession })
   const canRun = weightSum > 0 && basket.some(r => r.symbol.trim());
 
   const addRow = useCallback(() => {
-    if (basket.length >= 8) return;
+    if (basket.length >= 20) return;
     setBasket(b => [...b, { id: `${Date.now()}`, symbol: '', weight: 0 }]);
   }, [basket.length]);
 
@@ -364,7 +366,11 @@ export const PortfolioPanel: React.FC<PortfolioPanelProps> = ({ onSaveSession })
               {onSaveSession && (
                 <SaveSessionInline
                   onSave={async (name) => {
-                    await onSaveSession({
+                    const portCurve = (() => {
+                      const lr = portfolioReturnSeries(result.assets.map(a => a.lr), result.assets.map(a => a.weight));
+                      return equityCurve(lr).filter((_, i) => i % 5 === 0);
+                    })();
+                    await (onSaveSession as any)({
                       name,
                       panel: 'portfolio',
                       symbols: result.assets.map((a) => a.symbol),
@@ -374,6 +380,17 @@ export const PortfolioPanel: React.FC<PortfolioPanelProps> = ({ onSaveSession })
                         portReturn: +result.portReturn.toFixed(2),
                         portSharpe: +result.portSharpe.toFixed(2),
                         diversification: +result.diversification.toFixed(2),
+                      },
+                      rawSnapshot: {
+                        basket: result.assets.map(a => ({
+                          symbol: a.symbol, weight: a.weight,
+                          annVol: a.annVol, annReturn: a.annReturn, sharpe: sharpeRatio(a.lr, 0, PPY_MAP[result.timeframe as import('../../types').Timeframe] ?? 252),
+                        })),
+                        portfolioMetrics: {
+                          portVol: result.portVol, portReturn: result.portReturn,
+                          portSharpe: result.portSharpe, portMdd: result.portMdd,
+                          diversification: result.diversification, equityCurve: portCurve,
+                        },
                       },
                     });
                     toast.success('Session saved');
@@ -558,6 +575,59 @@ export const PortfolioPanel: React.FC<PortfolioPanelProps> = ({ onSaveSession })
                 <ReferenceLine y={1} stroke="var(--muted-foreground)" strokeDasharray="4 3" />
                 <Line type="monotone" dataKey="v" stroke="var(--chart-1)" strokeWidth={1.5} dot={false} isAnimationActive={false} />
               </LineChart>
+            </ResponsiveContainer>
+          </section>
+          {/* Section 6 — Efficient Frontier */}
+          {result.assets.length >= 2 && (() => {
+            const ppy = PPY_MAP[result.timeframe as import('../../types').Timeframe] ?? 252;
+            const points = efficientFrontierPoints(result.assets.map(a => a.lr), 200, ppy);
+            const currentVol = result.portVol * 100;
+            const currentRet = result.portReturn * 100;
+            const current = [{ vol: currentVol, ret: currentRet, sharpe: result.portSharpe, current: true }];
+            return (
+              <section className="ds-surface" style={{ padding: 14, borderRadius: 10, marginBottom: 16 }}>
+                <h2 className="ds-heading" style={{ margin: '0 0 4px' }}>Efficient Frontier</h2>
+                <p className="ds-caption" style={{ margin: '0 0 10px', color: 'var(--muted-foreground)' }}>200 random weight combinations. Your portfolio = ★.</p>
+                <ResponsiveContainer width="100%" height={200}>
+                  <ScatterChart margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <CartesianGrid stroke="var(--border)" strokeDasharray="2 4" />
+                    <XAxis type="number" dataKey="vol" name="Vol %" tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} axisLine={false} tickLine={false} tickFormatter={v => `${v.toFixed(1)}%`} />
+                    <YAxis type="number" dataKey="ret" name="Return %" tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} axisLine={false} tickLine={false} tickFormatter={v => `${v.toFixed(1)}%`} />
+                    <ZAxis range={[18, 18]} />
+                    <Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 6, fontSize: 11 }}
+                      formatter={(v: number, n: string) => [`${v.toFixed(2)}${n === 'Vol %' || n === 'Return %' ? '%' : ''}`, n]} />
+                    <Scatter data={points} fill="var(--chart-3)" opacity={0.4} name="Random" />
+                    <Scatter data={current} fill="var(--primary)" name="Current" shape="star" />
+                  </ScatterChart>
+                </ResponsiveContainer>
+                <p className="ds-caption" style={{ margin: '4px 0 0', color: 'var(--muted-foreground)', fontSize: 10 }}>
+                  Move up-left to improve Sharpe. If your portfolio is below the frontier, consider rebalancing.
+                </p>
+              </section>
+            );
+          })()}
+
+          {/* Section 7 — Attribution */}
+          <section className="ds-surface" style={{ padding: 14, borderRadius: 10, marginBottom: 16 }}>
+            <h2 className="ds-heading" style={{ margin: '0 0 10px' }}>Attribution — Return vs Risk Contribution</h2>
+            <ResponsiveContainer width="100%" height={Math.max(120, result.assets.length * 28)}>
+              <BarChart
+                layout="vertical"
+                data={result.assets.map((a, i) => ({
+                  symbol: a.symbol,
+                  returnContrib: +(a.annReturn * a.weight * 100).toFixed(2),
+                  riskContrib: +(result.riskContribs[i] * 100).toFixed(2),
+                }))}
+                margin={{ top: 4, right: 20, left: 8, bottom: 0 }}
+              >
+                <CartesianGrid stroke="var(--border)" strokeDasharray="2 4" horizontal={false} />
+                <XAxis type="number" tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} axisLine={false} tickLine={false} tickFormatter={v => `${v.toFixed(0)}%`} />
+                <YAxis type="category" dataKey="symbol" tick={{ fontSize: 11, fill: 'var(--foreground)' }} axisLine={false} tickLine={false} width={48} />
+                <Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 6, fontSize: 11 }} formatter={(v: number, n: string) => [`${v.toFixed(2)}%`, n]} />
+                <Legend wrapperStyle={{ fontSize: 10 }} />
+                <Bar dataKey="returnContrib" fill="var(--chart-2)" radius={[0, 3, 3, 0]} name="Return contrib %" />
+                <Bar dataKey="riskContrib" fill="var(--chart-1)" opacity={0.75} radius={[0, 3, 3, 0]} name="Risk contrib %" />
+              </BarChart>
             </ResponsiveContainer>
           </section>
         </>

@@ -1,5 +1,6 @@
 import React, { useCallback, useState } from 'react';
-import { Bookmark, BookmarkCheck, BookmarkPlus, Copy, Download, Check } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Bookmark, BookmarkCheck, BookmarkPlus, Copy, Download, Check, ExternalLink, MessageSquare } from 'lucide-react';
 import { toast } from 'sonner';
 import ReactMarkdown from 'react-markdown';
 import { useWorkspace } from '../WorkspaceContext';
@@ -51,6 +52,7 @@ export const ArtifactDetailDrawerBody: React.FC<Props> = ({
 }) => {
   const { currentWorkspace, currentProject } = useWorkspace();
   const { isPinned, pin, unpin } = usePins(currentWorkspace?.id ?? null, currentProject?.id ?? null);
+  const navigate = useNavigate();
   const [copied, setCopied] = useState(false);
   const [pinning, setPinning] = useState(false);
   const [saved, setSaved] = useState(artifact.saved ?? false);
@@ -118,6 +120,19 @@ export const ArtifactDetailDrawerBody: React.FC<Props> = ({
     a.click();
     URL.revokeObjectURL(url);
   }, [artifact]);
+
+  const handleAskCopilot = useCallback(() => {
+    navigate('/copilot', {
+      state: {
+        artifactContext: {
+          id: artifact.id,
+          title: artifact.title,
+          summary: artifact.summary ?? artifact.narrative,
+          symbols: artifact.symbols,
+        },
+      },
+    });
+  }, [navigate, artifact]);
 
   const handleExportJson = useCallback(() => {
     const json = JSON.stringify(artifact, null, 2);
@@ -326,6 +341,22 @@ export const ArtifactDetailDrawerBody: React.FC<Props> = ({
           <Download size={14} />
           Export JSON
         </button>
+        <button
+          onClick={handleAskCopilot}
+          className="ds-btn-secondary"
+          style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}
+        >
+          <MessageSquare size={14} />
+          Ask Copilot
+        </button>
+        <Link
+          to={`/artifacts/${artifact.id}`}
+          className="ds-btn-secondary"
+          style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, textDecoration: 'none', color: 'inherit' }}
+        >
+          <ExternalLink size={14} />
+          Open page
+        </Link>
       </div>
 
       {/* Related Intelligence */}

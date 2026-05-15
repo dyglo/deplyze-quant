@@ -6,7 +6,15 @@ export type BriefingGenerateKind =
   | 'daily-macro'
   | 'instrument-snapshot'
   | 'cross-asset'
-  | 'sentiment';
+  | 'sentiment'
+  | 'weekly-regime'
+  | 'volatility'
+  | 'market-stress'
+  | 'earnings'
+  | 'sector-rotation'
+  | 'positioning'
+  | 'risk'
+  | 'trade-thesis';
 
 export interface BriefingGenerateRequest {
   kind: BriefingGenerateKind;

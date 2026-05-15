@@ -1,12 +1,12 @@
-import React, { useCallback, useMemo, useState } from 'react';
-import { Library } from 'lucide-react';
+import React, { useCallback, useMemo, useState, useRef } from 'react';
+import { Library, Lightbulb } from 'lucide-react';
 import { useWorkspace } from '../components/WorkspaceContext';
 import { useArtifacts } from '../hooks/useArtifacts';
 import { usePins } from '../hooks/usePins';
 import { useDrawer } from '../components/quant/DataDrawer';
 import { useLibraryStats } from '../hooks/useLibraryStats';
 import { PageHeader } from '../components/quant/PageHeader';
-import { LibraryCharts } from '../components/quant/LibraryCharts';
+import { LibraryCharts, type ChartSelection } from '../components/quant/LibraryCharts';
 import { LibraryCard } from '../components/quant/LibraryCard';
 import { ArtifactDetailDrawerBody } from '../components/quant/ArtifactDetailDrawerBody';
 import { Disclaimer } from '../components/quant/Disclaimer';
@@ -36,6 +36,73 @@ const SectionHeading: React.FC<{ type: string; count: number }> = ({ type, count
   </div>
 );
 
+// ─── Research Overview Panel ──────────────────────────────────────────────────
+
+const ResearchOverviewPanel: React.FC<{
+  stats: ReturnType<typeof import('../hooks/useLibraryStats').useLibraryStats>;
+  artifacts: import('../types').IntelligenceArtifact[];
+}> = ({ stats, artifacts }) => {
+  const [open, setOpen] = useState(false);
+
+  const overview = useMemo(() => {
+    if (!stats.total) return '';
+    const topType = stats.typeBreakdown[0];
+    const topTypePct = topType ? Math.round((topType.value / stats.total) * 100) : 0;
+    const mostRecent = artifacts.length
+      ? [...artifacts].sort((a, b) => {
+          const ta = typeof a.createdAt === 'number' ? a.createdAt : (a.createdAt as any)?.toMillis?.() ?? 0;
+          const tb = typeof b.createdAt === 'number' ? b.createdAt : (b.createdAt as any)?.toMillis?.() ?? 0;
+          return tb - ta;
+        })[0]
+      : null;
+    const recentAge = mostRecent
+      ? (() => {
+          const ms = typeof mostRecent.createdAt === 'number' ? mostRecent.createdAt : (mostRecent.createdAt as any)?.toMillis?.() ?? 0;
+          const h = Math.floor((Date.now() - ms) / 3600000);
+          return h < 24 ? `${h}h ago` : `${Math.floor(h / 24)}d ago`;
+        })()
+      : null;
+
+    const lines: string[] = [
+      `You have ${stats.total} saved item${stats.total > 1 ? 's' : ''} in your research library.`,
+    ];
+    if (stats.topSymbol) {
+      const symCount = stats.symbolCoverage.find(s => s.symbol === stats.topSymbol)?.count ?? 0;
+      lines.push(`${stats.topSymbol} is your most-researched instrument with ${symCount} item${symCount > 1 ? 's' : ''}.`);
+    }
+    if (topType) {
+      lines.push(`${topTypePct}% of your library is ${topType.name.replace(/_/g, ' ')} — consider diversifying your research types if this feels concentrated.`);
+    }
+    if (stats.avgConfidence != null) {
+      const conf = Math.round(stats.avgConfidence * 100);
+      lines.push(`Average confidence across your library is ${conf}%.${conf < 60 ? ' Many items are low-confidence — review and update or delete stale research.' : conf > 80 ? ' Strong overall quality.' : ''}`);
+    }
+    if (stats.thisWeek > 0) {
+      lines.push(`You saved ${stats.thisWeek} item${stats.thisWeek > 1 ? 's' : ''} this week.`);
+    }
+    if (recentAge) {
+      lines.push(`Most recent save was ${recentAge}.`);
+    }
+    return lines.join(' ');
+  }, [stats, artifacts]);
+
+  return (
+    <div className="ds-surface" style={{ borderRadius: 10, padding: 14, marginBottom: 24, marginTop: 8 }}>
+      <button onClick={() => setOpen(o => !o)}
+        style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', cursor: 'pointer', padding: 0, width: '100%', textAlign: 'left' }}>
+        <Lightbulb size={14} style={{ color: 'var(--primary)', flexShrink: 0 }} />
+        <span className="ds-label" style={{ color: 'var(--foreground)' }}>Research Overview</span>
+        <span className="ds-caption" style={{ color: 'var(--muted-foreground)', marginLeft: 'auto', fontSize: 10 }}>{open ? 'Hide' : 'Show'}</span>
+      </button>
+      {open && (
+        <p className="ds-body" style={{ margin: '10px 0 0', lineHeight: 1.7, fontSize: 13, color: 'var(--foreground)' }}>
+          {overview}
+        </p>
+      )}
+    </div>
+  );
+};
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export const ResearchLibrary: React.FC = () => {
@@ -46,6 +113,7 @@ export const ResearchLibrary: React.FC = () => {
 
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState('all');
+  const [chartSel, setChartSel] = useState<ChartSelection | null>(null);
 
   // Only user-created artifacts
   const userArtifacts = useMemo(
@@ -78,12 +146,18 @@ export const ResearchLibrary: React.FC = () => {
     if (filterType !== 'all') {
       items = items.filter(a => (a.artifactType ?? 'unknown') === filterType);
     }
+    if (chartSel?.type) {
+      items = items.filter(a => (a.artifactType ?? 'unknown') === chartSel.type);
+    }
+    if (chartSel?.symbol) {
+      items = items.filter(a => a.symbols?.includes(chartSel.symbol!));
+    }
     if (search.trim()) {
       const q = search.toLowerCase();
       items = items.filter(a => a.title.toLowerCase().includes(q) || a.symbols?.some(s => s.toLowerCase().includes(q)));
     }
     return items;
-  }, [userArtifacts, filterType, search]);
+  }, [userArtifacts, filterType, chartSel, search]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, IntelligenceArtifact[]>();
@@ -125,8 +199,30 @@ export const ResearchLibrary: React.FC = () => {
             />
           </div>
 
-          {/* Charts */}
-          <LibraryCharts stats={stats} />
+          {/* Charts — click to filter */}
+          <LibraryCharts stats={stats} selection={chartSel ?? undefined} onSelect={setChartSel} />
+
+          {/* Active chart filters chips */}
+          {chartSel && (
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 10, flexWrap: 'wrap' }}>
+              <span className="ds-caption" style={{ color: 'var(--muted-foreground)', fontSize: 11 }}>Filtered by:</span>
+              {chartSel.type && (
+                <span style={{ background: 'var(--primary)', color: 'var(--primary-foreground)', borderRadius: 12, padding: '2px 10px', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+                  onClick={() => setChartSel(s => s ? { ...s, type: undefined } : null)}>
+                  Type: {chartSel.type.replace(/_/g, ' ')} ×
+                </span>
+              )}
+              {chartSel.symbol && (
+                <span style={{ background: 'var(--primary)', color: 'var(--primary-foreground)', borderRadius: 12, padding: '2px 10px', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+                  onClick={() => setChartSel(s => s ? { ...s, symbol: undefined } : null)}>
+                  Symbol: {chartSel.symbol} ×
+                </span>
+              )}
+              <button onClick={() => setChartSel(null)} style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--card)', cursor: 'pointer', color: 'var(--muted-foreground)' }}>
+                Clear all
+              </button>
+            </div>
+          )}
 
           {/* Filter bar */}
           <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
@@ -173,6 +269,11 @@ export const ResearchLibrary: React.FC = () => {
             ))
           )}
         </>
+      )}
+
+      {/* AI Overview — deterministic insight paragraph */}
+      {userArtifacts.length >= 3 && (
+        <ResearchOverviewPanel stats={stats} artifacts={userArtifacts} />
       )}
 
       <Disclaimer />

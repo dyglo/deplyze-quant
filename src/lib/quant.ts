@@ -360,3 +360,158 @@ export function equityCurve(returns: number[]): number[] {
   let eq = 1;
   return [eq, ...returns.map((r) => { eq *= Math.exp(r); return eq; })];
 }
+
+// ─── Analytics V1.0 additions ────────────────────────────────────────────────
+
+/** Rolling Sharpe ratio over a window of log-return periods. */
+export function rollingSharpe(returns: number[], window: number, ppy = 252): number[] {
+  if (returns.length < window) return [];
+  const out: number[] = [];
+  for (let i = window; i <= returns.length; i++) {
+    out.push(sharpeRatio(returns.slice(i - window, i), 0, ppy));
+  }
+  return out;
+}
+
+/** OLS beta of asset returns vs benchmark returns. */
+export function beta(assetReturns: number[], benchReturns: number[]): number {
+  const n = Math.min(assetReturns.length, benchReturns.length);
+  if (n < 2) return 1;
+  const a = assetReturns.slice(-n), b = benchReturns.slice(-n);
+  const mb = mean(b);
+  let cov = 0, varB = 0;
+  for (let i = 0; i < n; i++) {
+    cov += (a[i] - mean(a)) * (b[i] - mb);
+    varB += (b[i] - mb) ** 2;
+  }
+  return varB === 0 ? 1 : cov / varB;
+}
+
+/** Jensen's alpha (annualised): asset_return − (rf + β × (bench_return − rf)). */
+export function jensensAlpha(
+  assetAnnReturn: number,
+  benchAnnReturn: number,
+  b: number,
+  rf = 0,
+): number {
+  return assetAnnReturn - (rf + b * (benchAnnReturn - rf));
+}
+
+/** Tracking error: annualised stdev of (asset − benchmark) excess returns. */
+export function trackingError(assetReturns: number[], benchReturns: number[], ppy = 252): number {
+  const n = Math.min(assetReturns.length, benchReturns.length);
+  if (n < 2) return 0;
+  const excess = Array.from({ length: n }, (_, i) => assetReturns[i] - benchReturns[i]);
+  return stdev(excess) * Math.sqrt(ppy);
+}
+
+/** Information ratio: (asset_return − bench_return) / tracking_error. */
+export function informationRatio(
+  assetAnnReturn: number,
+  benchAnnReturn: number,
+  te: number,
+): number {
+  return te === 0 ? 0 : (assetAnnReturn - benchAnnReturn) / te;
+}
+
+/** Rebase a price series to 100 at index 0. */
+export function rebase100(values: number[]): number[] {
+  if (!values.length || values[0] === 0) return values;
+  const base = values[0];
+  return values.map(v => (v / base) * 100);
+}
+
+/** All distinct drawdown periods: array of { start, trough, end, depth }. */
+export function drawdownPeriods(curve: number[]): Array<{
+  start: number; trough: number; end: number; depth: number;
+}> {
+  const periods: Array<{ start: number; trough: number; end: number; depth: number }> = [];
+  let inDD = false, peakVal = curve[0] ?? 1, peakIdx = 0, troughVal = curve[0] ?? 1, troughIdx = 0;
+  for (let i = 1; i < curve.length; i++) {
+    const v = curve[i];
+    if (!inDD) {
+      if (v > peakVal) { peakVal = v; peakIdx = i; }
+      else if (v < peakVal) { inDD = true; troughVal = v; troughIdx = i; }
+    } else {
+      if (v < troughVal) { troughVal = v; troughIdx = i; }
+      else if (v >= peakVal) {
+        const depth = peakVal > 0 ? (peakVal - troughVal) / peakVal : 0;
+        if (depth > 0.01) periods.push({ start: peakIdx, trough: troughIdx, end: i, depth });
+        inDD = false; peakVal = v; peakIdx = i;
+      }
+    }
+  }
+  if (inDD) {
+    const depth = peakVal > 0 ? (peakVal - troughVal) / peakVal : 0;
+    if (depth > 0.01) periods.push({ start: peakIdx, trough: troughIdx, end: curve.length - 1, depth });
+  }
+  return periods;
+}
+
+/** Monte Carlo simulation of future paths. Returns percentile series at P10/P25/P50/P75/P90.
+ *  paths: number of simulations, horizon: number of periods forward. */
+export function monteCarloPaths(
+  returns: number[],
+  horizon = 252,
+  paths = 500,
+): { p10: number[]; p25: number[]; p50: number[]; p75: number[]; p90: number[] } {
+  if (returns.length < 2) {
+    const z = new Array(horizon + 1).fill(1);
+    return { p10: z, p25: z, p50: z, p75: z, p90: z };
+  }
+  const m = mean(returns);
+  const s = stdev(returns);
+  // Box-Muller RNG
+  function randNorm(): number {
+    const u1 = Math.random(), u2 = Math.random();
+    return Math.sqrt(-2 * Math.log(u1 + 1e-10)) * Math.cos(2 * Math.PI * u2);
+  }
+  const allPaths: number[][] = [];
+  for (let p = 0; p < paths; p++) {
+    let v = 1;
+    const path = [v];
+    for (let t = 0; t < horizon; t++) {
+      v *= Math.exp(m + s * randNorm());
+      path.push(v);
+    }
+    allPaths.push(path);
+  }
+  // Compute percentiles at each time step
+  const result = { p10: [], p25: [], p50: [], p75: [], p90: [] } as Record<string, number[]>;
+  for (let t = 0; t <= horizon; t++) {
+    const col = allPaths.map(p => p[t]).sort((a, b) => a - b);
+    const pick = (q: number) => col[Math.floor(q * (col.length - 1))];
+    result.p10.push(pick(0.10));
+    result.p25.push(pick(0.25));
+    result.p50.push(pick(0.50));
+    result.p75.push(pick(0.75));
+    result.p90.push(pick(0.90));
+  }
+  return result as { p10: number[]; p25: number[]; p50: number[]; p75: number[]; p90: number[] };
+}
+
+/** Efficient frontier: simulate N random weight combinations, return { vol, ret, sharpe }[]. */
+export function efficientFrontierPoints(
+  returnSeries: number[][],
+  n = 200,
+  ppy = 252,
+): Array<{ vol: number; ret: number; sharpe: number; weights: number[] }> {
+  const k = returnSeries.length;
+  if (k < 2) return [];
+  const cov = covarianceMatrix(returnSeries);
+  const annReturns = returnSeries.map(lr =>
+    lr.length >= 2 ? (Math.exp(mean(lr) * ppy) - 1) : 0
+  );
+  const points = [];
+  for (let i = 0; i < n; i++) {
+    // Random Dirichlet weights
+    const raw = Array.from({ length: k }, () => -Math.log(Math.random() + 1e-10));
+    const sum = raw.reduce((a, b) => a + b, 0);
+    const w = raw.map(v => v / sum);
+    const vol = portfolioVol(w, cov, ppy);
+    const ret = w.reduce((s, wi, j) => s + wi * annReturns[j], 0);
+    const sharpe = vol > 0 ? ret / vol : 0;
+    points.push({ vol: vol * 100, ret: ret * 100, sharpe, weights: w });
+  }
+  return points;
+}

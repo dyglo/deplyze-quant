@@ -1,85 +1,108 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useId } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, ReferenceLine, Legend,
+  ResponsiveContainer, ReferenceLine, Legend, BarChart, Bar,
 } from 'recharts';
-import { Play, Loader2, Copy, Check, AlertTriangle } from 'lucide-react';
+import { Play, Loader2, Copy, Check, Plus, Trash2, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 
 import {
   closes, logReturns, annualisedVol, rollingAnnualisedVol,
-  rollingZScore, smaCross, pearson, rollingPearson,
-  alignClosesByTs, mean, type SmaCrossState,
+  rollingZScore, smaCross, pearson, alignClosesByTs, mean, stdev,
+  rebase100, beta as calcBeta, jensensAlpha, trackingError, informationRatio,
+  sharpeRatio,
+  type SmaCrossState,
 } from '../../lib/quant';
 import { fetchOHLCV } from '../../services/marketService';
 import type { OHLCVBar, Timeframe } from '../../types';
 import { StatTile } from './StatTile';
 import { FreshnessBadge } from './FreshnessBadge';
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-interface AlphaResult {
+interface AssetRow { id: string; symbol: string; isBenchmark: boolean; }
+
+interface AssetResult {
   symbol: string;
-  benchmarkSymbol: string | null;
-  timeframe: Timeframe;
-  fetchedAt: number;
+  isBenchmark: boolean;
   bars: OHLCVBar[];
-  // series (pre-computed for charts)
-  rollingVol: number[];      // 30-bar rolling ann. vol %
-  zScores: number[];         // rolling z-score on price
-  fastSma: number[];
-  slowSma: number[];
-  fastWindow: number;
-  slowWindow: number;
-  zWindow: number;
-  smaState: SmaCrossState;
-  lastFast: number;
-  lastSlow: number;
-  // scalars
+  lr: number[];
   annVol: number;
-  totalReturn: number;
-  currentZ: number;
-  // benchmark
-  benchCorr: number | null;
-  rollingCorr: number[];
+  annReturn: number;
+  sharpe: number;
+  beta: number | null;
+  alpha: number | null;
+  infoRatio: number | null;
+  trackingError: number | null;
+  rebased: number[];  // rebased to 100
 }
 
 interface AlphaPanelProps {
   defaultSymbol?: string;
-  onSaveSession?: (payload: { name: string; panel: 'alpha'; symbols: string[]; timeframe: string; summary: Record<string, string | number> }) => Promise<void>;
+  onSaveSession?: (payload: {
+    name: string; panel: 'alpha'; symbols: string[]; timeframe: string;
+    summary: Record<string, string | number>;
+    rawSnapshot?: { alphaMetrics?: import('../../types').LabSessionAssetSnapshot[] };
+  }) => Promise<void>;
 }
 
-const SaveSessionInline: React.FC<{ onSave: (name: string) => Promise<void> }> = ({ onSave }) => {
+// ─── Constants & helpers ──────────────────────────────────────────────────────
+
+const TIMEFRAMES: Timeframe[] = ['1day', '1week', '1month'];
+const TF_LABEL: Partial<Record<Timeframe, string>> = { '1day': '1D', '1week': '1W', '1month': '1M' };
+const SIZE_MAP: Partial<Record<Timeframe, number>> = { '1day': 250, '1week': 200, '1month': 120 };
+const PPY_MAP: Partial<Record<Timeframe, number>> = { '1day': 252, '1week': 52, '1month': 12 };
+const COLORS = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)', 'var(--chart-5)',
+  '#B87333', '#7c5cbf', '#2aa198', '#d33682', '#6c71c4'];
+const MAX_ASSETS = 10;
+
+function fmt2(n: number | null): string { return n != null && isFinite(n) ? n.toFixed(2) : '—'; }
+function fmtPct(n: number | null): string { return n != null && isFinite(n) ? `${n.toFixed(2)}%` : '—'; }
+
+const inputStyle: React.CSSProperties = {
+  fontSize: 12, padding: '5px 8px', borderRadius: 6,
+  border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--foreground)', width: '100%',
+};
+const tfBtn = (active: boolean): React.CSSProperties => ({
+  padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer',
+  border: '1px solid var(--border)',
+  background: active ? 'var(--primary)' : 'var(--card)',
+  color: active ? 'var(--primary-foreground)' : 'var(--foreground)',
+});
+const runBtn = (disabled: boolean): React.CSSProperties => ({
+  padding: '6px 14px', borderRadius: 6, border: 'none', fontSize: 12, fontWeight: 700,
+  cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.5 : 1,
+  background: 'var(--primary)', color: 'var(--primary-foreground)',
+  display: 'inline-flex', alignItems: 'center', gap: 6,
+});
+
+const SMA_STATE_LABEL: Record<SmaCrossState, string> = {
+  bullish: '▲ Bullish', bearish: '▼ Bearish', neutral: '· Neutral', insufficient: '—',
+};
+const SMA_STATE_COLOR: Record<SmaCrossState, string> = {
+  bullish: '#788C5D', bearish: 'var(--chart-1)', neutral: 'var(--muted-foreground)', insufficient: 'var(--muted-foreground)',
+};
+
+// ─── Save inline ─────────────────────────────────────────────────────────────
+
+const SaveInline: React.FC<{ onSave: (name: string) => Promise<void> }> = ({ onSave }) => {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
   const [saving, setSaving] = useState(false);
-  const defaultName = `Alpha session ${new Date().toLocaleDateString()}`;
-
-  if (!open) {
-    return (
-      <button
-        onClick={() => { setName(defaultName); setOpen(true); }}
-        style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--foreground)', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
-      >
-        Save Session
-      </button>
-    );
-  }
+  const def = `Alpha ${new Date().toLocaleDateString()}`;
+  if (!open) return (
+    <button onClick={() => { setName(def); setOpen(true); }}
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--foreground)', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
+      Save Session
+    </button>
+  );
   return (
     <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-      <input
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder="Session name"
+      <input value={name} onChange={e => setName(e.target.value)} placeholder="Session name"
         style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--foreground)', width: 180 }}
-        autoFocus
-        onKeyDown={(e) => { if (e.key === 'Escape') setOpen(false); }}
-      />
-      <button
-        onClick={async () => { setSaving(true); try { await onSave(name || defaultName); setOpen(false); } catch { toast.error('Failed to save session'); } finally { setSaving(false); } }}
-        disabled={saving}
-        style={{ padding: '4px 10px', borderRadius: 6, border: 'none', background: 'var(--primary)', color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
-      >
+        autoFocus onKeyDown={e => e.key === 'Escape' && setOpen(false)} />
+      <button onClick={async () => { setSaving(true); try { await onSave(name || def); setOpen(false); } catch { toast.error('Failed'); } finally { setSaving(false); } }}
+        disabled={saving} style={{ padding: '4px 10px', borderRadius: 6, border: 'none', background: 'var(--primary)', color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
         {saving ? 'Saving…' : 'Save'}
       </button>
       <button onClick={() => setOpen(false)} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--foreground)', fontSize: 11, cursor: 'pointer' }}>Cancel</button>
@@ -87,419 +110,368 @@ const SaveSessionInline: React.FC<{ onSave: (name: string) => Promise<void> }> =
   );
 };
 
-// ─── Constants ───────────────────────────────────────────────────────────────
-
-const TIMEFRAMES: Timeframe[] = ['1day', '1week', '1month'];
-const TF_LABEL: Partial<Record<Timeframe, string>> = { '1day': '1D', '1week': '1W', '1month': '1M' };
-const SIZE_MAP: Partial<Record<Timeframe, number>> = { '1day': 250, '1week': 200, '1month': 120 };
-const PPY_MAP: Partial<Record<Timeframe, number>> = { '1day': 252, '1week': 52, '1month': 12 };
-
-function fmt2(n: number): string { return isFinite(n) ? n.toFixed(2) : '—'; }
-function fmtPct(n: number): string { return isFinite(n) ? `${n.toFixed(2)}%` : '—'; }
-
-const SMA_STATE_COLOR: Record<SmaCrossState, string> = {
-  bullish: '#788C5D',
-  bearish: 'var(--primary)',
-  neutral: 'var(--muted-foreground)',
-  insufficient: 'var(--muted-foreground)',
-};
-const SMA_STATE_LABEL: Record<SmaCrossState, string> = {
-  bullish: '▲ Bullish',
-  bearish: '▼ Bearish',
-  neutral: '· Neutral',
-  insufficient: '— Insufficient data',
-};
-
-// ─── Component ───────────────────────────────────────────────────────────────
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export const AlphaPanel: React.FC<AlphaPanelProps> = ({ defaultSymbol = 'SPY', onSaveSession }) => {
-  const [symbol, setSymbol] = useState(defaultSymbol);
-  const [benchmark, setBenchmark] = useState('');
+  const uid = useId();
+  const [rows, setRows] = useState<AssetRow[]>([
+    { id: `${uid}-0`, symbol: defaultSymbol, isBenchmark: false },
+    { id: `${uid}-1`, symbol: 'SPY', isBenchmark: true },
+  ]);
   const [timeframe, setTimeframe] = useState<Timeframe>('1day');
-  const [fastWindow, setFastWindow] = useState(20);
-  const [slowWindow, setSlowWindow] = useState(50);
-  const [zWindow, setZWindow] = useState(30);
   const [running, setRunning] = useState(false);
-  const [result, setResult] = useState<AlphaResult | null>(null);
+  const [results, setResults] = useState<AssetResult[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
+  const addRow = useCallback(() => {
+    if (rows.length >= MAX_ASSETS) return;
+    setRows(r => [...r, { id: `${uid}-${Date.now()}`, symbol: '', isBenchmark: false }]);
+  }, [rows.length, uid]);
+
+  const removeRow = useCallback((id: string) => {
+    setRows(r => r.length > 1 ? r.filter(x => x.id !== id) : r);
+  }, []);
+
+  const updateRow = useCallback((id: string, field: 'symbol' | 'isBenchmark', val: string | boolean) => {
+    setRows(r => r.map(x => x.id === id ? { ...x, [field]: val } : x));
+  }, []);
+
+  const setBenchmarkRow = useCallback((id: string) => {
+    setRows(r => r.map(x => ({ ...x, isBenchmark: x.id === id })));
+  }, []);
+
   const run = useCallback(async () => {
-    const sym = symbol.trim().toUpperCase();
-    if (!sym) return;
-    const bench = benchmark.trim().toUpperCase() || null;
-    setRunning(true);
-    setError(null);
+    const validRows = rows.filter(r => r.symbol.trim());
+    if (!validRows.length) return;
+    setRunning(true); setError(null);
     try {
-      const outputsize = SIZE_MAP[timeframe] ?? 200;
       const ppy = PPY_MAP[timeframe] ?? 252;
-      const fast = Math.max(5, Math.min(fastWindow, 100));
-      const slow = Math.max(fast + 1, Math.min(slowWindow, 200));
-      const zw = Math.max(10, Math.min(zWindow, 120));
+      const outputsize = SIZE_MAP[timeframe] ?? 250;
+      const settled = await Promise.allSettled(
+        validRows.map(r => fetchOHLCV(r.symbol.trim().toUpperCase(), timeframe, outputsize))
+      );
+      const benchRow = validRows.find(r => r.isBenchmark);
+      const benchIdx = benchRow ? validRows.indexOf(benchRow) : -1;
+      const benchResult = benchIdx >= 0 && settled[benchIdx].status === 'fulfilled'
+        ? (settled[benchIdx] as PromiseFulfilledResult<{ bars: OHLCVBar[] }>).value
+        : null;
+      const benchLr = benchResult ? logReturns(closes(benchResult.bars)) : null;
+      const benchAnnReturn = benchLr
+        ? (Math.exp(mean(benchLr) * ppy) - 1)
+        : null;
 
-      const [primaryRes, secondaryRes] = await Promise.allSettled([
-        fetchOHLCV(sym, timeframe, outputsize),
-        bench ? fetchOHLCV(bench, timeframe, outputsize) : Promise.resolve(null),
-      ]);
+      const computed: AssetResult[] = settled.map((res, i) => {
+        const row = validRows[i];
+        if (res.status === 'rejected') return null;
+        const { bars } = res.value;
+        if (bars.length < 5) return null;
+        const cs = closes(bars);
+        const lr = logReturns(cs);
+        const annVol = annualisedVol(lr, ppy) * 100;
+        const annReturn = Math.exp(mean(lr) * ppy) - 1;
+        const sharpe = sharpeRatio(lr, 0, ppy);
+        const rebased = rebase100(cs);
 
-      if (primaryRes.status === 'rejected') {
-        throw primaryRes.reason instanceof Error ? primaryRes.reason : new Error(String(primaryRes.reason));
-      }
-      const { bars } = primaryRes.value;
-      if (bars.length < 10) throw new Error(`Only ${bars.length} bars returned for ${sym}.`);
-
-      const cs = closes(bars);
-      const lr = logReturns(cs);
-      const annVol = annualisedVol(lr, ppy) * 100;
-      const totalReturn = ((cs[cs.length - 1] / cs[0]) - 1) * 100;
-      const rollingVol = rollingAnnualisedVol(lr, Math.min(30, lr.length - 1), ppy);
-      const zScores = rollingZScore(cs, Math.min(zw, cs.length - 1));
-      const currentZ = zScores.length > 0 ? zScores[zScores.length - 1] : 0;
-      const { state: smaState, fastSma, slowSma, lastFast, lastSlow } = smaCross(cs, fast, slow);
-
-      // Benchmark
-      let benchCorr: number | null = null;
-      let rollingCorr: number[] = [];
-      if (bench && secondaryRes.status === 'fulfilled' && secondaryRes.value) {
-        const aligned = alignClosesByTs(bars, secondaryRes.value.bars);
-        if (aligned.a.length >= 20) {
-          const ra = logReturns(aligned.a);
-          const rb = logReturns(aligned.b);
-          benchCorr = pearson(ra, rb);
-          rollingCorr = rollingPearson(ra, rb, Math.min(60, ra.length));
+        let b: number | null = null, alpha: number | null = null;
+        let te: number | null = null, ir: number | null = null;
+        if (benchLr && benchAnnReturn != null && !row.isBenchmark) {
+          const aligned = alignClosesByTs(bars, benchResult!.bars);
+          if (aligned.a.length >= 20) {
+            const ra = logReturns(aligned.a), rb = logReturns(aligned.b);
+            b = calcBeta(ra, rb);
+            alpha = jensensAlpha(annReturn, benchAnnReturn, b);
+            te = trackingError(ra, rb, ppy);
+            ir = informationRatio(annReturn, benchAnnReturn, te);
+          }
         }
-      }
+        return { symbol: row.symbol.trim().toUpperCase(), isBenchmark: row.isBenchmark, bars, lr, annVol, annReturn, sharpe, beta: b, alpha, infoRatio: ir, trackingError: te, rebased };
+      }).filter((x): x is AssetResult => x !== null);
 
-      setResult({
-        symbol: sym, benchmarkSymbol: bench, timeframe, fetchedAt: Date.now(),
-        bars, rollingVol, zScores, fastSma, slowSma, fastWindow: fast, slowWindow: slow,
-        zWindow: zw, smaState, lastFast, lastSlow,
-        annVol, totalReturn, currentZ, benchCorr, rollingCorr,
-      });
+      setResults(computed);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setRunning(false);
-    }
-  }, [symbol, benchmark, timeframe, fastWindow, slowWindow, zWindow]);
+    } finally { setRunning(false); }
+  }, [rows, timeframe]);
 
-  const copyJSON = useCallback(() => {
-    if (!result) return;
-    const payload = {
-      symbol: result.symbol, benchmark: result.benchmarkSymbol, timeframe: result.timeframe,
-      fetchedAt: new Date(result.fetchedAt).toISOString(),
-      annVol: +result.annVol.toFixed(4), totalReturn: +result.totalReturn.toFixed(4),
-      currentZScore: +result.currentZ.toFixed(4), smaState: result.smaState,
-      fastSmaLast: +result.lastFast.toFixed(4), slowSmaLast: +result.lastSlow.toFixed(4),
-      benchmarkCorrelation: result.benchCorr != null ? +result.benchCorr.toFixed(4) : null,
-    };
-    navigator.clipboard.writeText(JSON.stringify(payload, null, 2)).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  }, [result]);
-
-  // Build SMA overlay chart data aligned to price array
-  const smaChartData = result
-    ? result.bars.map((_, i) => {
-        const fOffset = result.fastWindow - 1;
-        const sOffset = result.slowWindow - 1;
-        return {
-          i,
-          price: closes(result.bars)[i],
-          fast: i >= fOffset ? result.fastSma[i - fOffset] ?? null : null,
-          slow: i >= sOffset ? result.slowSma[i - sOffset] ?? null : null,
-        };
+  // ── Indexed chart data ──────────────────────────────────────────────────────
+  const indexedData = results.length
+    ? Array.from({ length: Math.max(...results.map(r => r.rebased.length)) }, (_, i) => {
+        const pt: Record<string, number | null> = { i };
+        for (const r of results) pt[r.symbol] = r.rebased[i] ?? null;
+        return pt;
       })
     : [];
 
-  return (
-    <div style={{ maxWidth: 960, margin: '0 auto', padding: '0 4px' }}>
+  // ── Return distribution (primary asset) ────────────────────────────────────
+  const primary = results.find(r => !r.isBenchmark) ?? results[0];
+  const distData = primary ? (() => {
+    const bins = 30;
+    const lr = primary.lr;
+    const lo = Math.min(...lr), hi = Math.max(...lr);
+    const step = (hi - lo) / bins || 0.001;
+    const counts = new Array(bins).fill(0);
+    for (const v of lr) {
+      const idx = Math.min(bins - 1, Math.floor((v - lo) / step));
+      counts[idx]++;
+    }
+    const m = mean(lr), s = stdev(lr);
+    return counts.map((count, i) => {
+      const x = lo + (i + 0.5) * step;
+      const normal = (lr.length * step) * (1 / (s * Math.sqrt(2 * Math.PI))) * Math.exp(-0.5 * ((x - m) / s) ** 2);
+      return { x: `${(x * 100).toFixed(1)}%`, count, normal: +normal.toFixed(1) };
+    });
+  })() : [];
 
-      {/* Controls */}
+  // ── Z-score (primary) ───────────────────────────────────────────────────────
+  const zData = primary ? (() => {
+    const zs = rollingZScore(closes(primary.bars), 30);
+    return zs.map((z, i) => ({ i, z }));
+  })() : [];
+
+  // ── SMA cross (primary) ─────────────────────────────────────────────────────
+  const smaResult = primary ? smaCross(closes(primary.bars), 20, 50) : null;
+
+  const handleSave = useCallback(async (name: string) => {
+    if (!onSaveSession || !results.length) return;
+    const primary = results.find(r => !r.isBenchmark) ?? results[0];
+    await onSaveSession({
+      name, panel: 'alpha',
+      symbols: results.map(r => r.symbol),
+      timeframe,
+      summary: {
+        assets: results.length,
+        primaryReturn: +primary.annReturn.toFixed(4),
+        primarySharpe: +primary.sharpe.toFixed(4),
+        primaryVol: +primary.annVol.toFixed(2),
+      },
+      rawSnapshot: {
+        alphaMetrics: results.map(r => ({
+          symbol: r.symbol,
+          annVol: r.annVol,
+          annReturn: r.annReturn,
+          sharpe: r.sharpe,
+          beta: r.beta ?? undefined,
+          alpha: r.alpha ?? undefined,
+          infoRatio: r.infoRatio ?? undefined,
+          trackingError: r.trackingError ?? undefined,
+          equityCurve: r.rebased.filter((_, i) => i % 5 === 0),
+        })),
+      },
+    });
+    toast.success('Alpha session saved');
+  }, [results, timeframe, onSaveSession]);
+
+  const AXIS = { fontSize: 10, fill: 'var(--muted-foreground)' };
+  const GRID = { stroke: 'var(--border)', strokeDasharray: '2 4' };
+  const TIP: React.CSSProperties = { background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 6, fontSize: 11, padding: '6px 10px' };
+
+  return (
+    <div style={{ maxWidth: 1040, margin: '0 auto', padding: '0 4px' }}>
+
+      {/* ── Controls ─────────────────────────────────────────────────────────── */}
       <section className="ds-surface" style={{ padding: 14, borderRadius: 10, marginBottom: 16 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, alignItems: 'end' }}>
-          <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <span className="ds-label" style={{ color: 'var(--muted-foreground)' }}>Symbol</span>
-            <input
-              value={symbol} onChange={e => setSymbol(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && run()}
-              placeholder="e.g. AAPL"
-              style={inputStyle}
-            />
-          </label>
-          <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <span className="ds-label" style={{ color: 'var(--muted-foreground)' }}>Benchmark (opt.)</span>
-            <input
-              value={benchmark} onChange={e => setBenchmark(e.target.value)}
-              placeholder="e.g. SPY"
-              style={inputStyle}
-            />
-          </label>
-          <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <span className="ds-label" style={{ color: 'var(--muted-foreground)' }}>Timeframe</span>
-            <div style={{ display: 'flex', gap: 4 }}>
-              {TIMEFRAMES.map(tf => (
-                <button key={tf} onClick={() => setTimeframe(tf)} style={tfBtnStyle(tf === timeframe)}>
-                  {TF_LABEL[tf]}
-                </button>
-              ))}
-            </div>
-          </label>
-          <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <span className="ds-label" style={{ color: 'var(--muted-foreground)' }}>SMA Fast</span>
-            <input
-              type="number" value={fastWindow} min={5} max={100}
-              onChange={e => setFastWindow(Math.max(5, Math.min(100, +e.target.value)))}
-              style={inputStyle}
-            />
-          </label>
-          <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <span className="ds-label" style={{ color: 'var(--muted-foreground)' }}>SMA Slow</span>
-            <input
-              type="number" value={slowWindow} min={20} max={200}
-              onChange={e => setSlowWindow(Math.max(20, Math.min(200, +e.target.value)))}
-              style={inputStyle}
-            />
-          </label>
-          <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <span className="ds-label" style={{ color: 'var(--muted-foreground)' }}>Z-score window</span>
-            <input
-              type="number" value={zWindow} min={10} max={120}
-              onChange={e => setZWindow(Math.max(10, Math.min(120, +e.target.value)))}
-              style={inputStyle}
-            />
-          </label>
-          <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-            <button onClick={run} disabled={running || !symbol.trim()} style={runBtnStyle(running || !symbol.trim())}>
-              {running ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Play size={13} />}
-              {running ? 'Running…' : 'Run'}
-            </button>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          <span className="ds-label" style={{ color: 'var(--muted-foreground)' }}>Assets (up to {MAX_ASSETS})</span>
+          <div style={{ display: 'flex', gap: 4, marginLeft: 'auto' }}>
+            {TIMEFRAMES.map(tf => <button key={tf} onClick={() => setTimeframe(tf)} style={tfBtn(tf === timeframe)}>{TF_LABEL[tf]}</button>)}
           </div>
         </div>
+        <div style={{ display: 'grid', gap: 6 }}>
+          {rows.map((row, i) => (
+            <div key={row.id} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <div style={{ width: 24, height: 8, borderRadius: 2, background: COLORS[i % COLORS.length], flexShrink: 0 }} />
+              <input
+                value={row.symbol}
+                onChange={e => updateRow(row.id, 'symbol', e.target.value.toUpperCase())}
+                onKeyDown={e => e.key === 'Enter' && run()}
+                placeholder={i === 0 ? 'Subject (e.g. AAPL)' : 'Peer / benchmark'}
+                style={{ ...inputStyle, width: 160 }}
+              />
+              <button
+                onClick={() => setBenchmarkRow(row.id)}
+                title="Set as primary benchmark"
+                style={{ fontSize: 10, padding: '3px 8px', borderRadius: 4, border: '1px solid var(--border)', background: row.isBenchmark ? 'var(--primary)' : 'var(--card)', color: row.isBenchmark ? 'var(--primary-foreground)' : 'var(--muted-foreground)', cursor: 'pointer', flexShrink: 0 }}
+              >
+                {row.isBenchmark ? '★ Bench' : '☆ Set bench'}
+              </button>
+              {rows.length > 1 && (
+                <button onClick={() => removeRow(row.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted-foreground)', padding: 2 }}>
+                  <Trash2 size={13} />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+        <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center' }}>
+          {rows.length < MAX_ASSETS && (
+            <button onClick={addRow} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--foreground)', fontSize: 11, cursor: 'pointer' }}>
+              <Plus size={11} /> Add asset
+            </button>
+          )}
+          <button onClick={run} disabled={running || rows.every(r => !r.symbol.trim())} style={runBtn(running || rows.every(r => !r.symbol.trim()))}>
+            {running ? <><Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> Running…</> : <><Play size={13} /> Run</>}
+          </button>
+          {results.length > 0 && onSaveSession && <SaveInline onSave={handleSave} />}
+          {results.length > 0 && (
+            <button onClick={() => { navigator.clipboard.writeText(JSON.stringify(results.map(r => ({ symbol: r.symbol, annReturn: r.annReturn.toFixed(4), sharpe: r.sharpe.toFixed(4), annVol: r.annVol.toFixed(4), beta: r.beta, alpha: r.alpha, infoRatio: r.infoRatio })), null, 2)); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--card)', fontSize: 11, cursor: 'pointer', color: 'var(--foreground)' }}>
+              {copied ? <><Check size={11} /> Copied</> : <><Copy size={11} /> Copy JSON</>}
+            </button>
+          )}
+        </div>
+        {error && <p style={{ color: 'var(--chart-1)', fontSize: 12, marginTop: 8, display: 'flex', alignItems: 'center', gap: 6 }}><AlertTriangle size={13} />{error}</p>}
       </section>
 
-      {/* Error */}
-      {error && (
-        <section className="ds-surface" style={{ padding: 12, borderRadius: 10, marginBottom: 16, border: '1px solid rgba(176,72,72,0.35)', background: 'rgba(176,72,72,0.06)', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-          <AlertTriangle size={15} style={{ color: '#b04848', flexShrink: 0, marginTop: 2 }} />
-          <div>
-            <p className="ds-caption" style={{ margin: '0 0 6px', color: 'var(--foreground)' }}>{error}</p>
-            <button onClick={run} style={{ padding: '4px 10px', borderRadius: 5, border: '1px solid #b04848', background: 'transparent', color: '#b04848', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>Retry</button>
-          </div>
-        </section>
+      {results.length === 0 && !running && (
+        <p className="ds-caption" style={{ color: 'var(--muted-foreground)', padding: '16px 0' }}>
+          Add assets above and click Run. Set one as the benchmark to compute Beta, Jensen's α, and Information Ratio.
+        </p>
       )}
 
-      {/* Results */}
-      {result && (
+      {results.length > 0 && (
         <>
-          {/* Header row */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span className="ds-heading" style={{ margin: 0 }}>{result.symbol}</span>
-              {result.benchmarkSymbol && <span className="ds-caption" style={{ color: 'var(--muted-foreground)' }}>vs {result.benchmarkSymbol}</span>}
-              <FreshnessBadge status="live" fetchedAt={result.fetchedAt} />
+          {/* ── KPI tiles ────────────────────────────────────────────────────── */}
+          {primary && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 10, marginBottom: 20 }}>
+              <StatTile label="Ann. Return" value={fmtPct(primary.annReturn * 100)} delta={primary.annReturn} />
+              <StatTile label="Ann. Vol" value={fmtPct(primary.annVol)} />
+              <StatTile label="Sharpe" value={fmt2(primary.sharpe)} />
+              {primary.beta != null && <StatTile label="Beta" value={fmt2(primary.beta)} />}
+              {primary.alpha != null && <StatTile label="Jensen's α" value={fmtPct(primary.alpha * 100)} delta={primary.alpha} />}
+              {primary.infoRatio != null && <StatTile label="Info. Ratio" value={fmt2(primary.infoRatio)} />}
             </div>
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-              {onSaveSession && (
-                <SaveSessionInline
-                  onSave={async (name) => {
-                    const syms = [result.symbol, ...(result.benchmarkSymbol ? [result.benchmarkSymbol] : [])];
-                    await onSaveSession({
-                      name,
-                      panel: 'alpha',
-                      symbols: syms,
-                      timeframe: result.timeframe,
-                      summary: {
-                        annVol: +result.annVol.toFixed(2),
-                        currentZ: +result.currentZ.toFixed(2),
-                        totalReturn: +result.totalReturn.toFixed(2),
-                        ...(result.benchCorr != null ? { benchCorr: +result.benchCorr.toFixed(2) } : {}),
-                      },
-                    });
-                    toast.success('Session saved');
-                  }}
-                />
-              )}
-              <button onClick={copyJSON} style={copyBtnStyle}>
-                {copied ? <Check size={12} style={{ color: '#4E6040' }} /> : <Copy size={12} />}
-                {copied ? 'Copied!' : 'Copy JSON'}
-              </button>
-            </div>
-          </div>
+          )}
 
-          {/* Section 1 — Stats */}
+          {/* ── Indexed Performance Chart ─────────────────────────────────── */}
           <section className="ds-surface" style={{ padding: 14, borderRadius: 10, marginBottom: 16 }}>
-            <h2 className="ds-heading" style={{ margin: '0 0 10px' }}>Alpha Signals</h2>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(155px, 1fr))', gap: 10 }}>
-              <StatTile label="Ann. Volatility" value={fmtPct(result.annVol)} hint="Full-window annualised σ" />
-              <StatTile label="Total Return" value={fmtPct(result.totalReturn)} delta={result.totalReturn} hint="Window start-to-end" />
-              <StatTile
-                label="SMA State"
-                value={
-                  <span style={{ color: SMA_STATE_COLOR[result.smaState], fontWeight: 700 }}>
-                    {SMA_STATE_LABEL[result.smaState]}
-                  </span>
-                }
-                hint={`${result.fastWindow}/${result.slowWindow} crossover`}
-              />
-              <StatTile
-                label="Current Z-score"
-                value={isFinite(result.currentZ) ? result.currentZ.toFixed(2) : '—'}
-                delta={isFinite(result.currentZ) ? result.currentZ * 10 : undefined}
-                hint={`${result.zWindow}-bar mean-reversion signal`}
-              />
-              <StatTile label={`Fast SMA (${result.fastWindow})`} value={result.lastFast > 0 ? result.lastFast.toFixed(2) : '—'} hint="Last bar fast SMA value" />
-              <StatTile label={`Slow SMA (${result.slowWindow})`} value={result.lastSlow > 0 ? result.lastSlow.toFixed(2) : '—'} hint="Last bar slow SMA value" />
-              {result.benchCorr != null && (
-                <StatTile
-                  label={`Corr. vs ${result.benchmarkSymbol}`}
-                  value={fmt2(result.benchCorr)}
-                  delta={result.benchCorr * 20}
-                  hint="Pearson on full aligned window"
-                />
-              )}
-            </div>
-          </section>
-
-          {/* Section 2 — Rolling Vol chart */}
-          <section className="ds-surface" style={{ padding: 14, borderRadius: 10, marginBottom: 16 }}>
-            <h2 className="ds-heading" style={{ margin: '0 0 10px' }}>30-bar Rolling Volatility (Ann. %)</h2>
-            <ResponsiveContainer width="100%" height={180}>
-              <LineChart data={result.rollingVol.map((v, i) => ({ i, v: +v.toFixed(2) }))} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis dataKey="i" tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} tickLine={false} axisLine={false} />
-                <YAxis domain={['auto', 'auto']} tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} tickLine={false} axisLine={false} width={44} tickFormatter={v => `${v.toFixed(0)}%`} />
-                <Tooltip formatter={(v: any) => [`${v.toFixed(2)}%`, 'Ann. Vol']} labelFormatter={l => `Bar ${l}`} contentStyle={tooltipStyle} />
-                <Line type="monotone" dataKey="v" stroke="var(--chart-1)" strokeWidth={1.5} dot={false} isAnimationActive={false} />
+            <p className="ds-label" style={{ margin: '0 0 10px', color: 'var(--muted-foreground)' }}>
+              Indexed Performance (rebased to 100)
+              {results.length > 1 && <span style={{ color: 'var(--muted-foreground)', fontWeight: 400 }}> — {results.length} assets</span>}
+            </p>
+            <ResponsiveContainer width="100%" height={220}>
+              <LineChart data={indexedData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+                <CartesianGrid {...GRID} />
+                <XAxis dataKey="i" tick={AXIS} axisLine={false} tickLine={false} tickFormatter={() => ''} />
+                <YAxis tick={AXIS} axisLine={false} tickLine={false} tickFormatter={v => `${v.toFixed(0)}`} />
+                <Tooltip contentStyle={TIP} formatter={(v: number, name: string) => [`${v.toFixed(1)}`, name]} />
+                <ReferenceLine y={100} stroke="var(--border)" strokeDasharray="3 3" />
+                <Legend wrapperStyle={{ fontSize: 10 }} />
+                {results.map((r, i) => (
+                  <Line key={r.symbol} type="monotone" dataKey={r.symbol}
+                    stroke={COLORS[i % COLORS.length]} strokeWidth={r.isBenchmark ? 1 : 1.8}
+                    strokeDasharray={r.isBenchmark ? '4 3' : undefined}
+                    dot={false} name={r.isBenchmark ? `${r.symbol} (bench)` : r.symbol}
+                    connectNulls />
+                ))}
               </LineChart>
             </ResponsiveContainer>
+            <FreshnessBadge status="cached" fetchedAt={results[0] ? Date.now() : null} compact />
           </section>
 
-          {/* Section 3 — Z-score chart */}
-          <section className="ds-surface" style={{ padding: 14, borderRadius: 10, marginBottom: 16 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
-              <h2 className="ds-heading" style={{ margin: 0 }}>Mean-Reversion Z-Score ({result.zWindow}-bar)</h2>
-              {isFinite(result.currentZ) && Math.abs(result.currentZ) > 1.5 && (
-                <span className="ds-caption" style={{
-                  color: result.currentZ > 0 ? '#b04848' : '#4E6040',
-                  fontWeight: 600, padding: '2px 8px',
-                  background: result.currentZ > 0 ? 'rgba(176,72,72,0.1)' : 'rgba(78,96,64,0.1)',
-                  borderRadius: 4,
-                }}>
-                  {result.currentZ > 1.5 ? '⚠ Elevated — potential mean reversion' : '↑ Depressed — potential bounce signal'}
-                </span>
-              )}
-            </div>
-            <ResponsiveContainer width="100%" height={180}>
-              <LineChart data={result.zScores.map((v, i) => ({ i, v: +v.toFixed(3) }))} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis dataKey="i" tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} tickLine={false} axisLine={false} />
-                <YAxis domain={['auto', 'auto']} tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} tickLine={false} axisLine={false} width={36} tickFormatter={v => v.toFixed(1)} />
-                <Tooltip formatter={(v: any) => [v.toFixed(3), 'Z-score']} labelFormatter={l => `Bar ${l}`} contentStyle={tooltipStyle} />
-                <ReferenceLine y={2} stroke="#b04848" strokeDasharray="4 3" label={{ value: '+2σ', position: 'right', fontSize: 10, fill: '#b04848' }} />
-                <ReferenceLine y={1} stroke="rgba(176,72,72,0.4)" strokeDasharray="4 3" />
-                <ReferenceLine y={0} stroke="var(--border)" />
-                <ReferenceLine y={-1} stroke="rgba(78,96,64,0.4)" strokeDasharray="4 3" />
-                <ReferenceLine y={-2} stroke="#4E6040" strokeDasharray="4 3" label={{ value: '−2σ', position: 'right', fontSize: 10, fill: '#4E6040' }} />
-                <Line type="monotone" dataKey="v" stroke="var(--chart-3)" strokeWidth={1.5} dot={false} isAnimationActive={false} />
-              </LineChart>
-            </ResponsiveContainer>
+          {/* ── Metrics Table ─────────────────────────────────────────────── */}
+          <section className="ds-surface" style={{ padding: 14, borderRadius: 10, marginBottom: 16, overflowX: 'auto' }}>
+            <p className="ds-label" style={{ margin: '0 0 10px', color: 'var(--muted-foreground)' }}>Comparative Metrics</p>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+              <thead>
+                <tr>
+                  {['Asset', 'Ann. Return', 'Ann. Vol', 'Sharpe', 'Beta', "Jensen's α", 'Info. Ratio', 'Track. Error'].map(h => (
+                    <th key={h} style={{ padding: '6px 10px', textAlign: 'right', color: 'var(--muted-foreground)', fontSize: 10, fontWeight: 600, borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' }}>
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {results.map((r, i) => (
+                  <tr key={r.symbol} style={{ borderBottom: '1px solid var(--border)' }}>
+                    <td style={{ padding: '7px 10px', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <div style={{ width: 8, height: 8, borderRadius: 2, background: COLORS[i % COLORS.length], flexShrink: 0 }} />
+                      <span style={{ fontWeight: 600 }}>{r.symbol}</span>
+                      {r.isBenchmark && <span style={{ fontSize: 9, color: 'var(--muted-foreground)', background: 'var(--muted)', borderRadius: 3, padding: '1px 4px' }}>BENCH</span>}
+                    </td>
+                    <td style={{ padding: '7px 10px', textAlign: 'right', color: r.annReturn >= 0 ? '#788C5D' : 'var(--chart-1)' }}>{fmtPct(r.annReturn * 100)}</td>
+                    <td style={{ padding: '7px 10px', textAlign: 'right' }}>{fmtPct(r.annVol)}</td>
+                    <td style={{ padding: '7px 10px', textAlign: 'right', color: r.sharpe > 1 ? '#788C5D' : r.sharpe < 0 ? 'var(--chart-1)' : 'inherit' }}>{fmt2(r.sharpe)}</td>
+                    <td style={{ padding: '7px 10px', textAlign: 'right' }}>{fmt2(r.beta)}</td>
+                    <td style={{ padding: '7px 10px', textAlign: 'right', color: r.alpha != null ? (r.alpha > 0 ? '#788C5D' : 'var(--chart-1)') : 'inherit' }}>{r.alpha != null ? fmtPct(r.alpha * 100) : '—'}</td>
+                    <td style={{ padding: '7px 10px', textAlign: 'right' }}>{fmt2(r.infoRatio)}</td>
+                    <td style={{ padding: '7px 10px', textAlign: 'right' }}>{r.trackingError != null ? fmtPct(r.trackingError * 100) : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </section>
 
-          {/* Section 4 — SMA overlay chart */}
-          <section className="ds-surface" style={{ padding: 14, borderRadius: 10, marginBottom: 16 }}>
-            <h2 className="ds-heading" style={{ margin: '0 0 10px' }}>
-              SMA {result.fastWindow} / {result.slowWindow} Crossover
-              {result.smaState !== 'insufficient' && (
-                <span style={{ fontSize: 12, fontWeight: 400, marginLeft: 10, color: SMA_STATE_COLOR[result.smaState] }}>
-                  {SMA_STATE_LABEL[result.smaState]}
-                </span>
-              )}
-            </h2>
-            <ResponsiveContainer width="100%" height={210}>
-              <LineChart data={smaChartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis dataKey="i" tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} tickLine={false} axisLine={false} />
-                <YAxis domain={['auto', 'auto']} tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} tickLine={false} axisLine={false} width={52} tickFormatter={v => v.toFixed(0)} />
-                <Tooltip
-                  formatter={(v: any, name: string) => [v != null ? v.toFixed(2) : '—', name === 'price' ? 'Price' : name === 'fast' ? `SMA ${result.fastWindow}` : `SMA ${result.slowWindow}`]}
-                  labelFormatter={l => `Bar ${l}`}
-                  contentStyle={tooltipStyle}
-                />
-                <Legend formatter={name => name === 'price' ? 'Price' : name === 'fast' ? `SMA ${result.fastWindow}` : `SMA ${result.slowWindow}`} wrapperStyle={{ fontSize: 11 }} />
-                <Line type="monotone" dataKey="price" stroke="var(--muted-foreground)" strokeWidth={1} dot={false} isAnimationActive={false} connectNulls={false} />
-                <Line type="monotone" dataKey="fast" stroke="var(--chart-1)" strokeWidth={1.5} dot={false} isAnimationActive={false} connectNulls={false} />
-                <Line type="monotone" dataKey="slow" stroke="#788C5D" strokeWidth={1.5} dot={false} isAnimationActive={false} connectNulls={false} />
-              </LineChart>
-            </ResponsiveContainer>
-          </section>
-
-          {/* Section 5 — Rolling benchmark correlation */}
-          {result.benchmarkSymbol && result.rollingCorr.length > 0 && (
+          {/* ── Return Distribution (primary) ─────────────────────────────── */}
+          {distData.length > 0 && (
             <section className="ds-surface" style={{ padding: 14, borderRadius: 10, marginBottom: 16 }}>
-              <h2 className="ds-heading" style={{ margin: '0 0 10px' }}>
-                Rolling 60-bar Correlation vs {result.benchmarkSymbol}
-                {result.benchCorr != null && (
-                  <span style={{ fontSize: 12, fontWeight: 400, marginLeft: 10, color: 'var(--muted-foreground)' }}>
-                    Full-window ρ = {result.benchCorr.toFixed(3)}
-                  </span>
-                )}
-              </h2>
+              <p className="ds-label" style={{ margin: '0 0 10px', color: 'var(--muted-foreground)' }}>
+                Return Distribution · {primary?.symbol} <span style={{ fontWeight: 400 }}>(daily log-returns)</span>
+              </p>
               <ResponsiveContainer width="100%" height={160}>
-                <LineChart data={result.rollingCorr.map((v, i) => ({ i, v: +v.toFixed(3) }))} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                  <XAxis dataKey="i" tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} tickLine={false} axisLine={false} />
-                  <YAxis domain={[-1, 1]} tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} tickLine={false} axisLine={false} width={36} tickFormatter={v => v.toFixed(1)} />
-                  <Tooltip formatter={(v: any) => [v.toFixed(3), 'ρ']} labelFormatter={l => `Bar ${l}`} contentStyle={tooltipStyle} />
-                  <ReferenceLine y={0.5} stroke="rgba(193,95,60,0.35)" strokeDasharray="4 3" />
+                <BarChart data={distData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }} barSize={6}>
+                  <CartesianGrid {...GRID} vertical={false} />
+                  <XAxis dataKey="x" tick={AXIS} axisLine={false} tickLine={false} interval={Math.floor(distData.length / 6)} />
+                  <YAxis tick={AXIS} axisLine={false} tickLine={false} />
+                  <Tooltip contentStyle={TIP} />
+                  <Bar dataKey="count" fill="var(--chart-3)" opacity={0.7} name="Observed" />
+                  <Line type="monotone" dataKey="normal" stroke="var(--chart-1)" strokeWidth={1.5} dot={false} name="Normal" />
+                </BarChart>
+              </ResponsiveContainer>
+            </section>
+          )}
+
+          {/* ── Z-score ───────────────────────────────────────────────────── */}
+          {zData.length > 0 && (
+            <section className="ds-surface" style={{ padding: 14, borderRadius: 10, marginBottom: 16 }}>
+              <p className="ds-label" style={{ margin: '0 0 10px', color: 'var(--muted-foreground)' }}>
+                Rolling Z-Score · {primary?.symbol} <span style={{ fontWeight: 400 }}>(30-bar window)</span>
+              </p>
+              <ResponsiveContainer width="100%" height={130}>
+                <LineChart data={zData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+                  <CartesianGrid {...GRID} />
+                  <XAxis dataKey="i" tick={AXIS} axisLine={false} tickLine={false} tickFormatter={() => ''} />
+                  <YAxis tick={AXIS} axisLine={false} tickLine={false} />
+                  <Tooltip contentStyle={TIP} formatter={(v: number) => [v.toFixed(2), 'Z-Score']} />
+                  <ReferenceLine y={2} stroke="rgba(193,95,60,0.5)" strokeDasharray="3 3" label={{ value: '+2σ', fontSize: 9, fill: 'var(--muted-foreground)', position: 'right' }} />
+                  <ReferenceLine y={-2} stroke="rgba(106,155,204,0.5)" strokeDasharray="3 3" label={{ value: '-2σ', fontSize: 9, fill: 'var(--muted-foreground)', position: 'right' }} />
                   <ReferenceLine y={0} stroke="var(--border)" />
-                  <ReferenceLine y={-0.5} stroke="rgba(106,155,204,0.35)" strokeDasharray="4 3" />
-                  <Line type="monotone" dataKey="v" stroke="#788C5D" strokeWidth={1.5} dot={false} isAnimationActive={false} />
+                  <Line type="monotone" dataKey="z" stroke="var(--chart-2)" strokeWidth={1.5} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </section>
+          )}
+
+          {/* ── SMA Cross (primary) ───────────────────────────────────────── */}
+          {smaResult && smaResult.state !== 'insufficient' && (
+            <section className="ds-surface" style={{ padding: 14, borderRadius: 10, marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                <p className="ds-label" style={{ margin: 0, color: 'var(--muted-foreground)' }}>SMA Cross · {primary?.symbol}</p>
+                <span style={{ fontSize: 12, fontWeight: 700, color: SMA_STATE_COLOR[smaResult.state] }}>
+                  {SMA_STATE_LABEL[smaResult.state]}
+                </span>
+              </div>
+              <ResponsiveContainer width="100%" height={130}>
+                <LineChart data={closes(primary!.bars).map((p, i) => ({
+                  i, price: p,
+                  fast: i >= 19 ? smaResult.fastSma[i - 19] ?? null : null,
+                  slow: i >= 49 ? smaResult.slowSma[i - 49] ?? null : null,
+                }))} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+                  <XAxis dataKey="i" tick={AXIS} axisLine={false} tickLine={false} tickFormatter={() => ''} />
+                  <YAxis tick={AXIS} axisLine={false} tickLine={false} />
+                  <Tooltip contentStyle={TIP} formatter={(v: number) => [v.toFixed(2), '']} />
+                  <Line type="monotone" dataKey="price" stroke="var(--chart-4)" strokeWidth={1} dot={false} name="Price" opacity={0.6} />
+                  <Line type="monotone" dataKey="fast" stroke="var(--chart-2)" strokeWidth={1.5} dot={false} name="SMA 20" connectNulls />
+                  <Line type="monotone" dataKey="slow" stroke="var(--chart-1)" strokeWidth={1.5} dot={false} name="SMA 50" connectNulls />
+                  <Legend wrapperStyle={{ fontSize: 10 }} />
                 </LineChart>
               </ResponsiveContainer>
             </section>
           )}
         </>
       )}
-
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+      <style>{`@keyframes spin { from { transform: rotate(0) } to { transform: rotate(360deg) } }`}</style>
     </div>
   );
-};
-
-// ─── Shared styles ────────────────────────────────────────────────────────────
-
-const inputStyle: React.CSSProperties = {
-  padding: '6px 8px', border: '1px solid var(--border)', borderRadius: 6,
-  background: 'var(--card)', color: 'var(--foreground)', fontSize: 13,
-  width: '100%', boxSizing: 'border-box',
-};
-
-const tfBtnStyle = (active: boolean): React.CSSProperties => ({
-  padding: '5px 10px', borderRadius: 6, border: '1px solid var(--border)',
-  cursor: 'pointer', fontSize: 12, fontWeight: 600,
-  background: active ? 'var(--primary)' : 'var(--card)',
-  color: active ? '#fff' : 'var(--foreground)',
-  transition: 'background 0.15s',
-});
-
-const runBtnStyle = (disabled: boolean): React.CSSProperties => ({
-  display: 'inline-flex', alignItems: 'center', gap: 6,
-  padding: '7px 16px', borderRadius: 6, border: 'none',
-  cursor: disabled ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600,
-  background: disabled ? 'var(--muted)' : 'var(--primary)',
-  color: disabled ? 'var(--muted-foreground)' : '#fff',
-  width: '100%', justifyContent: 'center',
-});
-
-const copyBtnStyle: React.CSSProperties = {
-  display: 'inline-flex', alignItems: 'center', gap: 5,
-  padding: '4px 10px', borderRadius: 6, border: '1px solid var(--border)',
-  background: 'var(--card)', color: 'var(--foreground)',
-  fontSize: 11, fontWeight: 600, cursor: 'pointer',
-};
-
-const tooltipStyle: React.CSSProperties = {
-  background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 6, fontSize: 11,
 };

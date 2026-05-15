@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, ReferenceLine,
+  ResponsiveContainer, ReferenceLine, ReferenceArea, Legend,
 } from 'recharts';
 import { Play, Loader2, Copy, Check, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
@@ -9,7 +9,8 @@ import { toast } from 'sonner';
 import {
   closes, logReturns, annualisedVol, maxDrawdown, stdev,
   downsideDeviation, historicalVaR, parametricVaR, sharpeRatio,
-  sortinoRatio, calmarRatio, equityCurve,
+  sortinoRatio, calmarRatio, equityCurve, rollingSharpe,
+  drawdownPeriods, monteCarloPaths,
 } from '../../lib/quant';
 import { STRESS_PRESETS, applyShock, fmtShock } from '../../lib/stressScenarios';
 import { fetchOHLCV } from '../../services/marketService';
@@ -43,7 +44,11 @@ interface RiskResult {
 
 interface RiskPanelProps {
   defaultSymbol?: string;
-  onSaveSession?: (payload: { name: string; panel: 'risk'; symbols: string[]; timeframe: string; summary: Record<string, string | number> }) => Promise<void>;
+  onSaveSession?: (payload: {
+    name: string; panel: 'risk'; symbols: string[]; timeframe: string;
+    summary: Record<string, string | number>;
+    rawSnapshot?: { riskMetrics?: import('../../types').LabSession['rawSnapshot'] extends { riskMetrics?: infer R } ? R : never };
+  }) => Promise<void>;
 }
 
 const SaveSessionInline: React.FC<{ onSave: (name: string) => Promise<void> }> = ({ onSave }) => {
@@ -379,7 +384,19 @@ export const RiskPanel: React.FC<RiskPanelProps> = ({ defaultSymbol = 'SPY', onS
                         sortino: +result.sortino.toFixed(2),
                         hVar95: +result.hVar95.toFixed(2),
                       },
-                    });
+                      rawSnapshot: {
+                        riskMetrics: {
+                          annVol: result.annVol,
+                          mdd: result.mdd,
+                          sharpe: result.sharpe,
+                          sortino: result.sortino,
+                          hVar95: result.hVar95,
+                          hVar99: result.hVar99,
+                          annReturn: result.annReturn,
+                          equityCurve: result.curve.filter((_, i) => i % 5 === 0),
+                        },
+                      },
+                    } as any);
                     toast.success('Session saved');
                   }}
                 />
@@ -528,6 +545,96 @@ export const RiskPanel: React.FC<RiskPanelProps> = ({ defaultSymbol = 'SPY', onS
               </LineChart>
             </ResponsiveContainer>
           </section>
+
+          {/* Section 3b — Drawdown Detail */}
+          {result.curve.length > 10 && (() => {
+            const dds = drawdownPeriods(result.curve);
+            const chartData = result.curve.map((v, i) => ({ i, v }));
+            return (
+              <section className="ds-surface" style={{ padding: 14, borderRadius: 10, marginBottom: 16 }}>
+                <h2 className="ds-heading" style={{ margin: '0 0 10px' }}>Drawdown Periods</h2>
+                <ResponsiveContainer width="100%" height={180}>
+                  <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                    <XAxis dataKey="i" tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} tickLine={false} axisLine={false} />
+                    <YAxis tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} tickLine={false} axisLine={false} width={44} tickFormatter={v => v.toFixed(2)} />
+                    <Tooltip formatter={(v: number) => [v.toFixed(4), 'Equity']} contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 6, fontSize: 11 }} />
+                    {dds.slice(0, 8).map((d, i) => (
+                      <ReferenceArea key={i} x1={d.start} x2={d.end}
+                        fill={`rgba(193,95,60,${Math.min(0.6, d.depth + 0.1)})`}
+                        label={{ value: `-${(d.depth * 100).toFixed(0)}%`, position: 'insideTop', fontSize: 8, fill: 'var(--muted-foreground)' }}
+                      />
+                    ))}
+                    <ReferenceLine y={1} stroke="var(--muted-foreground)" strokeDasharray="4 3" />
+                    <Line type="monotone" dataKey="v" stroke="var(--chart-1)" strokeWidth={1.5} dot={false} isAnimationActive={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+                {dds.length > 0 && (
+                  <p className="ds-caption" style={{ margin: '6px 0 0', color: 'var(--muted-foreground)', fontSize: 10 }}>
+                    {dds.length} drawdown period{dds.length > 1 ? 's' : ''} detected. Worst: -{(Math.max(...dds.map(d => d.depth)) * 100).toFixed(1)}%. Shading opacity scales with depth.
+                  </p>
+                )}
+              </section>
+            );
+          })()}
+
+          {/* Section 3c — Rolling Sharpe */}
+          {result.curve.length > 60 && (() => {
+            const lr = logReturns(closes(result.bars));
+            const ppy = PPY_MAP[result.timeframe as Timeframe] ?? 252;
+            const window = Math.min(90, Math.floor(lr.length / 3));
+            const rs = rollingSharpe(lr, window, ppy);
+            const chartData = rs.map((s, i) => ({ i: i + window, s }));
+            return (
+              <section className="ds-surface" style={{ padding: 14, borderRadius: 10, marginBottom: 16 }}>
+                <h2 className="ds-heading" style={{ margin: '0 0 10px' }}>Rolling {window}-Period Sharpe</h2>
+                <ResponsiveContainer width="100%" height={150}>
+                  <LineChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                    <XAxis dataKey="i" tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} tickLine={false} axisLine={false} />
+                    <YAxis tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} tickLine={false} axisLine={false} />
+                    <Tooltip formatter={(v: number) => [v.toFixed(2), 'Rolling Sharpe']} contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 6, fontSize: 11 }} />
+                    <ReferenceLine y={0} stroke="var(--border)" />
+                    <ReferenceLine y={1} stroke="rgba(120,140,93,0.5)" strokeDasharray="3 3" label={{ value: '1.0', fontSize: 9, fill: 'var(--muted-foreground)' }} />
+                    <Line type="monotone" dataKey="s" stroke="var(--chart-2)" strokeWidth={1.5} dot={false} isAnimationActive={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+                <p className="ds-caption" style={{ margin: '4px 0 0', color: 'var(--muted-foreground)', fontSize: 10 }}>
+                  Rising Sharpe = improving risk-adjusted performance. Sustained above 1.0 is institutional grade.
+                </p>
+              </section>
+            );
+          })()}
+
+          {/* Section 3d — Monte Carlo */}
+          {result.curve.length > 20 && (() => {
+            const lr = logReturns(closes(result.bars));
+            const { p10, p25, p50, p75, p90 } = monteCarloPaths(lr, Math.min(126, 252), 300);
+            const chartData = p50.map((v, i) => ({ i, p10: p10[i], p25: p25[i], p50: v, p75: p75[i], p90: p90[i] }));
+            return (
+              <section className="ds-surface" style={{ padding: 14, borderRadius: 10, marginBottom: 16 }}>
+                <h2 className="ds-heading" style={{ margin: '0 0 10px' }}>Monte Carlo — Forward Paths ({chartData.length - 1} periods, 300 simulations)</h2>
+                <ResponsiveContainer width="100%" height={180}>
+                  <LineChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                    <XAxis dataKey="i" tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} tickLine={false} axisLine={false} />
+                    <YAxis tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} tickLine={false} axisLine={false} tickFormatter={v => v.toFixed(2)} />
+                    <Tooltip formatter={(v: number, n: string) => [v.toFixed(3), n]} contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 6, fontSize: 11 }} />
+                    <ReferenceLine y={1} stroke="var(--muted-foreground)" strokeDasharray="4 3" />
+                    <Legend wrapperStyle={{ fontSize: 10 }} />
+                    <Line type="monotone" dataKey="p90" stroke="rgba(120,140,93,0.3)" strokeWidth={1} dot={false} name="P90" isAnimationActive={false} />
+                    <Line type="monotone" dataKey="p75" stroke="rgba(120,140,93,0.5)" strokeWidth={1} dot={false} name="P75" isAnimationActive={false} />
+                    <Line type="monotone" dataKey="p50" stroke="var(--chart-2)" strokeWidth={2} dot={false} name="P50 (median)" isAnimationActive={false} />
+                    <Line type="monotone" dataKey="p25" stroke="rgba(193,95,60,0.5)" strokeWidth={1} dot={false} name="P25" isAnimationActive={false} />
+                    <Line type="monotone" dataKey="p10" stroke="rgba(193,95,60,0.3)" strokeWidth={1} dot={false} name="P10" isAnimationActive={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+                <p className="ds-caption" style={{ margin: '4px 0 0', color: 'var(--muted-foreground)', fontSize: 10 }}>
+                  Simulated using historical mean and stdev of returns (geometric Brownian motion). Not a prediction — illustrates range of outcomes.
+                </p>
+              </section>
+            );
+          })()}
 
           {/* Section 4 — Stress scenarios */}
           <section className="ds-surface" style={{ padding: 14, borderRadius: 10, marginBottom: 16 }}>

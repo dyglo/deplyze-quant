@@ -4,6 +4,7 @@ import {
   ResponsiveContainer, LineChart, Line, ReferenceLine, Cell,
 } from 'recharts';
 import { Play, Loader2, Plus, Trash2, Copy, Check, AlertTriangle } from 'lucide-react';
+import { toast } from 'sonner';
 
 import {
   closes, logReturns, annualisedVol, maxDrawdown, equityCurve,
@@ -74,9 +75,53 @@ function corrColor(r: number, isDiag: boolean): string {
   return 'rgba(106,155,204,0.65)';
 }
 
+// ─── Save session inline ─────────────────────────────────────────────────────
+
+const SaveSessionInline: React.FC<{ onSave: (name: string) => Promise<void> }> = ({ onSave }) => {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [saving, setSaving] = useState(false);
+  const defaultName = `Portfolio session ${new Date().toLocaleDateString()}`;
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => { setName(defaultName); setOpen(true); }}
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--foreground)', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+      >
+        Save Session
+      </button>
+    );
+  }
+  return (
+    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+      <input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Session name"
+        style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--foreground)', width: 180 }}
+        autoFocus
+        onKeyDown={(e) => { if (e.key === 'Escape') setOpen(false); }}
+      />
+      <button
+        onClick={async () => { setSaving(true); try { await onSave(name || defaultName); setOpen(false); } catch { toast.error('Failed to save session'); } finally { setSaving(false); } }}
+        disabled={saving}
+        style={{ padding: '4px 10px', borderRadius: 6, border: 'none', background: 'var(--primary)', color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+      >
+        {saving ? 'Saving…' : 'Save'}
+      </button>
+      <button onClick={() => setOpen(false)} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--foreground)', fontSize: 11, cursor: 'pointer' }}>Cancel</button>
+    </div>
+  );
+};
+
+interface PortfolioPanelProps {
+  onSaveSession?: (payload: { name: string; panel: 'portfolio'; symbols: string[]; timeframe: string; summary: Record<string, string | number> }) => Promise<void>;
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export const PortfolioPanel: React.FC = () => {
+export const PortfolioPanel: React.FC<PortfolioPanelProps> = ({ onSaveSession }) => {
   const uid = useId();
   const [basket, setBasket] = useState<BasketRow[]>(DEFAULT_BASKET);
   const [timeframe, setTimeframe] = useState<Timeframe>('1day');
@@ -315,10 +360,31 @@ export const PortfolioPanel: React.FC = () => {
               </span>
               <FreshnessBadge status="live" fetchedAt={result.fetchedAt} />
             </div>
-            <button onClick={copyJSON} style={copyBtnStyle}>
-              {copied ? <Check size={12} style={{ color: '#4E6040' }} /> : <Copy size={12} />}
-              {copied ? 'Copied!' : 'Copy JSON'}
-            </button>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              {onSaveSession && (
+                <SaveSessionInline
+                  onSave={async (name) => {
+                    await onSaveSession({
+                      name,
+                      panel: 'portfolio',
+                      symbols: result.assets.map((a) => a.symbol),
+                      timeframe: result.timeframe,
+                      summary: {
+                        portVol: +result.portVol.toFixed(2),
+                        portReturn: +result.portReturn.toFixed(2),
+                        portSharpe: +result.portSharpe.toFixed(2),
+                        diversification: +result.diversification.toFixed(2),
+                      },
+                    });
+                    toast.success('Session saved');
+                  }}
+                />
+              )}
+              <button onClick={copyJSON} style={copyBtnStyle}>
+                {copied ? <Check size={12} style={{ color: '#4E6040' }} /> : <Copy size={12} />}
+                {copied ? 'Copied!' : 'Copy JSON'}
+              </button>
+            </div>
           </div>
 
           {/* Failed assets warning */}
@@ -467,7 +533,7 @@ export const PortfolioPanel: React.FC = () => {
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
                 <XAxis type="number" tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} tickLine={false} axisLine={false} tickFormatter={v => `${v}%`} />
                 <YAxis type="category" dataKey="symbol" tick={{ fontSize: 11, fill: 'var(--foreground)', fontWeight: 600 }} tickLine={false} axisLine={false} width={48} />
-                <Tooltip formatter={(v: number) => [`${v.toFixed(2)}%`, 'Risk Contrib']} contentStyle={tooltipStyle} />
+                <Tooltip formatter={(v: any) => [`${v.toFixed(2)}%`, 'Risk Contrib']} contentStyle={tooltipStyle} />
                 <Bar dataKey="contrib" radius={[0, 4, 4, 0]} label={{ position: 'right', fontSize: 11, formatter: (v: number) => `${v.toFixed(1)}%` }}>
                   {result.assets.map((_, i) => (
                     <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
@@ -488,7 +554,7 @@ export const PortfolioPanel: React.FC = () => {
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis dataKey="i" tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} tickLine={false} axisLine={false} />
                 <YAxis domain={['auto', 'auto']} tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} tickLine={false} axisLine={false} width={48} tickFormatter={v => v.toFixed(2)} />
-                <Tooltip formatter={(v: number) => [v.toFixed(4), 'Portfolio']} labelFormatter={l => `Bar ${l}`} contentStyle={tooltipStyle} />
+                <Tooltip formatter={(v: any) => [v.toFixed(4), 'Portfolio']} labelFormatter={l => `Bar ${l}`} contentStyle={tooltipStyle} />
                 <ReferenceLine y={1} stroke="var(--muted-foreground)" strokeDasharray="4 3" />
                 <Line type="monotone" dataKey="v" stroke="var(--chart-1)" strokeWidth={1.5} dot={false} isAnimationActive={false} />
               </LineChart>

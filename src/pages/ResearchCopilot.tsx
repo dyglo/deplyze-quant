@@ -1,12 +1,21 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Send, Sparkles, Play, ChevronRight } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import { Send, Sparkles, Play, ChevronRight, Bookmark } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
+import { toast } from 'sonner';
 import { useCopilotSession } from '../hooks/useCopilotSession';
 import { useBatchQuotes } from '../hooks/useMarket';
 import { useMacroSeries } from '../hooks/useMacro';
+import { useArtifacts, useBriefings } from '../hooks/useArtifacts';
+import { useInsights } from '../hooks/useInsights';
+import { useResearchContext } from '../hooks/useResearchContext';
+import { useWorkspace } from '../components/WorkspaceContext';
+import { useAuth } from '../components/AuthProvider';
 import { PageHeader } from '../components/quant/PageHeader';
 import { Disclaimer } from '../components/quant/Disclaimer';
 import { FreshnessBadge } from '../components/quant/FreshnessBadge';
+import { createArtifactFromCopilot } from '../services/artifactService';
+import type { CopilotInsight } from '../types';
 
 const SUGGESTIONS = [
   'Summarise the current macro regime in one paragraph with confidence band.',
@@ -20,12 +29,27 @@ const MACRO_HIGHLIGHTS = ['FEDFUNDS', 'DGS10', 'CPI'] as const;
 
 export const ResearchCopilot: React.FC = () => {
   const location = useLocation();
+  const { currentWorkspace, currentProject } = useWorkspace();
+  const { user } = useAuth();
 
   // Live snapshots to feed Copilot context.
   const pulse = useBatchQuotes(PULSE_SYMBOLS);
   const fedFunds = useMacroSeries('FEDFUNDS');
   const dgs10 = useMacroSeries('DGS10');
   const cpi = useMacroSeries('CPI');
+
+  // Workspace research context.
+  const artifacts = useArtifacts(currentWorkspace?.id ?? null, currentProject?.id ?? null);
+  const briefings = useBriefings(currentWorkspace?.id ?? null, currentProject?.id ?? null);
+  const { save: saveInsight } = useInsights(currentWorkspace?.id ?? null, currentProject?.id ?? null);
+
+  // Calculate active symbol for research context
+  const activeSymbol = useMemo(() => {
+    const top1 = (pulse.data ?? []).filter((r) => r.ok && r.data).slice(0, 1);
+    return top1.length ? top1[0].symbol : null;
+  }, [pulse.data]);
+
+  const ctx = useResearchContext(activeSymbol);
 
   const buildSnapshot = useCallback(() => {
     const lines: string[] = [
@@ -53,9 +77,30 @@ export const ResearchCopilot: React.FC = () => {
       lines.push('Latest macro values (alpha_vantage):');
       lines.push(...macroRows);
     }
+    // Workspace research context
+    const recentArtifacts = artifacts.items.slice(0, 5);
+    if (recentArtifacts.length) {
+      lines.push('Recent workspace intelligence artifacts:');
+      for (const a of recentArtifacts) {
+        lines.push(`  - [${a.category}] ${a.title} (symbols: ${a.symbols?.join(', ') ?? 'none'}, confidence: ${(a.confidence * 100).toFixed(0)}%)`);
+      }
+    }
+    const recentBriefings = briefings.items.slice(0, 3);
+    if (recentBriefings.length) {
+      lines.push('Recent workspace briefings:');
+      for (const b of recentBriefings) {
+        lines.push(`  - [${b.kind}] ${b.title}`);
+      }
+    }
+    if (ctx.pinnedArtifacts.length) {
+      lines.push('Pinned research artifacts:');
+      for (const a of ctx.pinnedArtifacts.slice(0, 3)) {
+        lines.push(`  - Pinned: ${a.title} (${a.category})`);
+      }
+    }
     lines.push('Use this snapshot as grounding evidence. Cite values explicitly. Probabilistic language only.');
     return lines.join('\n');
-  }, [location.pathname, pulse.data, fedFunds.data, dgs10.data, cpi.data]);
+  }, [location.pathname, pulse.data, fedFunds.data, dgs10.data, cpi.data, artifacts.items, briefings.items, ctx.pinnedArtifacts]);
 
   const contextResolver = useCallback(() => ({
     context: {
@@ -83,6 +128,35 @@ export const ResearchCopilot: React.FC = () => {
     const top3 = (pulse.data ?? []).filter((r) => r.ok && r.data).slice(0, 3);
     return top3.map((r) => r.symbol);
   }, [pulse.data]);
+
+  const handleSaveInsight = useCallback(async (content: string) => {
+    if (!currentWorkspace?.id || !currentProject?.id || !user) {
+      toast.error('No workspace selected');
+      return;
+    }
+    try {
+      const insightPayload = {
+        workspaceId: currentWorkspace.id,
+        projectId: currentProject.id,
+        content,
+        savedBy: user.uid,
+        symbols: contextChips,
+      };
+      const docId = await saveInsight(insightPayload);
+      toast.success('Insight saved to workspace');
+      // Co-create artifact (fire-and-forget; failure does not block)
+      const savedInsight: CopilotInsight = {
+        id: docId,
+        createdAt: Date.now(),
+        ...insightPayload,
+      };
+      createArtifactFromCopilot(
+        currentWorkspace.id, currentProject.id, savedInsight, user.uid
+      ).catch(console.error);
+    } catch {
+      toast.error('Failed to save insight');
+    }
+  }, [currentWorkspace, currentProject, user, saveInsight, contextChips]);
 
   return (
     <div style={{ padding: '0 24px 24px', maxWidth: 920, margin: '0 auto', display: 'flex', flexDirection: 'column', height: 'calc(100vh - 80px)' }}>
@@ -115,6 +189,14 @@ export const ResearchCopilot: React.FC = () => {
             border: '1px solid var(--border)',
           }}>{id}</span>
         ))}
+        {artifacts.items.length > 0 && (
+          <span style={{
+            padding: '2px 8px', borderRadius: 999, fontSize: 10, fontWeight: 600,
+            background: 'rgba(78,96,64,0.08)',
+            color: 'var(--muted-foreground)',
+            border: '1px solid var(--border)',
+          }}>{artifacts.items.length} artifact{artifacts.items.length !== 1 ? 's' : ''}</span>
+        )}
       </section>
 
       <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '6px 0', display: 'grid', gap: 12, alignContent: 'start' }}>
@@ -179,7 +261,32 @@ export const ResearchCopilot: React.FC = () => {
             background: m.role === 'user' ? 'rgba(193, 95, 60, 0.08)' : 'var(--card)',
             border: '1px solid var(--border)',
           }}>
-            <p className="ds-body" style={{ margin: 0, whiteSpace: 'pre-wrap', lineHeight: 1.55 }}>{m.content}</p>
+            {m.role === 'assistant' ? (
+              <div className="copilot-md">
+                <ReactMarkdown>{m.content}</ReactMarkdown>
+              </div>
+            ) : (
+              <p className="ds-body" style={{ margin: 0, whiteSpace: 'pre-wrap', lineHeight: 1.55 }}>{m.content}</p>
+            )}
+            {m.role === 'assistant' && (
+              <div style={{ marginTop: 8, display: 'flex', justifyContent: 'flex-end' }}>
+                <button
+                  onClick={() => handleSaveInsight(m.content)}
+                  title="Save as insight"
+                  style={{
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    color: 'var(--muted-foreground)', padding: 4, display: 'flex',
+                    alignItems: 'center', gap: 4, fontSize: 11,
+                    borderRadius: 4,
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--muted)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+                >
+                  <Bookmark size={12} />
+                  Save
+                </button>
+              </div>
+            )}
           </article>
         ))}
 
@@ -224,6 +331,26 @@ export const ResearchCopilot: React.FC = () => {
       </form>
 
       <Disclaimer />
+      <style>{`
+        .copilot-md { font-size: 13px; line-height: 1.6; color: var(--foreground); }
+        .copilot-md p { margin: 0 0 8px; }
+        .copilot-md p:last-child { margin-bottom: 0; }
+        .copilot-md h1, .copilot-md h2, .copilot-md h3 { font-weight: 700; letter-spacing: -0.01em; margin: 12px 0 6px; }
+        .copilot-md h2 { font-size: 14px; }
+        .copilot-md h3 { font-size: 13px; color: var(--muted-foreground); }
+        .copilot-md ul, .copilot-md ol { margin: 6px 0 8px 18px; }
+        .copilot-md li { margin: 3px 0; }
+        .copilot-md strong { font-weight: 700; color: var(--foreground); }
+        .copilot-md em { font-style: italic; color: var(--muted-foreground); }
+        .copilot-md code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.85em; padding: 1px 5px; background: var(--muted); border-radius: 4px; }
+        .copilot-md pre { background: var(--muted); border-radius: 6px; padding: 10px 12px; overflow-x: auto; margin: 8px 0; }
+        .copilot-md pre code { background: none; padding: 0; }
+        .copilot-md blockquote { border-left: 2px solid var(--primary); padding-left: 10px; color: var(--muted-foreground); margin: 8px 0; font-style: italic; }
+        .copilot-md table { border-collapse: collapse; width: 100%; margin: 8px 0; font-size: 12px; }
+        .copilot-md th, .copilot-md td { padding: 5px 10px; border: 1px solid var(--border); text-align: left; }
+        .copilot-md th { font-weight: 700; background: var(--muted); }
+        .copilot-md hr { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
+      `}</style>
     </div>
   );
 };

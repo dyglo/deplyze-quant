@@ -1,7 +1,10 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import { toast } from 'sonner';
+import { Camera, Loader2 } from 'lucide-react';
 import { useInstrumentIntelligence } from '../hooks/useInstrument';
 import { useQuote, useOHLCV, useNews } from '../hooks/useMarket';
+import { useArtifacts, useBriefings } from '../hooks/useArtifacts';
 import { PageHeader } from '../components/quant/PageHeader';
 import { OHLCVChart } from '../components/quant/OHLCVChart';
 import { NewsList } from '../components/quant/NewsList';
@@ -9,7 +12,13 @@ import { StatTile } from '../components/quant/StatTile';
 import { AssetIcon } from '../components/quant/AssetIcon';
 import { FreshnessBadge, SourceBadge } from '../components/quant/FreshnessBadge';
 import { Disclaimer } from '../components/quant/Disclaimer';
+import { RelatedIntelligencePanel } from '../components/quant/RelatedIntelligencePanel';
+import { ArtifactDetailDrawerBody } from '../components/quant/ArtifactDetailDrawerBody';
+import { useDrawer } from '../components/quant/DataDrawer';
 import { closes, logReturns, annualisedVol, maxDrawdown, trendLabel } from '../lib/quant';
+import { createInstrumentSnapshot } from '../services/artifactService';
+import { useWorkspace } from '../components/WorkspaceContext';
+import { useAuth } from '../components/AuthProvider';
 
 const TREND_COPY: Record<string, string> = {
   'strong-up':   'Strong uptrend',
@@ -31,6 +40,14 @@ export const InstrumentDetail: React.FC = () => {
   // Slow path: composite endpoint with Gemini narrative.
   const intel = useInstrumentIntelligence(sym);
 
+  const { currentWorkspace, currentProject } = useWorkspace();
+  const { user } = useAuth();
+  const artifacts = useArtifacts(currentWorkspace?.id ?? null, currentProject?.id ?? null);
+  const briefings = useBriefings(currentWorkspace?.id ?? null, currentProject?.id ?? null);
+  const drawer = useDrawer();
+
+  const [savingSnap, setSavingSnap] = useState(false);
+
   const bars = ohlcv.data?.bars ?? [];
   const cs = useMemo(() => closes(bars), [bars]);
   const analytics = useMemo(() => {
@@ -47,6 +64,33 @@ export const InstrumentDetail: React.FC = () => {
     const t = trendLabel(cs);
     return { vol, ret60, mdd: mdd * 100, trend: t };
   }, [cs]);
+
+  const handleSaveSnapshot = async () => {
+    if (!sym || !q || !analytics || !currentWorkspace?.id || !currentProject?.id || !user) return;
+    setSavingSnap(true);
+    try {
+      await createInstrumentSnapshot(
+        currentWorkspace.id, currentProject.id,
+        sym, q, analytics, intel.data?.narrative ?? '', user.uid,
+      );
+      toast.success('Snapshot saved to Research Timeline');
+    } catch {
+      toast.error('Failed to save snapshot');
+    } finally {
+      setSavingSnap(false);
+    }
+  };
+
+  const handleOpenArtifact = useCallback((artifactId: string) => {
+    const artifact = artifacts.items.find(a => a.id === artifactId);
+    if (!artifact) return;
+    drawer.open({
+      title: artifact.title,
+      subtitle: artifact.category,
+      width: 560,
+      body: <ArtifactDetailDrawerBody artifact={artifact} relatedArtifacts={artifacts.items} onOpenArtifact={handleOpenArtifact} />,
+    });
+  }, [artifacts.items, drawer]);
 
   if (!sym) return null;
 
@@ -73,6 +117,15 @@ export const InstrumentDetail: React.FC = () => {
           <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
             {q?.source && <SourceBadge source={q.source} />}
             <FreshnessBadge status={quote.status} fetchedAt={quote.fetchedAt} compact />
+            <button
+              disabled={savingSnap || !q}
+              onClick={handleSaveSnapshot}
+              className="ds-btn-secondary"
+              style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}
+            >
+              {savingSnap ? <Loader2 size={11} className="animate-spin" /> : <Camera size={11} />}
+              Save Snapshot
+            </button>
             <Link to="/instruments" className="ds-caption" style={{
               padding: '6px 10px', border: '1px solid var(--border)', borderRadius: 6,
               textDecoration: 'none', color: 'var(--muted-foreground)',
@@ -211,6 +264,14 @@ export const InstrumentDetail: React.FC = () => {
           )}
         </aside>
       </div>
+
+      <RelatedIntelligencePanel
+        symbols={sym ? [sym] : []}
+        artifacts={artifacts.items}
+        briefings={briefings.items}
+        onOpenArtifact={handleOpenArtifact}
+        maxItems={3}
+      />
 
       <Disclaimer />
     </div>

@@ -7,8 +7,12 @@ import { MacroMultiChart, type MacroRange, type MacroScale, type MacroSeriesEntr
 import { FreshnessBadge, SourceBadge } from '../components/quant/FreshnessBadge';
 import { Disclaimer } from '../components/quant/Disclaimer';
 import { Sparkline } from '../components/quant/Sparkline';
-import { RotateCcw } from 'lucide-react';
+import { RotateCcw, Save, Loader2 } from 'lucide-react';
 import type { MacroSeries } from '../types';
+import { createMacroShiftArtifact } from '../services/artifactService';
+import { useWorkspace } from '../components/WorkspaceContext';
+import { useAuth } from '../components/AuthProvider';
+import { toast } from 'sonner';
 
 interface SeriesMeta {
   id: string;
@@ -48,10 +52,13 @@ interface LoadedSeries {
 
 export const MacroRegimeDesk: React.FC = () => {
   const drawer = useDrawer();
+  const { currentWorkspace, currentProject } = useWorkspace();
+  const { user } = useAuth();
   const [active, setActive] = useState<string[]>(['FEDFUNDS', 'DGS10', 'CPI']);
   const [range, setRange] = useState<MacroRange>('5Y');
   const [scale, setScale] = useState<MacroScale>('indexed');
   const [loaded, setLoaded] = useState<Record<string, LoadedSeries>>({});
+  const [savingMacro, setSavingMacro] = useState(false);
 
   const onLoaded = React.useCallback(
     (id: string, data: MacroSeries | null, status: import('../services/gatewayClient').FreshnessStatus, fetchedAt: number | null) => {
@@ -104,11 +111,49 @@ export const MacroRegimeDesk: React.FC = () => {
     return xs.length ? Math.max(...xs) : null;
   }, [loaded]);
 
+  const buildMacroNarrative = () =>
+    SERIES_META
+      .filter(m => active.includes(m.id))
+      .map(m => {
+        const pts = loaded[m.id]?.data?.points ?? [];
+        const last = pts[pts.length - 1];
+        return last ? `${m.name}: ${last.value.toFixed(2)}` : null;
+      })
+      .filter((x): x is string => x !== null)
+      .join('\n');
+
+  const handleSaveMacroContext = async () => {
+    if (!currentWorkspace?.id || !currentProject?.id || !user) return;
+    setSavingMacro(true);
+    try {
+      await createMacroShiftArtifact(
+        currentWorkspace.id, currentProject.id,
+        active, buildMacroNarrative(), user.uid,
+      );
+      toast.success('Macro context saved to Research Timeline');
+    } catch {
+      toast.error('Failed to save');
+    } finally {
+      setSavingMacro(false);
+    }
+  };
+
   return (
     <div style={{ padding: '0 24px 32px', maxWidth: 1280, margin: '0 auto' }}>
       <PageHeader
         title="Macro Regime Desk"
         subtitle="Central bank posture, yield curves, growth/inflation tilt, and the current macro regime classification."
+        actions={
+          <button
+            disabled={savingMacro || active.length === 0}
+            onClick={handleSaveMacroContext}
+            className="ds-btn-secondary"
+            style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}
+          >
+            {savingMacro ? <Loader2 size={11} className="animate-spin" /> : <Save size={11} />}
+            Save Context
+          </button>
+        }
       />
 
       {/* Headless fetch-and-cache for every series so toggles are instant. */}

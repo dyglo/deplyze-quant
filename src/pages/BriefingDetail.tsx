@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { doc, getDoc, Timestamp } from 'firebase/firestore';
 import ReactMarkdown from 'react-markdown';
@@ -6,12 +6,18 @@ import { toast } from 'sonner';
 import { db } from '../lib/firebase';
 import { useWorkspace } from '../components/WorkspaceContext';
 import { useBriefingGenerate } from '../hooks/useBriefingGenerate';
+import { useArtifacts, useBriefings } from '../hooks/useArtifacts';
+import { useDrawer } from '../components/quant/DataDrawer';
 import { PageHeader } from '../components/quant/PageHeader';
 import { Disclaimer } from '../components/quant/Disclaimer';
 import { FreshnessBadge, SourceBadge } from '../components/quant/FreshnessBadge';
-import { RefreshCw, Loader2 } from 'lucide-react';
+import { RelatedIntelligencePanel } from '../components/quant/RelatedIntelligencePanel';
+import { ArtifactDetailDrawerBody } from '../components/quant/ArtifactDetailDrawerBody';
+import { RefreshCw, Loader2, Archive } from 'lucide-react';
 import type { Briefing } from '../types';
 import type { BriefingGenerateKind } from '../services/briefingService';
+import { createArtifactFromBriefing } from '../services/artifactService';
+import { useAuth } from '../components/AuthProvider';
 
 function normalizeBriefing(raw: Record<string, unknown>): Briefing {
   const createdAt = raw.createdAt;
@@ -27,10 +33,21 @@ function normalizeBriefing(raw: Record<string, unknown>): Briefing {
 export const BriefingDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const { currentWorkspace, currentProject } = useWorkspace();
+  const { user } = useAuth();
   const [briefing, setBriefing] = useState<Briefing | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [savingArtifact, setSavingArtifact] = useState(false);
   const gen = useBriefingGenerate();
+  const drawer = useDrawer();
+  const artifacts = useArtifacts(currentWorkspace?.id ?? null, currentProject?.id ?? null);
+  const briefings = useBriefings(currentWorkspace?.id ?? null, currentProject?.id ?? null);
+
+  const handleOpenArtifact = useCallback((artifactId: string) => {
+    const artifact = artifacts.items.find((a) => a.id === artifactId);
+    if (!artifact) return;
+    drawer.open({ title: artifact.title, subtitle: artifact.category, width: 560, body: <ArtifactDetailDrawerBody artifact={artifact} relatedArtifacts={artifacts.items} onOpenArtifact={handleOpenArtifact} /> });
+  }, [artifacts.items, drawer]);
 
   const load = React.useCallback(() => {
     if (!id || !currentWorkspace || !currentProject) return;
@@ -63,6 +80,19 @@ export const BriefingDetail: React.FC = () => {
     }
   };
 
+  const handleSaveAsArtifact = async () => {
+    if (!briefing || !currentWorkspace?.id || !currentProject?.id || !user) return;
+    setSavingArtifact(true);
+    try {
+      await createArtifactFromBriefing(currentWorkspace.id, currentProject.id, briefing, user.uid);
+      toast.success('Saved to Research Timeline');
+    } catch {
+      toast.error('Failed to save');
+    } finally {
+      setSavingArtifact(false);
+    }
+  };
+
   return (
     <div style={{ padding: '0 24px 32px', maxWidth: 920, margin: '0 auto' }}>
       <PageHeader
@@ -74,6 +104,15 @@ export const BriefingDetail: React.FC = () => {
               <>
                 <SourceBadge source={briefing.source ?? 'manual'} />
                 <FreshnessBadge status="cached" fetchedAt={briefing.createdAt} compact />
+                <button
+                  disabled={savingArtifact || !briefing}
+                  onClick={handleSaveAsArtifact}
+                  className="ds-btn-secondary"
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}
+                >
+                  {savingArtifact ? <Loader2 size={11} className="animate-spin" /> : <Archive size={11} />}
+                  Save to Timeline
+                </button>
                 <button
                   disabled={gen.generating}
                   onClick={handleRegenerate}
@@ -156,6 +195,17 @@ export const BriefingDetail: React.FC = () => {
           <article className="ds-surface ds-markdown" style={{ padding: 20, borderRadius: 10 }}>
             <ReactMarkdown>{briefing.body}</ReactMarkdown>
           </article>
+
+          {briefing.symbols?.length ? (
+            <RelatedIntelligencePanel
+              symbols={briefing.symbols}
+              artifacts={artifacts.items}
+              briefings={briefings.items}
+              excludeId={briefing.id}
+              onOpenArtifact={handleOpenArtifact}
+              maxItems={4}
+            />
+          ) : null}
         </>
       )}
 

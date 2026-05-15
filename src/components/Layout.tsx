@@ -14,6 +14,7 @@ import {
   Beaker,
   FileText,
   Telescope,
+  Library,
   ChevronLeft,
   ChevronDown,
   Check,
@@ -63,6 +64,7 @@ const menuItems = [
   { id: 'copilot',     label: 'Research Copilot',       icon: MessageSquare,   path: '/copilot' },
   { id: 'warehouse',   label: 'Data Warehouse',         icon: Database,        path: '/warehouse' },
   { id: 'briefings',   label: 'Briefings',              icon: FileText,        path: '/briefings' },
+  { id: 'library',    label: 'Research Library',       icon: Library,         path: '/library' },
 ];
 
 const bottomItems = [
@@ -249,7 +251,7 @@ const SidebarInner: React.FC<{ signOut: () => void; user: any; profile: any }> =
 
             {/* Project Select Menu */}
             <div className="relative">
-              <p style={{ fontSize: '0.55rem', fontWeight: 600, color: 'var(--muted-foreground)', letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: '0.18rem' }}>Active Project</p>
+              <p style={{ fontSize: '0.55rem', fontWeight: 600, color: 'var(--muted-foreground)', letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: '0.18rem' }}>Research Focus</p>
               <button
                 onClick={() => { setProjOpen(!projOpen); setWsOpen(false); }}
                 className="w-full text-left flex items-center justify-between p-1.5 rounded-md border border-divider hover:bg-light transition-colors cursor-pointer select-none"
@@ -258,7 +260,7 @@ const SidebarInner: React.FC<{ signOut: () => void; user: any; profile: any }> =
                 <div className="flex items-center gap-1.5 min-w-0">
                   <MapPin size={12} style={{ color: 'var(--chart-2)' }} />
                   <span className="truncate text-xs font-medium text-secondary-foreground">
-                    {currentProject?.name || 'All Sites'}
+                    {currentProject?.name || 'Institutional Portfolio'}
                   </span>
                 </div>
                 <ChevronDown size={12} className="text-muted-foreground shrink-0 ml-1" />
@@ -270,7 +272,7 @@ const SidebarInner: React.FC<{ signOut: () => void; user: any; profile: any }> =
                   className="absolute left-0 right-0 mt-1 rounded-md border border-divider shadow-md p-1 z-50 flex flex-col gap-0.5 ds-fade-in"
                   style={{ background: 'var(--popover)', borderColor: 'var(--border)' }}
                 >
-                  <p className="px-2 py-1 text-[9px] font-bold text-muted-foreground uppercase tracking-widest">Select Project</p>
+                  <p className="px-2 py-1 text-[9px] font-bold text-muted-foreground uppercase tracking-widest">Select Research Asset</p>
                   
                   {/* Option for All Sites */}
                   <button
@@ -281,7 +283,7 @@ const SidebarInner: React.FC<{ signOut: () => void; user: any; profile: any }> =
                     className="w-full text-left flex items-center justify-between px-2 py-1.5 rounded text-xs hover:bg-light transition-colors text-secondary-foreground cursor-pointer"
                     style={{ background: !currentProject ? 'var(--accent)' : 'transparent', fontWeight: !currentProject ? 600 : 400 }}
                   >
-                    <span>All Sites & Projects</span>
+                    <span>Institutional Portfolio</span>
                     {!currentProject && <Check size={11} style={{ color: 'var(--chart-2)' }} />}
                   </button>
 
@@ -312,7 +314,7 @@ const SidebarInner: React.FC<{ signOut: () => void; user: any; profile: any }> =
                     className="w-full text-left flex items-center gap-1.5 px-2 py-1.5 rounded text-xs hover:bg-light transition-colors text-muted-foreground cursor-pointer"
                   >
                     <Plus size={11} />
-                    <span>Create Site / Project</span>
+                    <span>Create Portfolio / Strategy</span>
                   </button>
                 </div>
               )}
@@ -596,8 +598,8 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                   fontWeight: 500,
                   color: 'var(--foreground)'
                 }}>
-                  <span style={{ fontSize: '0.55rem', fontWeight: 800, color: 'var(--chart-2)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>PROJ</span>
-                  <span className="truncate" style={{ maxWidth: '7.5rem' }}>{currentProject?.name || 'All Sites'}</span>
+                  <span style={{ fontSize: '0.55rem', fontWeight: 800, color: 'var(--chart-2)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>ASSET</span>
+                  <span className="truncate" style={{ maxWidth: '7.5rem' }}>{currentProject?.name || 'Institutional Portfolio'}</span>
                 </div>
 
                 <span style={{ color: 'var(--muted-foreground)', opacity: 0.6, fontFamily: 'monospace', fontSize: '0.75rem', userSelect: 'none' }}>/</span>

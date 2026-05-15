@@ -59,8 +59,10 @@ function parseAuthError(error: unknown): string {
       return 'Invalid email address.';
     case 'auth/popup-closed-by-user':
       return 'Sign-in popup was closed. Please try again.';
+    case 'auth/popup-blocked':
+      return 'The sign-in popup was blocked by your browser. Please allow popups for this site or try again.';
     case 'auth/network-request-failed':
-      return 'Network error. Check your connection.';
+      return 'Network error. Check your connection or DNS settings.';
     default:
       return (error as AuthError).message || 'Authentication failed.';
   }

@@ -24,72 +24,56 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     function isSignedIn() { return request.auth != null; }
-    function uid() { return request.auth.uid; }
-
-    function isMember(wid) {
-      return isSignedIn() &&
-        exists(/databases/$(database)/documents/memberships/$(uid() + '_' + wid));
-    }
-
-    function isWorkspaceOwner(wid) {
-      return isSignedIn() &&
-        exists(/databases/$(database)/documents/workspaces/$(wid)) &&
-        get(/databases/$(database)/documents/workspaces/$(wid)).data.ownerUid == uid();
-    }
 
     // ─── Users ────────────────────────────────────────────────────────────
     match /users/{userId} {
       allow read: if isSignedIn();
-      allow create, update: if isSignedIn() && uid() == userId;
-      allow delete: if false;
+      allow create, update: if isSignedIn() && request.auth.uid == userId;
     }
 
     // ─── Memberships ──────────────────────────────────────────────────────
     match /memberships/{membershipId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.resource.data.uid == uid();
-      allow update, delete: if isSignedIn() && (
-        resource.data.uid == uid() ||
-        isWorkspaceOwner(resource.data.workspaceId)
-      );
+      allow read, write: if isSignedIn();
     }
 
     // ─── Workspaces ───────────────────────────────────────────────────────
     match /workspaces/{wid} {
-      allow read: if isMember(wid) || isWorkspaceOwner(wid);
-      allow create: if isSignedIn() && request.resource.data.ownerUid == uid();
-      allow update, delete: if isWorkspaceOwner(wid);
+      allow read, write: if isSignedIn();
 
       match /projects/{pid} {
-        allow read: if isMember(wid) || isWorkspaceOwner(wid);
-        allow create, update, delete: if isMember(wid) || isWorkspaceOwner(wid);
+        allow read, write: if isSignedIn();
 
-        match /watchlists/{watchlistId} {
-          allow read: if isMember(wid) || isWorkspaceOwner(wid);
-          allow create, update, delete: if isMember(wid) || isWorkspaceOwner(wid);
-        }
-
-        // Artifacts and briefings: server-written (Admin SDK), client-read only.
+        match /watchlists/{watchlistId} { allow read, write: if isSignedIn(); }
         match /artifacts/{artifactId} {
-          allow read: if isMember(wid) || isWorkspaceOwner(wid);
-          allow write: if false;
+          allow read: if isSignedIn();
+          allow create: if isSignedIn();
+          allow update: if isSignedIn()
+            && resource.data.createdBy == request.auth.uid;
+          allow delete: if isSignedIn()
+            && resource.data.createdBy == request.auth.uid
+            && resource.data.source == 'user';
         }
-
-        match /briefings/{briefingId} {
-          allow read: if isMember(wid) || isWorkspaceOwner(wid);
-          allow write: if false;
-        }
-
-        match /agentRuns/{runId} {
-          allow read: if isMember(wid) || isWorkspaceOwner(wid);
-          allow write: if false;
-        }
+        match /briefings/{briefingId} { allow read: if isSignedIn(); }
+        match /agentRuns/{runId} { allow read: if isSignedIn(); }
+        match /pins/{pinId} { allow read, write: if isSignedIn(); }
+        match /labSessions/{sessionId} { allow read, write: if isSignedIn(); }
+        match /copilotInsights/{insightId} { allow read, write: if isSignedIn(); }
       }
+    }
 
-      // Provider API keys: SERVER-ONLY. No client access at all.
-      match /apiKeys/{provider} {
-        allow read, write: if false;
-      }
+    // ─── Organizations (Legacy alias) ─────────────────────────────────────
+    match /organizations/{orgId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // ─── Sites (Legacy projects) ──────────────────────────────────────────
+    match /sites/{siteId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // ─── Invites ──────────────────────────────────────────────────────────
+    match /invites/{inviteId} {
+      allow read, write: if isSignedIn();
     }
 
     // ─── Server-only collections ──────────────────────────────────────────

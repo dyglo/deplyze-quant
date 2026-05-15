@@ -4,6 +4,7 @@ import {
   ResponsiveContainer, ReferenceLine,
 } from 'recharts';
 import { Play, Loader2, Copy, Check, AlertTriangle } from 'lucide-react';
+import { toast } from 'sonner';
 
 import {
   closes, logReturns, annualisedVol, maxDrawdown, stdev,
@@ -42,7 +43,56 @@ interface RiskResult {
 
 interface RiskPanelProps {
   defaultSymbol?: string;
+  onSaveSession?: (payload: { name: string; panel: 'risk'; symbols: string[]; timeframe: string; summary: Record<string, string | number> }) => Promise<void>;
 }
+
+const SaveSessionInline: React.FC<{ onSave: (name: string) => Promise<void> }> = ({ onSave }) => {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [saving, setSaving] = useState(false);
+  const defaultName = `Risk session ${new Date().toLocaleDateString()}`;
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => { setName(defaultName); setOpen(true); }}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 5,
+          padding: '4px 10px', borderRadius: 6,
+          border: '1px solid var(--border)', background: 'var(--card)',
+          color: 'var(--foreground)', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+        }}
+      >
+        Save Session
+      </button>
+    );
+  }
+  return (
+    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+      <input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Session name"
+        style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--foreground)', width: 180 }}
+        autoFocus
+        onKeyDown={(e) => { if (e.key === 'Escape') setOpen(false); }}
+      />
+      <button
+        onClick={async () => {
+          setSaving(true);
+          try { await onSave(name || defaultName); setOpen(false); }
+          catch { toast.error('Failed to save session'); }
+          finally { setSaving(false); }
+        }}
+        disabled={saving}
+        style={{ padding: '4px 10px', borderRadius: 6, border: 'none', background: 'var(--primary)', color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+      >
+        {saving ? 'Saving…' : 'Save'}
+      </button>
+      <button onClick={() => setOpen(false)} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--foreground)', fontSize: 11, cursor: 'pointer' }}>Cancel</button>
+    </div>
+  );
+};
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -74,7 +124,7 @@ function fmtRatio(n: number): string {
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export const RiskPanel: React.FC<RiskPanelProps> = ({ defaultSymbol = 'SPY' }) => {
+export const RiskPanel: React.FC<RiskPanelProps> = ({ defaultSymbol = 'SPY', onSaveSession }) => {
   const [symbol, setSymbol] = useState(defaultSymbol);
   const [timeframe, setTimeframe] = useState<Timeframe>('1day');
   const [running, setRunning] = useState(false);
@@ -313,18 +363,40 @@ export const RiskPanel: React.FC<RiskPanelProps> = ({ defaultSymbol = 'SPY' }) =
               <span className="ds-heading" style={{ margin: 0 }}>{result.symbol}</span>
               <FreshnessBadge status="live" fetchedAt={result.fetchedAt} />
             </div>
-            <button
-              onClick={copyJSON}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 5,
-                padding: '4px 10px', borderRadius: 6,
-                border: '1px solid var(--border)', background: 'var(--card)',
-                color: 'var(--foreground)', fontSize: 11, fontWeight: 600, cursor: 'pointer',
-              }}
-            >
-              {copied ? <Check size={12} style={{ color: '#4E6040' }} /> : <Copy size={12} />}
-              {copied ? 'Copied!' : 'Copy JSON'}
-            </button>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              {onSaveSession && (
+                <SaveSessionInline
+                  onSave={async (name) => {
+                    await onSaveSession({
+                      name,
+                      panel: 'risk',
+                      symbols: [result.symbol],
+                      timeframe: result.timeframe,
+                      summary: {
+                        annVol: +result.annVol.toFixed(2),
+                        mdd: +result.mdd.toFixed(2),
+                        sharpe: +result.sharpe.toFixed(2),
+                        sortino: +result.sortino.toFixed(2),
+                        hVar95: +result.hVar95.toFixed(2),
+                      },
+                    });
+                    toast.success('Session saved');
+                  }}
+                />
+              )}
+              <button
+                onClick={copyJSON}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5,
+                  padding: '4px 10px', borderRadius: 6,
+                  border: '1px solid var(--border)', background: 'var(--card)',
+                  color: 'var(--foreground)', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                }}
+              >
+                {copied ? <Check size={12} style={{ color: '#4E6040' }} /> : <Copy size={12} />}
+                {copied ? 'Copied!' : 'Copy JSON'}
+              </button>
+            </div>
           </div>
 
           {/* Section 1 — Stats grid */}
@@ -435,7 +507,7 @@ export const RiskPanel: React.FC<RiskPanelProps> = ({ defaultSymbol = 'SPY' }) =
                   tickFormatter={v => v.toFixed(2)}
                 />
                 <Tooltip
-                  formatter={(val: number) => [val.toFixed(4), 'Value']}
+                  formatter={(val: any) => [val.toFixed(4), 'Value']}
                   labelFormatter={l => `Bar ${l}`}
                   contentStyle={{
                     background: 'var(--card)',

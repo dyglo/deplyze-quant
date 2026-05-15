@@ -5,6 +5,7 @@ import { AssetIcon } from './AssetIcon';
 import { FreshnessBadge, SourceBadge } from './FreshnessBadge';
 import { Sparkline } from './Sparkline';
 import { NewsList } from './NewsList';
+import { RegimeIntelligencePanel } from './RegimeIntelligencePanel';
 import { ExternalLink } from 'lucide-react';
 
 export const InstrumentDrawerBody: React.FC<{ symbol: string }> = ({ symbol }) => {
@@ -88,6 +89,9 @@ export const InstrumentDrawerBody: React.FC<{ symbol: string }> = ({ symbol }) =
           ))}
         </section>
       )}
+
+      {/* Regime intelligence */}
+      <RegimeIntelligencePanel symbol={symbol} />
 
       {/* Recent headlines */}
       <section>

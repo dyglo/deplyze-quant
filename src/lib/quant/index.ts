@@ -32,3 +32,5 @@ export * from './benchmark';
 export * from './portfolio';
 export * from './seasonality';
 export * from './artifacts';
+export * from './regimes';
+export * from './anomalies';

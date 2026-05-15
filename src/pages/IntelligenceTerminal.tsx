@@ -158,17 +158,29 @@ export const IntelligenceTerminal: React.FC = () => {
 
         {/* Headlines */}
         <section>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
             <h2 className="ds-heading" style={{ margin: 0 }}>Live Headlines</h2>
             <FreshnessBadge status={headlines.status} fetchedAt={headlines.fetchedAt} compact />
           </div>
           {headlines.loading ? (
-            <p className="ds-caption" style={{ color: 'var(--muted-foreground)' }}>Loading…</p>
+            <div style={{ display: 'grid', gap: 8 }}>
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="ds-surface" style={{ padding: '12px 14px', borderRadius: 10, opacity: 0.5, height: 72 }} />
+              ))}
+            </div>
           ) : !headlines.data || headlines.data.length === 0 ? (
             <p className="ds-caption" style={{ color: 'var(--muted-foreground)' }}>No headlines available.</p>
           ) : (
-            <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 8 }}>
-              {headlines.data.slice(0, 10).map((h, i) => (
+            <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 6 }}>
+              {headlines.data.slice(0, 12).map((h, i) => {
+                const publishedAt = h.date ? Date.parse(h.date) : undefined;
+                const ago = publishedAt ? (() => {
+                  const s = Math.floor((Date.now() - publishedAt) / 1000);
+                  if (s < 60) return `${s}s ago`;
+                  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+                  return `${Math.floor(s / 3600)}h ago`;
+                })() : h.date ?? null;
+                return (
                 <li key={`${i}-${h.link}`}>
                   <button
                     onClick={() => drawer.open({
@@ -179,30 +191,44 @@ export const IntelligenceTerminal: React.FC = () => {
                         summary: h.snippet,
                         url: h.link,
                         source: h.source,
-                        publishedAt: h.date ? Date.parse(h.date) || undefined : undefined,
+                        publishedAt,
                       }} />,
                     })}
-                    className="ds-surface ds-transition-fast"
                     style={{
-                      width: '100%',
-                      textAlign: 'left',
-                      padding: '10px 12px',
-                      borderRadius: 8,
+                      width: '100%', textAlign: 'left',
+                      padding: '11px 14px', borderRadius: 10,
                       border: '1px solid var(--border)',
-                      background: 'var(--card)',
-                      cursor: 'pointer',
-                      color: 'inherit',
-                      display: 'block',
+                      background: 'var(--card)', cursor: 'pointer', color: 'inherit',
+                      display: 'grid', gap: 5,
+                      transition: 'border-color 0.12s, background 0.12s',
                     }}
+                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--primary) 40%, transparent)'; e.currentTarget.style.background = 'color-mix(in srgb, var(--primary) 3%, var(--card))'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.background = 'var(--card)'; }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <span className="ds-label" style={{ color: 'var(--muted-foreground)' }}>{h.source}</span>
-                      {h.date && <span className="ds-caption" style={{ color: 'var(--muted-foreground)' }}>{h.date}</span>}
+                    {/* Source + time row */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{
+                        fontSize: 9, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase',
+                        padding: '1px 6px', borderRadius: 999,
+                        background: 'rgba(193,95,60,0.08)',
+                        color: 'var(--primary)',
+                        border: '1px solid color-mix(in srgb, var(--primary) 20%, transparent)',
+                        flexShrink: 0,
+                      }}>{h.source}</span>
+                      {ago && (
+                        <span className="ds-caption" style={{ color: 'var(--muted-foreground)', marginLeft: 'auto', flexShrink: 0 }}>
+                          {ago}
+                        </span>
+                      )}
                     </div>
-                    <div className="ds-heading" style={{ marginTop: 4 }}>{h.title}</div>
+                    {/* Headline */}
+                    <p style={{ margin: 0, fontSize: 13, fontWeight: 600, lineHeight: 1.4, letterSpacing: '-0.01em', color: 'var(--foreground)' }}>
+                      {h.title}
+                    </p>
+                    {/* Snippet */}
                     {h.snippet && (
-                      <p className="ds-caption" style={{
-                        marginTop: 4, color: 'var(--muted-foreground)',
+                      <p style={{
+                        margin: 0, fontSize: 11, color: 'var(--muted-foreground)', lineHeight: 1.5,
                         display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
                       }}>
                         {h.snippet}
@@ -210,7 +236,8 @@ export const IntelligenceTerminal: React.FC = () => {
                     )}
                   </button>
                 </li>
-              ))}
+                );
+              })}
             </ul>
           )}
         </section>

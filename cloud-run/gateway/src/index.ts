@@ -112,6 +112,13 @@ if (missingOptional.length > 0) {
 const app = express();
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(requestId);
+
+// Trace incoming requests for production debugging
+app.use((req, _res, next) => {
+  console.log(`[Gateway] [${req.requestId}] ${req.method} ${req.originalUrl}`);
+  next();
+});
+
 app.use(applyCors);
 app.use(express.json({ limit: '2mb' }));
 app.use(rateLimiter);
@@ -122,7 +129,7 @@ app.get('/health', (_req, res) => {
 });
 
 // All /v1 routes require a verified Firebase ID token + per-user rate limit.
-// Support both /v1 and /api/v1 (prod proxy)
+// Support both /v1 and /api/v1 (prod proxy via Firebase Hosting)
 const router = express.Router();
 router.use(authenticate, userRateLimiter);
 router.use('/market', marketRouter);
@@ -136,10 +143,11 @@ router.use('/fundamentals', fundamentalsRouter);
 router.use('/earnings', earningsRouter);
 router.use('/edgar', edgarRouter);
 
-app.use('/v1', router);
-app.use('/api/v1', router);
+// Mount router on both paths to handle local dev (/v1) and prod proxy (/api/v1)
+app.use(['/v1', '/api/v1'], router);
 
-app.use((_req, res) => {
+app.use((req, res) => {
+  console.warn(`[Gateway] [${req.requestId}] 404 Not Found: ${req.method} ${req.originalUrl}`);
   res.status(404).json({ error: 'Not Found', code: 'NOT_FOUND' });
 });
 

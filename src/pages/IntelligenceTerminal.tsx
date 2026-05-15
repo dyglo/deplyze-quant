@@ -60,16 +60,22 @@ export const IntelligenceTerminal: React.FC = () => {
   const pinnedIds = useMemo(() => new Set(pinMap.keys()), [pinMap]);
   const [activeTab, setActiveTab] = useState<'feed' | 'timeline'>('feed');
 
+  // Feed shows only agent-generated artifacts; user saves go to Research Library
+  const agentArtifacts = useMemo(
+    () => artifacts.items.filter(a => !a.source || a.source === 'agent'),
+    [artifacts.items],
+  );
+
   const handleOpenArtifact = useCallback((id: string) => {
-    const artifact = artifacts.items.find((a) => a.id === id);
+    const artifact = agentArtifacts.find((a) => a.id === id);
     if (!artifact) return;
     drawer.open({
       title: artifact.title,
       subtitle: artifact.category,
       width: 560,
-      body: <ArtifactDetailDrawerBody artifact={artifact} relatedArtifacts={artifacts.items} onOpenArtifact={handleOpenArtifact} />,
+      body: <ArtifactDetailDrawerBody artifact={artifact} relatedArtifacts={agentArtifacts} onOpenArtifact={handleOpenArtifact} />,
     });
-  }, [artifacts.items, drawer]);
+  }, [agentArtifacts, drawer]);
 
   return (
     <div style={{ padding: '0 24px 32px', maxWidth: 1280, margin: '0 auto' }}>
@@ -151,7 +157,7 @@ export const IntelligenceTerminal: React.FC = () => {
 
           {activeTab === 'feed' ? (
             <IntelligenceFeed
-              items={artifacts.items}
+              items={agentArtifacts}
               loading={artifacts.loading}
               emptyTitle="No intelligence artifacts yet"
               emptyHint="Autonomous research agents start producing artifacts in Phase 5. Until then the feed will be empty; the Research Copilot is available for on-demand analysis."

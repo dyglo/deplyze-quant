@@ -21,6 +21,7 @@ export const ResearchTimeline: React.FC<Props> = ({ events, loading, onOpenArtif
   const [search, setSearch] = useState('');
   const [filterKind, setFilterKind] = useState<'all' | TimelineEvent['kind']>('all');
   const [filterSymbol, setFilterSymbol] = useState('');
+  const [filterSource, setFilterSource] = useState<'all' | 'agent' | 'user'>('all');
   const [pinnedOnly, setPinnedOnly] = useState(false);
   const [savedOnly, setSavedOnly] = useState(false);
   const [sortDir, setSortDir] = useState<'desc' | 'asc'>('desc');
@@ -58,6 +59,16 @@ export const ResearchTimeline: React.FC<Props> = ({ events, loading, onOpenArtif
       });
     }
 
+    // Filter by source (agent / user / all)
+    if (filterSource !== 'all') {
+      result = result.filter(e => {
+        if (e.kind !== 'artifact') return filterSource === 'agent';
+        const src = (e.data as { source?: string }).source;
+        if (filterSource === 'agent') return !src || src === 'agent';
+        return src === 'user';
+      });
+    }
+
     // Filter pinned only
     if (pinnedOnly) {
       result = result.filter(
@@ -84,7 +95,7 @@ export const ResearchTimeline: React.FC<Props> = ({ events, loading, onOpenArtif
     });
 
     return result;
-  }, [events, filterKind, search, filterSymbol, pinnedOnly, savedOnly, sortDir, pinnedIds]);
+  }, [events, filterKind, search, filterSymbol, filterSource, pinnedOnly, savedOnly, sortDir, pinnedIds]);
 
   if (loading) {
     return <p className="ds-caption" style={{ color: 'var(--muted-foreground)', padding: '24px 0' }}>Loading timeline…</p>;
@@ -126,15 +137,23 @@ export const ResearchTimeline: React.FC<Props> = ({ events, loading, onOpenArtif
             <option value="insight">Copilot</option>
           </select>
         </div>
-        {/* Row 2: symbol filter + toggle buttons */}
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        {/* Row 2: symbol filter + source + toggle buttons */}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <input
             className="ds-input"
-            style={{ flex: 1, fontSize: 12 }}
+            style={{ flex: 1, minWidth: 80, fontSize: 12 }}
             placeholder="Filter by symbol…"
             value={filterSymbol}
             onChange={(e) => setFilterSymbol(e.target.value)}
           />
+          {(['all', 'agent', 'user'] as const).map(s => (
+            <button
+              key={s}
+              onClick={() => setFilterSource(s)}
+              className={filterSource === s ? 'ds-btn-primary' : 'ds-btn-secondary'}
+              style={{ fontSize: 12, padding: '4px 10px', textTransform: 'capitalize' }}
+            >{s === 'all' ? 'All' : s === 'agent' ? 'Agent' : 'Saved'}</button>
+          ))}
           <button
             onClick={() => setPinnedOnly((v) => !v)}
             className={pinnedOnly ? 'ds-btn-primary' : 'ds-btn-secondary'}

@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { useBatchQuotes, useHeadlines, useOHLCV } from '../hooks/useMarket';
 import { useArtifacts } from '../hooks/useArtifacts';
 import { useTimeline } from '../hooks/useTimeline';
@@ -14,6 +14,7 @@ import { FreshnessBadge } from '../components/quant/FreshnessBadge';
 import { InstrumentDrawerBody } from '../components/quant/InstrumentDrawerBody';
 import { HeadlineDrawerBody } from '../components/quant/HeadlineDrawerBody';
 import { RefreshCw } from 'lucide-react';
+import { usePins } from '../hooks/usePins';
 
 // Grouped by asset class for breadth of market coverage
 const DEFAULT_WATCH = [
@@ -55,6 +56,8 @@ export const IntelligenceTerminal: React.FC = () => {
     currentProject?.id ?? null,
   );
   const timeline = useTimeline(currentWorkspace?.id ?? null, currentProject?.id ?? null);
+  const { pinMap } = usePins(currentWorkspace?.id ?? null, currentProject?.id ?? null);
+  const pinnedIds = useMemo(() => new Set(pinMap.keys()), [pinMap]);
   const [activeTab, setActiveTab] = useState<'feed' | 'timeline'>('feed');
 
   const handleOpenArtifact = useCallback((id: string) => {
@@ -159,6 +162,7 @@ export const IntelligenceTerminal: React.FC = () => {
               events={timeline.events}
               loading={timeline.loading}
               onOpenArtifact={handleOpenArtifact}
+              pinnedIds={pinnedIds}
             />
           )}
         </section>

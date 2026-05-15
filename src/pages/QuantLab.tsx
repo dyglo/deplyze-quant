@@ -9,6 +9,7 @@ import { LabSessionCard } from '../components/quant/LabSessionCard';
 import { useWorkspace } from '../components/WorkspaceContext';
 import { useAuth } from '../components/AuthProvider';
 import { useLabSessions } from '../hooks/useLabSessions';
+import { createArtifactFromQuantLab } from '../services/artifactService';
 import type { LabPanel, LabSession } from '../types';
 
 type LabTab = 'risk' | 'alpha' | 'portfolio' | 'sessions';
@@ -46,34 +47,105 @@ type PanelSavePayload = {
 
 export const QuantLab: React.FC = () => {
   const [activeTab, setActiveTab] = useState<LabTab>('risk');
-  const { currentWorkspace, currentProject } = useWorkspace();
+  const { currentWorkspace, currentProject, projects } = useWorkspace();
   const { user } = useAuth();
   const { sessions, loading: sessionsLoading, save: saveSession, remove: deleteSession } = useLabSessions(
     currentWorkspace?.id ?? null,
     currentProject?.id ?? null,
   );
 
-  const handleSaveSession = async (payload: PanelSavePayload) => {
-    if (!currentWorkspace?.id || !currentProject?.id || !user) {
-      toast.error('No workspace selected');
-      throw new Error('No workspace selected');
+  const handleSaveAsArtifact = async (session: LabSession) => {
+    if (!currentWorkspace?.id || !currentProject?.id || !user) return;
+    try {
+      await createArtifactFromQuantLab(currentWorkspace.id, currentProject.id, session, user.uid);
+      toast.success('Saved to Research Timeline');
+    } catch {
+      toast.error('Failed to save artifact');
     }
+  };
+
+  const handleSaveSession = async (payload: PanelSavePayload) => {
+    if (!currentWorkspace?.id || !user) {
+      toast.error('Please select an Institutional Portfolio first');
+      return;
+    }
+
+    if (!currentProject?.id) {
+      toast.error('Please select a Research Asset to save this session to.');
+      // In a real implementation, we would open a selection modal here.
+      // For now, we'll prompt the user to use the sidebar to select a project.
+      return;
+    }
+
     const sessionPayload: Omit<LabSession, 'id' | 'createdAt'> = {
       ...payload,
       workspaceId: currentWorkspace.id,
       projectId: currentProject.id,
       savedBy: user.uid,
     };
-    await saveSession(sessionPayload);
-    // Throws propagate to the panel's onSave — success toast only fires when this resolves
+    const sessionId = await saveSession(sessionPayload);
+
+    const savedSession: LabSession = {
+      id: sessionId,
+      ...sessionPayload,
+      createdAt: new Date().getTime(),
+    };
+
+    toast.success('Session saved', {
+      action: {
+        label: 'Save as Artifact',
+        onClick: () => handleSaveAsArtifact(savedSession),
+      },
+    });
   };
 
   return (
     <div style={{ padding: '0 24px 48px', maxWidth: 1200, margin: '0 auto' }}>
-      <PageHeader
-        title="Quant Lab"
-        subtitle="Client-side analytics computed from live OHLCV data. No lookahead. No fake results."
-      />
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <PageHeader
+          title="Quant Lab"
+          subtitle="Client-side analytics computed from live OHLCV data. No lookahead. No fake results."
+        />
+        
+        {/* Project Selector for Quant Lab — only shown if in "All Sites" or no project selected */}
+        {!currentProject && currentWorkspace && (
+          <div style={{ 
+            background: 'var(--card)', 
+            border: '1px solid var(--border)', 
+            padding: '8px 12px', 
+            borderRadius: 8,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 4
+          }}>
+            <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted-foreground)', textTransform: 'uppercase' }}>
+              Research Target
+            </span>
+            <select 
+              className="ds-input"
+              style={{ padding: '4px 8px', fontSize: 12, minWidth: 160 }}
+              onChange={(e) => {
+                const proj = projects.find(p => p.id === e.target.value);
+                if (proj) {
+                  // This is a bit of a hack since WorkspaceContext doesn't expose a setter for currentProject 
+                  // but we can trigger it by updating localStorage and waiting for sync if needed,
+                  // or just let the user know they need to select it.
+                  localStorage.setItem(`deplyze_active_proj_id_${currentWorkspace.id}`, proj.id);
+                  window.dispatchEvent(new Event('storage')); // Notify context if it listens
+                  toast.success(`Target set to ${proj.name}. You can now save.`);
+                  window.location.reload(); // Force refresh to update context for now
+                }
+              }}
+              value=""
+            >
+              <option value="" disabled>Select Research Asset...</option>
+              {projects.map(p => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
 
       {/* Tab bar */}
       <nav

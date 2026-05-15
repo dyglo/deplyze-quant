@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { Send, Sparkles, Play, ChevronRight, Bookmark } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -233,7 +234,13 @@ export const ResearchCopilot: React.FC = () => {
             background: m.role === 'user' ? 'rgba(193, 95, 60, 0.08)' : 'var(--card)',
             border: '1px solid var(--border)',
           }}>
-            <p className="ds-body" style={{ margin: 0, whiteSpace: 'pre-wrap', lineHeight: 1.55 }}>{m.content}</p>
+            {m.role === 'assistant' ? (
+              <div className="copilot-md">
+                <ReactMarkdown>{m.content}</ReactMarkdown>
+              </div>
+            ) : (
+              <p className="ds-body" style={{ margin: 0, whiteSpace: 'pre-wrap', lineHeight: 1.55 }}>{m.content}</p>
+            )}
             {m.role === 'assistant' && (
               <div style={{ marginTop: 8, display: 'flex', justifyContent: 'flex-end' }}>
                 <button
@@ -297,6 +304,26 @@ export const ResearchCopilot: React.FC = () => {
       </form>
 
       <Disclaimer />
+      <style>{`
+        .copilot-md { font-size: 13px; line-height: 1.6; color: var(--foreground); }
+        .copilot-md p { margin: 0 0 8px; }
+        .copilot-md p:last-child { margin-bottom: 0; }
+        .copilot-md h1, .copilot-md h2, .copilot-md h3 { font-weight: 700; letter-spacing: -0.01em; margin: 12px 0 6px; }
+        .copilot-md h2 { font-size: 14px; }
+        .copilot-md h3 { font-size: 13px; color: var(--muted-foreground); }
+        .copilot-md ul, .copilot-md ol { margin: 6px 0 8px 18px; }
+        .copilot-md li { margin: 3px 0; }
+        .copilot-md strong { font-weight: 700; color: var(--foreground); }
+        .copilot-md em { font-style: italic; color: var(--muted-foreground); }
+        .copilot-md code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.85em; padding: 1px 5px; background: var(--muted); border-radius: 4px; }
+        .copilot-md pre { background: var(--muted); border-radius: 6px; padding: 10px 12px; overflow-x: auto; margin: 8px 0; }
+        .copilot-md pre code { background: none; padding: 0; }
+        .copilot-md blockquote { border-left: 2px solid var(--primary); padding-left: 10px; color: var(--muted-foreground); margin: 8px 0; font-style: italic; }
+        .copilot-md table { border-collapse: collapse; width: 100%; margin: 8px 0; font-size: 12px; }
+        .copilot-md th, .copilot-md td { padding: 5px 10px; border: 1px solid var(--border); text-align: left; }
+        .copilot-md th { font-weight: 700; background: var(--muted); }
+        .copilot-md hr { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
+      `}</style>
     </div>
   );
 };

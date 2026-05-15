@@ -194,6 +194,17 @@ export type ArtifactCategory =
   | 'risk'
   | 'earnings';
 
+export type ArtifactType =
+  | 'briefing'
+  | 'quant_lab_analysis'
+  | 'copilot_insight'
+  | 'macro_shift'
+  | 'volatility_anomaly'
+  | 'correlation_breakdown'
+  | 'sentiment_cluster'
+  | 'instrument_snapshot'
+  | 'market_note';
+
 export type ConfidenceBand = 'low' | 'medium' | 'high' | 'very-high';
 
 export interface IntelligenceArtifact {
@@ -213,6 +224,22 @@ export interface IntelligenceArtifact {
   }>;
   createdAt: number;            // unix ms
   agentId?: string;
+  // V2 extensions — all optional for backward compatibility
+  artifactType?: ArtifactType;           // V2 type literal
+  source?: 'agent' | 'user';            // 'agent' for gateway-written, 'user' for client-created
+  summary?: string;                      // 2-4 sentence executive summary
+  body?: string;                         // markdown content
+  relatedSymbols?: string[];
+  relatedMacroIndicators?: string[];
+  relatedDatasets?: string[];
+  relatedProviders?: string[];
+  confidenceScore?: number;              // V2 alias; UI prefers this over the existing `confidence` field
+  completenessScore?: number;
+  sourceReferences?: string[];
+  tags?: string[];
+  saved?: boolean;
+  createdBy?: string;                    // uid; only set on user-created artifacts
+  updatedAt?: number;                    // unix ms
 }
 
 // ─── Regime, correlations, ML outputs ───────────────────────────────────────

@@ -42,7 +42,7 @@ export const BriefingDetail: React.FC = () => {
   const handleOpenArtifact = useCallback((artifactId: string) => {
     const artifact = artifacts.items.find((a) => a.id === artifactId);
     if (!artifact) return;
-    drawer.open({ title: artifact.title, subtitle: artifact.category, width: 560, body: <ArtifactDetailDrawerBody artifact={artifact} /> });
+    drawer.open({ title: artifact.title, subtitle: artifact.category, width: 560, body: <ArtifactDetailDrawerBody artifact={artifact} relatedArtifacts={artifacts.items} onOpenArtifact={handleOpenArtifact} /> });
   }, [artifacts.items, drawer]);
 
   const load = React.useCallback(() => {

@@ -64,7 +64,7 @@ export const IntelligenceTerminal: React.FC = () => {
       title: artifact.title,
       subtitle: artifact.category,
       width: 560,
-      body: <ArtifactDetailDrawerBody artifact={artifact} />,
+      body: <ArtifactDetailDrawerBody artifact={artifact} relatedArtifacts={artifacts.items} onOpenArtifact={handleOpenArtifact} />,
     });
   }, [artifacts.items, drawer]);
 

@@ -32,6 +32,9 @@ import { ExtremesTab } from '../components/quant/historical-intelligence/Extreme
 import { CrossAssetTab } from '../components/quant/historical-intelligence/CrossAssetTab';
 import { ForwardReturnsTab } from '../components/quant/historical-intelligence/ForwardReturnsTab';
 import { ReversionTab } from '../components/quant/historical-intelligence/ReversionTab';
+import { BenchmarkTab } from '../components/quant/historical-intelligence/BenchmarkTab';
+import { ScenarioTab } from '../components/quant/historical-intelligence/ScenarioTab';
+import { TimelineTab } from '../components/quant/historical-intelligence/TimelineTab';
 
 /** Tab definitions. The IDs are stable — tab bodies wire onto them. */
 const TABS = [
@@ -193,6 +196,12 @@ export const HistoricalIntelligenceTerminal: React.FC = () => {
           <ForwardReturnsTab symbol={symbol} />
         ) : tab === 'reversion' ? (
           <ReversionTab symbol={symbol} />
+        ) : tab === 'benchmark' ? (
+          <BenchmarkTab symbol={symbol} benchmark={benchmark} />
+        ) : tab === 'scenario' ? (
+          <ScenarioTab symbol={symbol} />
+        ) : tab === 'timeline' ? (
+          <TimelineTab symbol={symbol} />
         ) : (
           <TabPlaceholder tab={tab} symbol={symbol} benchmark={benchmark} lookback={lookback} />
         )}

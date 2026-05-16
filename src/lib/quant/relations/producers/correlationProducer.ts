@@ -6,7 +6,7 @@
 import { alignClosesByTs, correlationDrift, pearson } from '../../correlation';
 import { logReturns } from '../../returns';
 import type { RelationsEdge } from '../types';
-import { edgeId, type Producer, type ProducerContext, type ProducerOutput } from './types';
+import { edgeId, sliceAsOf, type Producer, type ProducerContext, type ProducerOutput } from './types';
 
 const MIN_OVERLAP = 30;
 const BASELINE_WINDOW = 126;
@@ -23,8 +23,10 @@ export const correlationProducer: Producer = {
       ...Object.entries(ctx.macros),
     ];
 
-    for (const [otherSym, otherBars] of all) {
-      const aligned = alignClosesByTs(ctx.focal.bars, otherBars);
+    const focalBars = sliceAsOf(ctx.focal.bars, ctx.asOfTs);
+    for (const [otherSym, otherBarsRaw] of all) {
+      const otherBars = sliceAsOf(otherBarsRaw, ctx.asOfTs);
+      const aligned = alignClosesByTs(focalBars, otherBars);
       if (aligned.ts.length < MIN_OVERLAP) {
         skipped.push({ id: `corr:${ctx.focal.symbol}-${otherSym}`, reason: 'insufficient overlap' });
         continue;

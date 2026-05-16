@@ -19,6 +19,16 @@ export interface ProducerContext {
   benchmarks: Record<string, OHLCVBar[]>;
   macros: Record<string, OHLCVBar[]>;
   windowDays: number;
+  /** When set, producers should derive relationships using only bars
+   *  whose timestamp is ≤ this value. Powers the replay timeline. */
+  asOfTs?: number;
+}
+
+/** Slice a chronological bar series to bars with ts ≤ asOf. */
+export function sliceAsOf(bars: OHLCVBar[], asOf?: number): OHLCVBar[] {
+  if (asOf == null) return bars;
+  const i = bars.findIndex((b) => b.ts > asOf);
+  return i === -1 ? bars : bars.slice(0, i);
 }
 
 export interface ProducerOutput {

@@ -22,11 +22,12 @@ import {
   RelationsSidePanel,
   RelationsFilterBar,
   RelationsNodeDrawerBody,
+  ReplayTimeline,
   OverlayControls,
   type SpotlightMode,
 } from '../components/quant/relations-map';
 import { buildSeedRelationsGraph } from '../lib/quant/relations/seed';
-import { buildFocalContext } from '../lib/quant/relations/context';
+import { buildFocalContext, type FocalContextLoad } from '../lib/quant/relations/context';
 import { composeRelationsGraph } from '../lib/quant/relations/compose';
 import type { EdgeKind, NodeKind, RelationsGraphSnapshot, RelationsNode } from '../lib/quant/relations/types';
 
@@ -51,22 +52,43 @@ export const RelationsMap: React.FC = () => {
   const [selected, setSelected] = useState<string | null>(null);
   const [spotlight, setSpotlight] = useState<SpotlightMode>('none');
   const [strengthThreshold, setStrengthThreshold] = useState(0);
+  // Replay: when null, snapshot reflects "present"; otherwise producers
+  // slice bars to ≤ replayAsOf.
+  const [replayAsOf, setReplayAsOf] = useState<number | null>(null);
 
-  const live = useSWR<RelationsGraphSnapshot | null>(
+  // SWR fetches the raw FocalContext once per focal/window. Replay
+  // re-derives the snapshot locally without refetching OHLCV.
+  const live = useSWR<FocalContextLoad | null>(
     async () => {
       if (mode !== 'live') return null;
-      const load = await buildFocalContext(focal, { windowDays });
-      const snapshot = composeRelationsGraph(load.context);
-      snapshot.skipped.push(...load.skipped);
-      snapshot.asOf = load.asOf || snapshot.asOf;
-      return snapshot;
+      return buildFocalContext(focal, { windowDays });
     },
     [focal, windowDays, mode],
-    { cacheKey: `relations:${mode}:${focal}:${windowDays}` },
+    { cacheKey: `relations-ctx:${mode}:${focal}:${windowDays}` },
   );
 
+  const liveSnapshot: RelationsGraphSnapshot | null = useMemo(() => {
+    if (mode !== 'live' || !live.data) return null;
+    const ctx = { ...live.data.context, asOfTs: replayAsOf ?? undefined };
+    const snapshot = composeRelationsGraph(ctx);
+    snapshot.skipped.push(...live.data.skipped);
+    snapshot.asOf = replayAsOf ?? live.data.asOf ?? snapshot.asOf;
+    return snapshot;
+  }, [mode, live.data, replayAsOf]);
+
   const seed = useMemo(() => buildSeedRelationsGraph(), []);
-  const baseSnapshot: RelationsGraphSnapshot = mode === 'live' ? (live.data ?? seed) : seed;
+  const baseSnapshot: RelationsGraphSnapshot = mode === 'live' ? (liveSnapshot ?? seed) : seed;
+
+  // Timeline bounds — earliest + latest bar of the focal series.
+  const replayBounds = useMemo(() => {
+    if (!live.data) return null;
+    const bars = live.data.context.focal.bars;
+    if (bars.length < 2) return null;
+    return { start: bars[0].ts, end: bars[bars.length - 1].ts };
+  }, [live.data]);
+
+  // Reset replay scrubber when focal / window / mode changes.
+  useEffect(() => { setReplayAsOf(null); }, [focal, windowDays, mode]);
 
   const toggleEdgeKind = useCallback((k: EdgeKind) => {
     setEdgeKinds((prev) => { const n = new Set(prev); if (n.has(k)) n.delete(k); else n.add(k); return n; });
@@ -113,11 +135,11 @@ export const RelationsMap: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (mode === 'live' && live.data && !selected) {
-      const f = live.data.nodes.find((n) => n.id === focal.toUpperCase());
+    if (mode === 'live' && liveSnapshot && !selected) {
+      const f = liveSnapshot.nodes.find((n) => n.id === focal.toUpperCase());
       if (f) setSelected(f.id);
     }
-  }, [live.data, focal, mode, selected]);
+  }, [liveSnapshot, focal, mode, selected]);
 
   const handleInspectNode = useCallback((id: string) => {
     const node = filteredSnapshot.nodes.find((n) => n.id === id);
@@ -203,6 +225,15 @@ export const RelationsMap: React.FC = () => {
         strengthThreshold={strengthThreshold}
         onStrengthThresholdChange={setStrengthThreshold}
       />
+
+      {mode === 'live' && replayBounds && (
+        <ReplayTimeline
+          start={replayBounds.start}
+          end={replayBounds.end}
+          value={replayAsOf}
+          onChange={setReplayAsOf}
+        />
+      )}
 
       {mode === 'live' && live.loading && !live.data && (
         <p className="ds-caption" style={{ color: 'var(--muted-foreground)' }}>

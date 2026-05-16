@@ -186,6 +186,7 @@ export const RelationsMap: React.FC = () => {
         <section style={{ position: 'relative', border: '1px solid var(--border)', borderRadius: 10, background: 'var(--card)', overflow: 'hidden' }}>
           <RelationsGraphCanvas
             snapshot={filteredSnapshot}
+            focalId={mode === 'live' ? focal.toUpperCase() : null}
             hoveredNodeId={hovered}
             selectedNodeId={selected}
             onHoverNode={setHovered}

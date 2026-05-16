@@ -26,6 +26,11 @@ const KIND_TO_CATEGORY: Record<QuantArtifactKind, ArtifactCategory> = {
   historical_analog: 'regime',
   benchmark_shift: 'risk',
   macro_alignment_change: 'macro',
+  statistical_extreme: 'anomaly',
+  regime_pattern: 'regime',
+  forward_return_distribution: 'opportunity',
+  scenario_result: 'opportunity',
+  momentum_reversion_event: 'regime',
 };
 
 /** Map onto the V2 ArtifactType literal — only the closest matches; falls
@@ -39,6 +44,11 @@ const KIND_TO_TYPE: Record<QuantArtifactKind, ArtifactType> = {
   historical_analog: 'market_note',
   benchmark_shift: 'market_note',
   macro_alignment_change: 'macro_shift',
+  statistical_extreme: 'volatility_anomaly',
+  regime_pattern: 'macro_shift',
+  forward_return_distribution: 'market_note',
+  scenario_result: 'market_note',
+  momentum_reversion_event: 'market_note',
 };
 
 function buildBody(a: QuantArtifact): string {

@@ -31,7 +31,12 @@ export type QuantArtifactKind =
   | 'seasonal_signal'
   | 'historical_analog'
   | 'benchmark_shift'
-  | 'macro_alignment_change';
+  | 'macro_alignment_change'
+  | 'statistical_extreme'
+  | 'regime_pattern'
+  | 'forward_return_distribution'
+  | 'scenario_result'
+  | 'momentum_reversion_event';
 
 export interface ArtifactEvidence {
   /** Free-form numeric supporting metrics, e.g. { realisedVol: 0.13, percentileRank: 0.07 }. */
@@ -141,6 +146,78 @@ export interface MacroAlignmentChangeArtifact extends QuantArtifactBase {
   };
 }
 
+export interface StatisticalExtremeArtifact extends QuantArtifactBase {
+  kind: 'statistical_extreme';
+  payload: {
+    metric: string;                   // 'return_z' | 'volatility_pct' | …
+    value: number;
+    score: number;                    // z-score or signed percentile distance
+    percentileRank: number;
+    direction: 'positive' | 'negative' | 'neutral';
+    magnitude: number;                // 0..1
+  };
+}
+
+export interface RegimePatternArtifact extends QuantArtifactBase {
+  kind: 'regime_pattern';
+  payload: {
+    regimeKey: string;                // composite label, e.g. 'trending-up|compressed|risk-on'
+    occurrences: number;
+    meanForwardReturn: number;
+    winRate: number;
+    horizonBars: number;
+  };
+}
+
+export interface ForwardReturnDistributionArtifact extends QuantArtifactBase {
+  kind: 'forward_return_distribution';
+  payload: {
+    horizonBars: number;
+    n: number;
+    mean: number;
+    median: number;
+    stdev: number;
+    winRate: number;
+    downsideProbability: number;
+    p05: number;
+    p25: number;
+    p75: number;
+    p95: number;
+    worstMae: number;
+    conditionLabel: string;           // describes the trigger set
+  };
+}
+
+export interface ScenarioResultArtifact extends QuantArtifactBase {
+  kind: 'scenario_result';
+  payload: {
+    conditions: Array<{ metric: string; comparator: string; value: number; label?: string }>;
+    matchCount: number;
+    horizons: number[];
+    distributions: Array<{
+      horizon: number;
+      n: number;
+      mean: number;
+      winRate: number;
+      worstMae: number;
+    }>;
+  };
+}
+
+export interface MomentumReversionEventArtifact extends QuantArtifactBase {
+  kind: 'momentum_reversion_event';
+  payload: {
+    reversionProb: number;
+    continuationProb: number;
+    ambiguityProb: number;
+    shortTermZ: number;
+    trendDeviationZ: number;
+    persistence: number;
+    stability: number;
+    ac1: number;
+  };
+}
+
 export type QuantArtifact =
   | VolatilityEventArtifact
   | RegimeTransitionArtifact
@@ -149,7 +226,12 @@ export type QuantArtifact =
   | SeasonalSignalArtifact
   | HistoricalAnalogArtifact
   | BenchmarkShiftArtifact
-  | MacroAlignmentChangeArtifact;
+  | MacroAlignmentChangeArtifact
+  | StatisticalExtremeArtifact
+  | RegimePatternArtifact
+  | ForwardReturnDistributionArtifact
+  | ScenarioResultArtifact
+  | MomentumReversionEventArtifact;
 
 // ─── ID helper ─────────────────────────────────────────────────────────────
 
@@ -484,6 +566,206 @@ export function makeMacroAlignmentChange(
   };
 }
 
+export function makeStatisticalExtreme(
+  ctx: ArtifactContext,
+  payload: StatisticalExtremeArtifact['payload'],
+): StatisticalExtremeArtifact {
+  const ts = ctx.ts ?? Date.now();
+  const confidence = clamp01(0.45 + payload.magnitude * 0.45);
+  const significance = clamp01(payload.magnitude);
+  const sym = ctx.symbols[0] ?? 'series';
+  const narrative =
+    `${sym} ${payload.metric.replace('_', ' ')} is at the ${(payload.percentileRank * 100).toFixed(0)}th percentile ` +
+    `(z ${payload.score.toFixed(2)}, ${payload.direction}-tail).`;
+  return {
+    id: makeId('statistical_extreme', ts, ctx.symbols),
+    kind: 'statistical_extreme',
+    ts,
+    recordedAt: Date.now(),
+    symbols: ctx.symbols,
+    relatedSymbols: ctx.relatedSymbols,
+    confidence,
+    confidenceLevel: normaliseConfidence(confidence),
+    significance,
+    evidence: {
+      metrics: { value: payload.value, percentileRank: payload.percentileRank, magnitude: payload.magnitude },
+      statistics: { zScore: payload.score },
+    },
+    narrative,
+    tags: ['statistical-extreme', payload.metric, payload.direction, ...(ctx.tags ?? [])],
+    providerLineage: ctx.providerLineage ?? ['derived'],
+    workspaceId: ctx.workspaceId,
+    projectId: ctx.projectId,
+    payload,
+  };
+}
+
+export function makeRegimePattern(
+  ctx: ArtifactContext,
+  payload: RegimePatternArtifact['payload'],
+): RegimePatternArtifact {
+  const ts = ctx.ts ?? Date.now();
+  const confidence = clamp01(Math.min(0.9, 0.4 + payload.occurrences / 120));
+  const significance = clamp01(Math.abs(payload.meanForwardReturn) * 25);
+  const narrative =
+    `${ctx.symbols[0] ?? 'series'} in regime "${payload.regimeKey}": ${payload.occurrences} historical occurrences, ` +
+    `mean ${payload.horizonBars}-bar forward return ${(payload.meanForwardReturn * 100).toFixed(2)}%, ` +
+    `win rate ${(payload.winRate * 100).toFixed(0)}%.`;
+  return {
+    id: makeId('regime_pattern', ts, ctx.symbols),
+    kind: 'regime_pattern',
+    ts,
+    recordedAt: Date.now(),
+    symbols: ctx.symbols,
+    relatedSymbols: ctx.relatedSymbols,
+    confidence,
+    confidenceLevel: normaliseConfidence(confidence),
+    significance,
+    evidence: {
+      metrics: {
+        occurrences: payload.occurrences,
+        meanForwardReturn: payload.meanForwardReturn,
+        winRate: payload.winRate,
+      },
+      windows: { horizonBars: payload.horizonBars },
+    },
+    narrative,
+    tags: ['regime-pattern', payload.regimeKey, ...(ctx.tags ?? [])],
+    providerLineage: ctx.providerLineage ?? ['derived'],
+    workspaceId: ctx.workspaceId,
+    projectId: ctx.projectId,
+    payload,
+  };
+}
+
+export function makeForwardReturnDistribution(
+  ctx: ArtifactContext,
+  payload: ForwardReturnDistributionArtifact['payload'],
+): ForwardReturnDistributionArtifact {
+  const ts = ctx.ts ?? Date.now();
+  const confidence = clamp01(Math.min(0.9, 0.35 + payload.n / 150));
+  const significance = clamp01(Math.abs(payload.mean) * 30 + Math.abs(payload.winRate - 0.5));
+  const narrative =
+    `${ctx.symbols[0] ?? 'series'} ${payload.horizonBars}-bar forward returns under "${payload.conditionLabel}": ` +
+    `mean ${(payload.mean * 100).toFixed(2)}%, median ${(payload.median * 100).toFixed(2)}%, ` +
+    `win rate ${(payload.winRate * 100).toFixed(0)}%, downside probability ${(payload.downsideProbability * 100).toFixed(0)}%, ` +
+    `worst MAE ${(payload.worstMae * 100).toFixed(1)}% across ${payload.n} samples.`;
+  return {
+    id: makeId('forward_return_distribution', ts, ctx.symbols),
+    kind: 'forward_return_distribution',
+    ts,
+    recordedAt: Date.now(),
+    symbols: ctx.symbols,
+    relatedSymbols: ctx.relatedSymbols,
+    confidence,
+    confidenceLevel: normaliseConfidence(confidence),
+    significance,
+    evidence: {
+      metrics: {
+        n: payload.n, mean: payload.mean, median: payload.median, stdev: payload.stdev,
+        winRate: payload.winRate, downsideProbability: payload.downsideProbability,
+        p05: payload.p05, p25: payload.p25, p75: payload.p75, p95: payload.p95,
+        worstMae: payload.worstMae,
+      },
+      windows: { horizonBars: payload.horizonBars },
+    },
+    narrative,
+    tags: ['forward-returns', `h${payload.horizonBars}`, ...(ctx.tags ?? [])],
+    providerLineage: ctx.providerLineage ?? ['derived'],
+    workspaceId: ctx.workspaceId,
+    projectId: ctx.projectId,
+    payload,
+  };
+}
+
+export function makeScenarioResult(
+  ctx: ArtifactContext,
+  payload: ScenarioResultArtifact['payload'],
+): ScenarioResultArtifact {
+  const ts = ctx.ts ?? Date.now();
+  const confidence = clamp01(Math.min(0.9, 0.35 + payload.matchCount / 120));
+  const significance = clamp01(payload.matchCount / 200);
+  const condText = payload.conditions
+    .map(c => c.label ?? `${c.metric} ${c.comparator} ${c.value}`)
+    .join(' AND ');
+  const headline = payload.distributions[0];
+  const headlineText = headline
+    ? ` ${headline.horizon}-bar mean ${(headline.mean * 100).toFixed(2)}%, win rate ${(headline.winRate * 100).toFixed(0)}%.`
+    : '';
+  const narrative =
+    `${ctx.symbols[0] ?? 'series'} scenario [${condText}] matched ${payload.matchCount} historical periods.${headlineText}`;
+  return {
+    id: makeId('scenario_result', ts, ctx.symbols),
+    kind: 'scenario_result',
+    ts,
+    recordedAt: Date.now(),
+    symbols: ctx.symbols,
+    relatedSymbols: ctx.relatedSymbols,
+    confidence,
+    confidenceLevel: normaliseConfidence(confidence),
+    significance,
+    evidence: {
+      metrics: { matchCount: payload.matchCount, conditionCount: payload.conditions.length },
+    },
+    narrative,
+    tags: ['scenario', ...payload.conditions.map(c => c.metric), ...(ctx.tags ?? [])],
+    providerLineage: ctx.providerLineage ?? ['derived'],
+    workspaceId: ctx.workspaceId,
+    projectId: ctx.projectId,
+    payload,
+  };
+}
+
+export function makeMomentumReversionEvent(
+  ctx: ArtifactContext,
+  payload: MomentumReversionEventArtifact['payload'],
+): MomentumReversionEventArtifact {
+  const ts = ctx.ts ?? Date.now();
+  const dominant =
+    payload.reversionProb >= payload.continuationProb && payload.reversionProb >= payload.ambiguityProb
+      ? 'mean-reversion'
+      : payload.continuationProb >= payload.ambiguityProb
+        ? 'momentum continuation'
+        : 'indeterminate';
+  const top = Math.max(payload.reversionProb, payload.continuationProb, payload.ambiguityProb);
+  const confidence = clamp01(0.4 + (top - 0.33) * 1.2);
+  const significance = clamp01(Math.abs(payload.trendDeviationZ) / 3);
+  const narrative =
+    `${ctx.symbols[0] ?? 'series'} structure favours ${dominant} ` +
+    `(${(top * 100).toFixed(0)}%). Trend deviation z ${payload.trendDeviationZ.toFixed(2)}, ` +
+    `persistence ${(payload.persistence * 100).toFixed(0)}%, AC₁ ${payload.ac1.toFixed(2)}.`;
+  return {
+    id: makeId('momentum_reversion_event', ts, ctx.symbols),
+    kind: 'momentum_reversion_event',
+    ts,
+    recordedAt: Date.now(),
+    symbols: ctx.symbols,
+    relatedSymbols: ctx.relatedSymbols,
+    confidence,
+    confidenceLevel: normaliseConfidence(confidence),
+    significance,
+    evidence: {
+      metrics: {
+        reversionProb: payload.reversionProb,
+        continuationProb: payload.continuationProb,
+        persistence: payload.persistence,
+        stability: payload.stability,
+      },
+      statistics: {
+        shortTermZ: payload.shortTermZ,
+        trendDeviationZ: payload.trendDeviationZ,
+        ac1: payload.ac1,
+      },
+    },
+    narrative,
+    tags: ['reversion-momentum', dominant, ...(ctx.tags ?? [])],
+    providerLineage: ctx.providerLineage ?? ['derived'],
+    workspaceId: ctx.workspaceId,
+    projectId: ctx.projectId,
+    payload,
+  };
+}
+
 // ─── Timeline projection ───────────────────────────────────────────────────
 
 const KIND_TO_TIMELINE: Record<QuantArtifactKind, TimelineEventKind> = {
@@ -495,6 +777,11 @@ const KIND_TO_TIMELINE: Record<QuantArtifactKind, TimelineEventKind> = {
   historical_analog: 'research_note',
   benchmark_shift: 'model_output',
   macro_alignment_change: 'regime_change',
+  statistical_extreme: 'anomaly_detected',
+  regime_pattern: 'regime_change',
+  forward_return_distribution: 'model_output',
+  scenario_result: 'research_note',
+  momentum_reversion_event: 'research_note',
 };
 
 /** Project an artifact onto the shared intelligence timeline format used by

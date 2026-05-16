@@ -15,6 +15,7 @@ interface Props {
   spotlight?: SpotlightMode;
   onSelect: (id: string) => void;
   onHover: (id: string | null) => void;
+  onInspect?: (id: string) => void;
 }
 
 /**
@@ -38,6 +39,7 @@ export const NodeCardOverlay: React.FC<Props> = ({
   spotlight = 'none',
   onSelect,
   onHover,
+  onInspect,
 }) => {
   const [, force] = useState(0);
 
@@ -98,9 +100,13 @@ export const NodeCardOverlay: React.FC<Props> = ({
             isFocal={isFocal}
             isFocus={isFocus}
             dim={!!dim}
-            onClick={() => onSelect(n.id)}
+            onClick={(shift) => {
+              if (shift && onInspect) onInspect(n.id);
+              else onSelect(n.id);
+            }}
             onMouseEnter={() => onHover(n.id)}
             onMouseLeave={() => onHover(null)}
+            onInspect={onInspect ? () => onInspect(n.id) : undefined}
           />
         );
       })}
@@ -116,13 +122,14 @@ interface CardProps {
   isFocal: boolean;
   isFocus: boolean;
   dim: boolean;
-  onClick: () => void;
+  onClick: (shiftKey: boolean) => void;
   onMouseEnter: () => void;
   onMouseLeave: () => void;
+  onInspect?: () => void;
 }
 
 const NodeCard: React.FC<CardProps> = ({
-  node, x, y, zoom, isFocal, isFocus, dim, onClick, onMouseEnter, onMouseLeave,
+  node, x, y, zoom, isFocal, isFocus, dim, onClick, onMouseEnter, onMouseLeave, onInspect,
 }) => {
   const accent = nodeColor(node.kind);
   // Focal node gets a larger, primary-coloured card. Companies/ETFs
@@ -135,7 +142,8 @@ const NodeCard: React.FC<CardProps> = ({
 
   return (
     <button
-      onClick={onClick}
+      onClick={(e) => onClick(e.shiftKey)}
+      onDoubleClick={(e) => { e.preventDefault(); onInspect?.(); }}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       style={{

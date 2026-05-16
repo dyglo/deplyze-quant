@@ -17,6 +17,7 @@ interface Props {
   strengthThreshold?: number;
   onHoverNode?: (id: string | null) => void;
   onSelectNode?: (id: string | null) => void;
+  onInspectNode?: (id: string) => void;
 }
 
 /**
@@ -36,6 +37,7 @@ export const RelationsGraphCanvas: React.FC<Props> = ({
   strengthThreshold = 0,
   onHoverNode,
   onSelectNode,
+  onInspectNode,
 }) => {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const sigmaRef = useRef<Sigma | null>(null);
@@ -172,6 +174,7 @@ export const RelationsGraphCanvas: React.FC<Props> = ({
         spotlight={spotlight}
         onSelect={(id) => onSelectNode?.(id)}
         onHover={(id) => onHoverNode?.(id)}
+        onInspect={(id) => onInspectNode?.(id)}
       />
       <CategoryOverlay categories={categories} />
     </div>

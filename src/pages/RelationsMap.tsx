@@ -15,11 +15,13 @@ import { PageHeader } from '../components/quant/PageHeader';
 import { Disclaimer } from '../components/quant/Disclaimer';
 import { FreshnessBadge } from '../components/quant/FreshnessBadge';
 import { InstrumentSelector } from '../components/quant/InstrumentSelector';
+import { useDrawer } from '../components/quant/DataDrawer';
 import { useSWR } from '../hooks/useSWR';
 import {
   RelationsGraphCanvas,
   RelationsSidePanel,
   RelationsFilterBar,
+  RelationsNodeDrawerBody,
   OverlayControls,
   type SpotlightMode,
 } from '../components/quant/relations-map';
@@ -38,6 +40,7 @@ const ALL_EDGE_KINDS: EdgeKind[] = [
 type Mode = 'live' | 'seed';
 
 export const RelationsMap: React.FC = () => {
+  const drawer = useDrawer();
   const [mode, setMode] = useState<Mode>('live');
   const [focal, setFocal] = useState('NVDA');
   const [windowDays, setWindowDays] = useState(63);
@@ -115,6 +118,29 @@ export const RelationsMap: React.FC = () => {
       if (f) setSelected(f.id);
     }
   }, [live.data, focal, mode, selected]);
+
+  const handleInspectNode = useCallback((id: string) => {
+    const node = filteredSnapshot.nodes.find((n) => n.id === id);
+    if (!node) return;
+    drawer.open({
+      title: node.label,
+      subtitle: node.meta ?? `${node.kind} · ${node.sector ?? 'unclassified'}`,
+      width: 540,
+      body: (
+        <RelationsNodeDrawerBody
+          snapshot={filteredSnapshot}
+          node={node}
+          focalId={mode === 'live' ? focal.toUpperCase() : null}
+          onMakeFocal={(newFocal) => { setFocal(newFocal); setSelected(null); drawer.close(); }}
+          onNavigateNode={(nid) => {
+            setSelected(nid);
+            handleInspectNode(nid);
+          }}
+        />
+      ),
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredSnapshot, drawer, mode, focal]);
 
   return (
     <div style={{ padding: '0 24px 32px', maxWidth: 1400, margin: '0 auto' }}>
@@ -204,6 +230,7 @@ export const RelationsMap: React.FC = () => {
             strengthThreshold={strengthThreshold}
             onHoverNode={setHovered}
             onSelectNode={setSelected}
+            onInspectNode={handleInspectNode}
           />
           <div style={{ position: 'absolute', left: 12, bottom: 12, right: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', pointerEvents: 'none' }}>
             <span className="ds-caption" style={{

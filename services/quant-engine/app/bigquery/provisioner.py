@@ -60,6 +60,22 @@ TABLE_REGISTRY = [
     (settings.BQ_DATASET_ARTIFACTS, "volatility_artifacts", S.VOLATILITY_ARTIFACTS, "created_at", ["symbol"]),
     (settings.BQ_DATASET_ARTIFACTS, "historical_analog_artifacts", S.HISTORICAL_ANALOG_ARTIFACTS, "created_at", ["symbol"]),
     (settings.BQ_DATASET_ARTIFACTS, "relationship_artifacts", S.RELATIONSHIP_ARTIFACTS, "created_at", ["symbol"]),
+    # cleaned · V3 Phase 2 (filings + narrative)
+    (settings.BQ_DATASET_CLEANED, "filings_cleaned", S.FILINGS_CLEANED, "filing_date", ["cik", "form_type"]),
+    (settings.BQ_DATASET_CLEANED, "narrative_cleaned", S.NARRATIVE_CLEANED, "published_at", ["theme_id"]),
+    # features · V3 Phase 2 (macro/narrative/filing/ontology)
+    (settings.BQ_DATASET_FEATURES, "macro_features", S.MACRO_FEATURES, "observation_time", ["series_id"]),
+    (settings.BQ_DATASET_FEATURES, "narrative_features", S.NARRATIVE_FEATURES, "observation_time", ["theme_id"]),
+    (settings.BQ_DATASET_FEATURES, "filing_features", S.FILING_FEATURES, "filing_date", ["cik", "form_type"]),
+    (settings.BQ_DATASET_FEATURES, "ontology_features", S.ONTOLOGY_FEATURES, "observation_time", ["entity_type", "entity_id"]),
+    # research · V3 Phase 2 (macro/narrative/filing memory)
+    (settings.BQ_DATASET_RESEARCH, "macro_observations", S.MACRO_OBSERVATIONS, "observation_time", ["observation_type", "regime_state"]),
+    (settings.BQ_DATASET_RESEARCH, "narrative_memory", S.NARRATIVE_MEMORY, "last_seen_at", ["theme_id"]),
+    (settings.BQ_DATASET_RESEARCH, "filing_observations", S.FILING_OBSERVATIONS, "observation_time", ["cik", "form_type"]),
+    # artifacts · V3 Phase 2 (macro/narrative/filing artifacts)
+    (settings.BQ_DATASET_ARTIFACTS, "macro_artifacts", S.MACRO_ARTIFACTS, "created_at", ["artifact_type"]),
+    (settings.BQ_DATASET_ARTIFACTS, "narrative_artifacts", S.NARRATIVE_ARTIFACTS, "created_at", ["artifact_type"]),
+    (settings.BQ_DATASET_ARTIFACTS, "filing_artifacts", S.FILING_ARTIFACTS, "created_at", ["artifact_type", "symbol"]),
     # model_outputs
     (settings.BQ_DATASET_MODEL_OUTPUTS, "model_predictions", S.MODEL_PREDICTIONS, "observation_time", ["symbol"]),
     (settings.BQ_DATASET_MODEL_OUTPUTS, "confidence_scores", S.CONFIDENCE_SCORES, "observation_time", ["symbol"]),

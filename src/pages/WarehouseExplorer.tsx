@@ -5,9 +5,13 @@ import { FreshnessBadge, SourceBadge } from '../components/quant/FreshnessBadge'
 import { useDrawer } from '../components/quant/DataDrawer';
 import { useProviderHealth } from '../hooks/useProviders';
 import { DatasetDrawerBody, type DatasetInfo } from '../components/quant/DatasetDrawerBody';
+import { QuantArchivePanel } from '../components/quant/QuantArchivePanel';
+import { ArtifactDetailDrawerBody } from '../components/quant/ArtifactDetailDrawerBody';
+import { useArtifacts } from '../hooks/useArtifacts';
+import { useWorkspace } from '../components/WorkspaceContext';
 import {
   RefreshCw, CheckCircle2, XCircle, AlertTriangle, Database,
-  Brain, Clock, BarChart2, FileText, Globe, Activity, ChevronRight,
+  Brain, Clock, BarChart2, FileText, Globe, Activity, ChevronRight, Archive,
 } from 'lucide-react';
 import type { ProviderId } from '../types';
 import { providerLabel } from '../lib/providerLabels';
@@ -286,14 +290,33 @@ const RoutingRow: React.FC<{ domain: string; chain: string[]; healthById: Map<st
 
 // ─── Tab type ─────────────────────────────────────────────────────────────
 
-type Tab = 'intelligence' | 'providers' | 'datasets';
+type Tab = 'intelligence' | 'archive' | 'providers' | 'datasets';
 
 // ─── Main component ───────────────────────────────────────────────────────
 
 export const WarehouseExplorer: React.FC = () => {
   const drawer = useDrawer();
   const health = useProviderHealth();
+  const { currentWorkspace, currentProject } = useWorkspace();
+  const artifacts = useArtifacts(currentWorkspace?.id ?? null, currentProject?.id ?? null);
   const [activeTab, setActiveTab] = useState<Tab>('intelligence');
+
+  const handleOpenArtifact = (id: string) => {
+    const artifact = artifacts.items.find((a) => a.id === id);
+    if (!artifact) return;
+    drawer.open({
+      title: artifact.title,
+      subtitle: artifact.artifactType ?? artifact.category,
+      width: 560,
+      body: (
+        <ArtifactDetailDrawerBody
+          artifact={artifact}
+          relatedArtifacts={artifacts.items}
+          onOpenArtifact={handleOpenArtifact}
+        />
+      ),
+    });
+  };
 
   const healthById = new Map<string, { configured: boolean; latencyMs?: number; consecutiveFailures?: number; lastSuccessAt?: number; lastFailureMessage?: string }>(
     (health.data ?? []).map((p) => [p.id, p as { configured: boolean }])
@@ -344,6 +367,9 @@ export const WarehouseExplorer: React.FC = () => {
       <div style={{ display: 'flex', gap: 2, marginBottom: 20, padding: '4px', borderRadius: 8, background: 'var(--muted)', width: 'fit-content' }}>
         <button style={TAB_STYLES('intelligence')} onClick={() => setActiveTab('intelligence')}>
           <Brain size={11} style={{ display: 'inline', marginRight: 4 }} />Intelligence
+        </button>
+        <button style={TAB_STYLES('archive')} onClick={() => setActiveTab('archive')}>
+          <Archive size={11} style={{ display: 'inline', marginRight: 4 }} />Archive
         </button>
         <button style={TAB_STYLES('providers')} onClick={() => setActiveTab('providers')}>
           <Activity size={11} style={{ display: 'inline', marginRight: 4 }} />Providers
@@ -494,6 +520,30 @@ export const WarehouseExplorer: React.FC = () => {
                 A singleton registry ensures one connection per asset class is shared across all components.
               </p>
             </div>
+          </section>
+        </div>
+      )}
+
+      {/* ── Archive tab ── */}
+      {activeTab === 'archive' && (
+        <div>
+          <section style={{ marginBottom: 20 }}>
+            <h2 className="ds-heading" style={{ marginBottom: 8 }}>Quant Intelligence Archive</h2>
+            <p className="ds-caption" style={{ marginBottom: 12, color: 'var(--muted-foreground)' }}>
+              Durable research memory — regime, anomaly, correlation, and analog artifacts persisted from the Wave A–D engines.
+              Pick a workspace and research asset in the sidebar to populate this view.
+            </p>
+            {!currentWorkspace?.id || !currentProject?.id ? (
+              <p className="ds-caption" style={{ color: 'var(--muted-foreground)' }}>
+                Select a workspace and research asset to see archived quant artifacts.
+              </p>
+            ) : (
+              <QuantArchivePanel
+                artifacts={artifacts.items}
+                loading={artifacts.loading}
+                onOpen={handleOpenArtifact}
+              />
+            )}
           </section>
         </div>
       )}

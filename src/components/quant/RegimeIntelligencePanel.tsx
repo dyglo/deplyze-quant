@@ -1,6 +1,14 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { toast } from 'sonner';
 import { useInstrumentRegime } from '../../hooks/useInstrumentRegime';
-import { describeVolPercentile, type MarketRegime } from '../../lib/quant';
+import { useWorkspace } from '../WorkspaceContext';
+import { useAuth } from '../AuthProvider';
+import {
+  describeVolPercentile,
+  makeVolatilityEvent,
+  type MarketRegime,
+} from '../../lib/quant';
+import { persistQuantArtifacts } from '../../services/quantArtifactService';
 
 const PILL_COLORS = {
   'risk-on':       { bg: 'rgba(78, 96, 64, 0.10)', fg: '#4E6040' },
@@ -102,6 +110,40 @@ const RegimeSummary: React.FC<{ regime: MarketRegime }> = ({ regime }) => {
 
 export const RegimeIntelligencePanel: React.FC<{ symbol: string }> = ({ symbol }) => {
   const intel = useInstrumentRegime(symbol);
+  const { currentWorkspace, currentProject } = useWorkspace();
+  const { user } = useAuth();
+  const [persisting, setPersisting] = useState(false);
+
+  const canPersist = !!(currentWorkspace?.id && currentProject?.id && user && intel.regime);
+
+  const handlePersist = async () => {
+    if (!canPersist || !intel.regime) return;
+    setPersisting(true);
+    try {
+      const ctx = {
+        symbols: [symbol],
+        workspaceId: currentWorkspace!.id,
+        projectId: currentProject!.id,
+      };
+      const artifacts = [
+        makeVolatilityEvent(ctx, intel.regime.volatility),
+        ...intel.returnAnomalies,
+        ...intel.volumeAnomalies,
+      ];
+      if (intel.volatilityEvent) artifacts.push(intel.volatilityEvent);
+      const ids = await persistQuantArtifacts(
+        currentWorkspace!.id,
+        currentProject!.id,
+        artifacts,
+        user!.uid,
+      );
+      toast.success(`Persisted ${ids.length} artifact${ids.length === 1 ? '' : 's'} to archive`);
+    } catch (e: unknown) {
+      toast.error(`Persistence failed: ${(e as Error).message}`);
+    } finally {
+      setPersisting(false);
+    }
+  };
 
   if (intel.loading) {
     return (
@@ -134,9 +176,32 @@ export const RegimeIntelligencePanel: React.FC<{ symbol: string }> = ({ symbol }
     <section className="ds-surface" style={{ padding: 14, borderRadius: 10, display: 'grid', gap: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
         <h3 className="ds-heading" style={{ margin: 0 }}>Regime intelligence</h3>
-        <span className="ds-caption" style={{ color: 'var(--muted-foreground)', fontSize: 10 }}>
-          {intel.barCount} bars · 2y
-        </span>
+        <div style={{ display: 'inline-flex', gap: 8, alignItems: 'baseline' }}>
+          {canPersist && (
+            <button
+              onClick={handlePersist}
+              disabled={persisting}
+              style={{
+                fontSize: 10,
+                fontWeight: 600,
+                padding: '2px 8px',
+                borderRadius: 4,
+                border: '1px solid var(--border)',
+                background: 'var(--card)',
+                color: 'var(--muted-foreground)',
+                cursor: persisting ? 'not-allowed' : 'pointer',
+                textTransform: 'uppercase',
+                letterSpacing: 0.4,
+              }}
+              title="Save regime + anomalies to the workspace archive"
+            >
+              {persisting ? 'Saving…' : 'Persist'}
+            </button>
+          )}
+          <span className="ds-caption" style={{ color: 'var(--muted-foreground)', fontSize: 10 }}>
+            {intel.barCount} bars · 2y
+          </span>
+        </div>
       </div>
       <RegimeSummary regime={intel.regime} />
 

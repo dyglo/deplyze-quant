@@ -59,7 +59,7 @@ const menuItems = [
   { id: 'terminal',    label: 'Intelligence Terminal',  icon: Activity,        path: '/' },
   { id: 'instruments', label: 'Instrument Intelligence', icon: LineChart,      path: '/instruments' },
   { id: 'macro',       label: 'Macro Regime Desk',      icon: TrendingUp,      path: '/macro' },
-  { id: 'cross-asset', label: 'Cross-Asset Matrix',     icon: Network,         path: '/cross-asset' },
+  { id: 'relations-map', label: 'Relations Map',         icon: Network,         path: '/relations-map' },
   { id: 'positioning', label: 'Positioning & Sentiment', icon: Users,          path: '/positioning' },
   { id: 'models',      label: 'Model Observatory',      icon: Telescope,       path: '/models' },
   { id: 'lab',         label: 'Quant Lab',              icon: Beaker,          path: '/lab' },

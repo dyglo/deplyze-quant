@@ -5,12 +5,16 @@ import type { RelationsGraphSnapshot, RelationsNode, RelationsEdge } from '../..
 import { edgeColor, edgeWidth } from './nodePalette';
 import { applyRadialLayout, defaultCategories, type RadialCategory } from './radialLayout';
 import { NodeCardOverlay } from './NodeCardOverlay';
+import { ClusterBackdrop } from './ClusterBackdrop';
+import { SPOTLIGHT_KINDS, type SpotlightMode } from './OverlayControls';
 
 interface Props {
   snapshot: RelationsGraphSnapshot;
   focalId?: string | null;
   hoveredNodeId?: string | null;
   selectedNodeId?: string | null;
+  spotlight?: SpotlightMode;
+  strengthThreshold?: number;
   onHoverNode?: (id: string | null) => void;
   onSelectNode?: (id: string | null) => void;
 }
@@ -28,6 +32,8 @@ export const RelationsGraphCanvas: React.FC<Props> = ({
   focalId,
   hoveredNodeId,
   selectedNodeId,
+  spotlight = 'none',
+  strengthThreshold = 0,
   onHoverNode,
   onSelectNode,
 }) => {
@@ -36,7 +42,14 @@ export const RelationsGraphCanvas: React.FC<Props> = ({
   const [sigmaInst, setSigmaInst] = useState<Sigma | null>(null);
   const hoverRef = useRef<string | null>(null);
   const selectRef = useRef<string | null>(null);
+  const spotlightRef = useRef<SpotlightMode>(spotlight);
+  const thresholdRef = useRef<number>(strengthThreshold);
   const categories = useRef<RadialCategory[]>(defaultCategories()).current;
+
+  // Sync spotlight + threshold into refs so edgeReducer sees fresh values
+  // without rebuilding the graph. Refresh forces reducers to re-run.
+  useEffect(() => { spotlightRef.current = spotlight; sigmaRef.current?.refresh(); }, [spotlight]);
+  useEffect(() => { thresholdRef.current = strengthThreshold; sigmaRef.current?.refresh(); }, [strengthThreshold]);
 
   const { graph, focalUsed } = useMemo(() => {
     const g = new Graph({ multi: false, allowSelfLoops: false, type: 'undirected' });
@@ -81,10 +94,25 @@ export const RelationsGraphCanvas: React.FC<Props> = ({
     sigma.setSetting('edgeReducer', (id, data) => {
       const d = { ...data } as Record<string, unknown> & { color?: string; size?: number; hidden?: boolean };
       const focusId = hoverRef.current ?? selectRef.current;
+      const kind = data.kind as string | undefined;
+      const strength = typeof data.strength === 'number' ? data.strength : 0;
+      const spot = spotlightRef.current;
+      const thresh = thresholdRef.current;
+
+      // Hide edges below strength threshold.
+      if (Math.abs(strength) < thresh) { d.hidden = true; return d as Record<string, unknown>; }
+
+      // Spotlight dimming: edges outside the selected family fade.
+      const spotKinds = SPOTLIGHT_KINDS[spot];
+      const inSpotlight = spotKinds.length === 0 || (kind && spotKinds.includes(kind as never));
+      if (!inSpotlight) {
+        d.color = fade(String(data.color ?? '#8b8b8b'), 0.07);
+      }
+
       if (focusId) {
         const [s, t] = graph.extremities(id);
         if (focusId !== s && focusId !== t) {
-          d.color = fade(String(data.color ?? '#8b8b8b'), 0.08);
+          d.color = fade(String(data.color ?? '#8b8b8b'), 0.06);
         } else {
           d.size = (typeof data.size === 'number' ? data.size : 1) * 1.55;
         }
@@ -114,8 +142,12 @@ export const RelationsGraphCanvas: React.FC<Props> = ({
     sigmaRef.current?.refresh();
   }, [selectedNodeId]);
 
+  // Map active spotlight onto the matching backdrop wedge id, if any.
+  const highlightCategoryId = spotlightToCategory(spotlight);
+
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%', minHeight: 540 }}>
+      <ClusterBackdrop categories={categories} highlightCategoryId={highlightCategoryId} />
       <div
         ref={hostRef}
         role="img"
@@ -124,10 +156,10 @@ export const RelationsGraphCanvas: React.FC<Props> = ({
           width: '100%',
           height: '100%',
           minHeight: 540,
-          background:
-            'radial-gradient(ellipse at center, color-mix(in srgb, var(--muted) 30%, transparent) 0%, transparent 70%), var(--card)',
+          background: 'transparent',
           borderRadius: 10,
           overflow: 'hidden',
+          position: 'relative',
         }}
       />
       <NodeCardOverlay
@@ -137,6 +169,7 @@ export const RelationsGraphCanvas: React.FC<Props> = ({
         focalId={focalUsed ?? null}
         hoveredId={hoveredNodeId ?? null}
         selectedId={selectedNodeId ?? null}
+        spotlight={spotlight}
         onSelect={(id) => onSelectNode?.(id)}
         onHover={(id) => onHoverNode?.(id)}
       />
@@ -192,6 +225,21 @@ function addNode(g: Graph, n: RelationsNode) {
 
 function fade(hexOrRgb: string, alpha: number): string {
   return `color-mix(in srgb, ${hexOrRgb} ${Math.round(alpha * 100)}%, transparent)`;
+}
+
+/** Map a spotlight selection to the backdrop wedge that should stay lit. */
+function spotlightToCategory(spot: SpotlightMode): string | null {
+  switch (spot) {
+    case 'benchmark':   return 'benchmarks';
+    case 'volatility':  return 'volatility';
+    case 'macro':       return 'macro';
+    case 'sector':      return 'sector';
+    case 'inverse':
+    case 'correlation':
+    case 'none':
+    default:
+      return null;
+  }
 }
 
 export type { RelationsEdge };

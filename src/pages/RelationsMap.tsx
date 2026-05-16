@@ -20,6 +20,8 @@ import {
   RelationsGraphCanvas,
   RelationsSidePanel,
   RelationsFilterBar,
+  OverlayControls,
+  type SpotlightMode,
 } from '../components/quant/relations-map';
 import { buildSeedRelationsGraph } from '../lib/quant/relations/seed';
 import { buildFocalContext } from '../lib/quant/relations/context';
@@ -44,6 +46,8 @@ export const RelationsMap: React.FC = () => {
   const [query, setQuery] = useState('');
   const [hovered, setHovered] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  const [spotlight, setSpotlight] = useState<SpotlightMode>('none');
+  const [strengthThreshold, setStrengthThreshold] = useState(0);
 
   const live = useSWR<RelationsGraphSnapshot | null>(
     async () => {
@@ -167,6 +171,13 @@ export const RelationsMap: React.FC = () => {
         onQueryChange={setQuery}
       />
 
+      <OverlayControls
+        spotlight={spotlight}
+        onSpotlightChange={setSpotlight}
+        strengthThreshold={strengthThreshold}
+        onStrengthThresholdChange={setStrengthThreshold}
+      />
+
       {mode === 'live' && live.loading && !live.data && (
         <p className="ds-caption" style={{ color: 'var(--muted-foreground)' }}>
           Fetching OHLCV for {focal} + peers, benchmarks, and macro proxies…
@@ -189,6 +200,8 @@ export const RelationsMap: React.FC = () => {
             focalId={mode === 'live' ? focal.toUpperCase() : null}
             hoveredNodeId={hovered}
             selectedNodeId={selected}
+            spotlight={spotlight}
+            strengthThreshold={strengthThreshold}
             onHoverNode={setHovered}
             onSelectNode={setSelected}
           />

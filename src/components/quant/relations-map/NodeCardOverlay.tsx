@@ -3,6 +3,7 @@ import type Sigma from 'sigma';
 import type Graph from 'graphology';
 import type { RelationsGraphSnapshot, RelationsNode } from '../../../lib/quant/relations/types';
 import { nodeColor } from './nodePalette';
+import { SPOTLIGHT_KINDS, type SpotlightMode } from './OverlayControls';
 
 interface Props {
   sigma: Sigma | null;
@@ -11,6 +12,7 @@ interface Props {
   focalId: string | null;
   hoveredId: string | null;
   selectedId: string | null;
+  spotlight?: SpotlightMode;
   onSelect: (id: string) => void;
   onHover: (id: string | null) => void;
 }
@@ -33,6 +35,7 @@ export const NodeCardOverlay: React.FC<Props> = ({
   focalId,
   hoveredId,
   selectedId,
+  spotlight = 'none',
   onSelect,
   onHover,
 }) => {
@@ -54,6 +57,20 @@ export const NodeCardOverlay: React.FC<Props> = ({
   if (!sigma || !graph) return null;
 
   const focus = hoveredId ?? selectedId;
+  // Pre-compute the set of node ids touched by a spotlight-matching edge,
+  // so non-participating cards can dim alongside their edges.
+  const spotKinds = SPOTLIGHT_KINDS[spotlight];
+  const spotlightActive = spotKinds.length > 0;
+  const spotlightNodeIds = new Set<string>();
+  if (spotlightActive) {
+    for (const e of snapshot.edges) {
+      if (spotKinds.includes(e.kind)) {
+        spotlightNodeIds.add(e.source);
+        spotlightNodeIds.add(e.target);
+      }
+    }
+    if (focalId) spotlightNodeIds.add(focalId);
+  }
   const cameraRatio = sigma.getCamera().getState().ratio;
   // Scale card font + padding with zoom, clamped to a usable range.
   const zoom = Math.max(0.4, Math.min(1.6, 1 / cameraRatio));
@@ -66,9 +83,11 @@ export const NodeCardOverlay: React.FC<Props> = ({
         const vp = sigma.graphToViewport({ x, y });
         const isFocal = n.id === focalId;
         const isFocus = focus === n.id;
-        const dim = focus && focus !== n.id
+        const dimByFocus = focus && focus !== n.id
           && !graph.hasEdge(focus, n.id)
           && !graph.hasEdge(n.id, focus);
+        const dimBySpotlight = spotlightActive && !spotlightNodeIds.has(n.id);
+        const dim = !!(dimByFocus || dimBySpotlight);
         return (
           <NodeCard
             key={n.id}

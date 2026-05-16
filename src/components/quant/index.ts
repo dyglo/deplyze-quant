@@ -13,3 +13,9 @@ export { MockBanner } from './MockBanner';
 export { PageHeader } from './PageHeader';
 export { StatTile } from './StatTile';
 export { Disclaimer } from './Disclaimer';
+// Phase-3 institutional chart primitives
+export { RegimeRibbon, ribbonBlocksFromKeys } from './charts/RegimeRibbon';
+export type { RegimeRibbonBlock } from './charts/RegimeRibbon';
+export { PriceWithRegime } from './charts/PriceWithRegime';
+export type { PriceEventMarker } from './charts/PriceWithRegime';
+export { paletteForRegime } from './charts/regimePalette';

@@ -1,0 +1,42 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual envs
+.venv/
+venv/
+env/
+
+# Secrets — never bake in
+.env
+.env.local
+.env.*
+
+# Dev artifacts
+*.log
+logs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Git
+.git/
+.gitignore
+
+# Docs
+docs/
+README.md
+
+# Test fixtures
+tests/
+
+# Node (shouldn't be here but just in case)
+node_modules/

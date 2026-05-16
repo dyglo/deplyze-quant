@@ -35,6 +35,7 @@ import { ReversionTab } from '../components/quant/historical-intelligence/Revers
 import { BenchmarkTab } from '../components/quant/historical-intelligence/BenchmarkTab';
 import { ScenarioTab } from '../components/quant/historical-intelligence/ScenarioTab';
 import { TimelineTab } from '../components/quant/historical-intelligence/TimelineTab';
+import { ContextStrip } from '../components/quant/historical-intelligence/ContextStrip';
 
 /** Tab definitions. The IDs are stable — tab bodies wire onto them. */
 const TABS = [
@@ -135,6 +136,9 @@ export const HistoricalIntelligenceTerminal: React.FC = () => {
           </div>
         </div>
       </section>
+
+      {/* Persistent visual context — long-horizon price + regime ribbon */}
+      <ContextStrip symbol={symbol} benchmark={benchmark} />
 
       {/* Tab strip */}
       <nav

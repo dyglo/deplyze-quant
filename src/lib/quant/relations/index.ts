@@ -1,2 +1,10 @@
 export * from './types';
 export * from './seed';
+export * from './taxonomy';
+export * from './context';
+export * from './compose';
+export * from './producers/types';
+export { correlationProducer } from './producers/correlationProducer';
+export { benchmarkProducer } from './producers/benchmarkProducer';
+export { volTransmissionProducer } from './producers/volTransmissionProducer';
+export { sectorPeerProducer } from './producers/sectorPeerProducer';

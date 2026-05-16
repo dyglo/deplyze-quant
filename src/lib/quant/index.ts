@@ -38,3 +38,7 @@ export * from './analog';
 export * from './crossAsset';
 export * from './benchmarkIntel';
 export * from './copilotContext';
+export * from './forwardReturns';
+export * from './extremes';
+export * from './reversion';
+export * from './scenario';

@@ -24,7 +24,6 @@ import {
 } from '../../../lib/quant';
 import { ConfidenceBadge } from '../ConfidenceBadge';
 
-const HISTORY_BARS = 2520;
 const HORIZONS = [5, 20, 60] as const;
 
 const METRICS: Array<{ key: ScenarioMetric; label: string; hint: string; defaultValue: number; defaultComparator: ScenarioComparator }> = [
@@ -63,8 +62,8 @@ const PRESETS: Array<{ name: string; conditions: ScenarioCondition[] }> = [
   },
 ];
 
-export const ScenarioTab: React.FC<{ symbol: string }> = ({ symbol }) => {
-  const ohlcv = useOHLCV(symbol, '1day', HISTORY_BARS);
+export const ScenarioTab: React.FC<{ symbol: string; historyBars?: number }> = ({ symbol, historyBars = 2520 }) => {
+  const ohlcv = useOHLCV(symbol, '1day', historyBars);
   const bars = ohlcv.data?.bars ?? [];
 
   const [conditions, setConditions] = useState<ScenarioCondition[]>(PRESETS[0].conditions);

@@ -15,11 +15,9 @@ import { Telescope, AlertTriangle } from 'lucide-react';
 import { useOHLCV } from '../../../hooks/useMarket';
 import { buildBenchmarkIntelligence, type BenchmarkIntelligence } from '../../../lib/quant';
 
-const HISTORY_BARS = 1260; // ~5y
-
-export const BenchmarkTab: React.FC<{ symbol: string; benchmark: string }> = ({ symbol, benchmark }) => {
-  const primary = useOHLCV(symbol, '1day', HISTORY_BARS);
-  const bench = useOHLCV(benchmark, '1day', HISTORY_BARS);
+export const BenchmarkTab: React.FC<{ symbol: string; benchmark: string; historyBars?: number }> = ({ symbol, benchmark, historyBars = 1260 }) => {
+  const primary = useOHLCV(symbol, '1day', historyBars);
+  const bench = useOHLCV(benchmark, '1day', historyBars);
   const primaryBars = primary.data?.bars ?? [];
   const benchBars = bench.data?.bars ?? [];
 

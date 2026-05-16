@@ -57,13 +57,18 @@ const DEFAULT_LOOKBACK = '10Y';
 const LOOKBACK_OPTIONS = ['1Y', '3Y', '5Y', '10Y', '20Y'] as const;
 type LookbackKey = typeof LOOKBACK_OPTIONS[number];
 
-const BENCHMARK_OPTIONS = ['SPY', 'QQQ', 'DIA', 'IWM'] as const;
+const LOOKBACK_BARS: Record<LookbackKey, number> = {
+  '1Y': 252, '3Y': 756, '5Y': 1260, '10Y': 2520, '20Y': 5040,
+};
+
 
 export const HistoricalIntelligenceTerminal: React.FC = () => {
   const [symbol, setSymbol] = useState<string>(DEFAULT_SYMBOL);
   const [benchmark, setBenchmark] = useState<string>('SPY');
   const [lookback, setLookback] = useState<LookbackKey>(DEFAULT_LOOKBACK);
   const [tab, setTab] = useState<TabId>('analogs');
+
+  const historyBars = LOOKBACK_BARS[lookback];
 
   const subtitle = useMemo(
     () =>
@@ -120,11 +125,11 @@ export const HistoricalIntelligenceTerminal: React.FC = () => {
 
         <div>
           <p className="ds-caption" style={controlLabelStyle}>Benchmark</p>
-          <div style={pillRowStyle}>
-            {BENCHMARK_OPTIONS.map((b) => (
-              <PillButton key={b} active={b === benchmark} onClick={() => setBenchmark(b)}>{b}</PillButton>
-            ))}
-          </div>
+          <InstrumentSelector
+            value={benchmark}
+            onSelect={(s) => setBenchmark(s.toUpperCase())}
+            placeholder="SPY, QQQ, DIA…"
+          />
         </div>
 
         <div>
@@ -138,7 +143,7 @@ export const HistoricalIntelligenceTerminal: React.FC = () => {
       </section>
 
       {/* Persistent visual context — long-horizon price + regime ribbon */}
-      <ContextStrip symbol={symbol} benchmark={benchmark} />
+      <ContextStrip symbol={symbol} benchmark={benchmark} historyBars={historyBars} />
 
       {/* Tab strip */}
       <nav
@@ -189,21 +194,21 @@ export const HistoricalIntelligenceTerminal: React.FC = () => {
       {/* Tab body */}
       <section role="tabpanel" style={{ minHeight: 480 }}>
         {tab === 'analogs' ? (
-          <AnalogsTab symbol={symbol} />
+          <AnalogsTab symbol={symbol} historyBars={historyBars} />
         ) : tab === 'regime' ? (
-          <RegimeTab symbol={symbol} benchmark={benchmark} />
+          <RegimeTab symbol={symbol} benchmark={benchmark} historyBars={historyBars} />
         ) : tab === 'extremes' ? (
-          <ExtremesTab symbol={symbol} />
+          <ExtremesTab symbol={symbol} historyBars={historyBars} />
         ) : tab === 'cross-asset' ? (
           <CrossAssetTab symbol={symbol} />
         ) : tab === 'forward' ? (
-          <ForwardReturnsTab symbol={symbol} />
+          <ForwardReturnsTab symbol={symbol} historyBars={historyBars} />
         ) : tab === 'reversion' ? (
-          <ReversionTab symbol={symbol} />
+          <ReversionTab symbol={symbol} historyBars={historyBars} />
         ) : tab === 'benchmark' ? (
-          <BenchmarkTab symbol={symbol} benchmark={benchmark} />
+          <BenchmarkTab symbol={symbol} benchmark={benchmark} historyBars={historyBars} />
         ) : tab === 'scenario' ? (
-          <ScenarioTab symbol={symbol} />
+          <ScenarioTab symbol={symbol} historyBars={historyBars} />
         ) : tab === 'timeline' ? (
           <TimelineTab symbol={symbol} />
         ) : (

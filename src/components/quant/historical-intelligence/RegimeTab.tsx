@@ -22,14 +22,13 @@ import {
 } from '../../../lib/quant';
 import { ConfidenceBadge } from '../ConfidenceBadge';
 
-const HISTORY_BARS = 2520;
 const ROLLING_STEP = 21;          // a regime "snapshot" each month
 const ROLLING_WINDOW_MIN = 280;   // matches classifyMarketRegime() minimum
 const FORWARD_HORIZON = 20;
 
-export const RegimeTab: React.FC<{ symbol: string; benchmark: string }> = ({ symbol, benchmark }) => {
-  const primary = useOHLCV(symbol, '1day', HISTORY_BARS);
-  const bench = useOHLCV(benchmark, '1day', HISTORY_BARS);
+export const RegimeTab: React.FC<{ symbol: string; benchmark: string; historyBars?: number }> = ({ symbol, benchmark, historyBars = 2520 }) => {
+  const primary = useOHLCV(symbol, '1day', historyBars);
+  const bench = useOHLCV(benchmark, '1day', historyBars);
 
   const primaryBars = primary.data?.bars ?? [];
   const benchBars = bench.data?.bars ?? [];

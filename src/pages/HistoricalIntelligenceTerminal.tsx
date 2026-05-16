@@ -26,6 +26,9 @@ import {
 import { PageHeader } from '../components/quant/PageHeader';
 import { Disclaimer } from '../components/quant/Disclaimer';
 import { InstrumentSelector } from '../components/quant/InstrumentSelector';
+import { AnalogsTab } from '../components/quant/historical-intelligence/AnalogsTab';
+import { RegimeTab } from '../components/quant/historical-intelligence/RegimeTab';
+import { ExtremesTab } from '../components/quant/historical-intelligence/ExtremesTab';
 
 /** Tab definitions. The IDs are stable — tab bodies wire onto them. */
 const TABS = [
@@ -175,7 +178,15 @@ export const HistoricalIntelligenceTerminal: React.FC = () => {
 
       {/* Tab body */}
       <section role="tabpanel" style={{ minHeight: 480 }}>
-        <TabPlaceholder tab={tab} symbol={symbol} benchmark={benchmark} lookback={lookback} />
+        {tab === 'analogs' ? (
+          <AnalogsTab symbol={symbol} />
+        ) : tab === 'regime' ? (
+          <RegimeTab symbol={symbol} benchmark={benchmark} />
+        ) : tab === 'extremes' ? (
+          <ExtremesTab symbol={symbol} />
+        ) : (
+          <TabPlaceholder tab={tab} symbol={symbol} benchmark={benchmark} lookback={lookback} />
+        )}
       </section>
 
       <Disclaimer />

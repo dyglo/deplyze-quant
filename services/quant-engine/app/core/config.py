@@ -41,6 +41,14 @@ class Settings(BaseSettings):
     BQ_DATASET_ARTIFACTS: str = "artifacts"
     BQ_DATASET_MODEL_OUTPUTS: str = "model_outputs"
 
+    # ─── V3 Phase 2 · public-source connectors ───────────────────────────────
+    # SEC EDGAR requires a descriptive User-Agent with contact email.
+    # Format suggestion: "Deplyze Quant ops@deplyze.io"
+    EDGAR_USER_AGENT: str = ""
+    EDGAR_DEFAULT_LOOKBACK_DAYS: int = 90
+    # FRED + RSS + COT etc. extend here in later waves.
+    FRED_API_KEY: str = ""
+
     @property
     def ALLOWED_ORIGINS(self) -> List[str]:
         if not self.ALLOWED_ORIGINS_RAW:

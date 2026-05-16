@@ -51,6 +51,13 @@ class BackfillRequest(BaseModel):
     providers: Optional[List[str]] = None
 
 
+class EdgarIngestRequest(BaseModel):
+    # Either tickers (resolved to CIK via SEC mapping) or pre-resolved CIKs.
+    symbols_or_ciks: List[str]
+    days_back: Optional[int] = None
+    forms: Optional[List[str]] = None
+
+
 def _new_run(pipeline_name: str) -> dict:
     run_id = str(uuid.uuid4())
     run = {
@@ -119,6 +126,34 @@ async def backfill(req: BackfillRequest, background_tasks: BackgroundTasks):
     run = _new_run("backfill")
     background_tasks.add_task(run_backfill, run["run_id"], req.symbols, req.start_date, req.end_date)
     return {"run_id": run["run_id"], "status": "queued"}
+
+
+@router.post("/ingest/edgar")
+async def ingest_edgar(req: EdgarIngestRequest, background_tasks: BackgroundTasks):
+    """
+    V3 Phase 2 · Wave B — trigger SEC EDGAR filings ingestion.
+
+    Resolves tickers to CIKs (or accepts CIKs directly), pulls recent filings
+    via the SEC `submissions` API, and writes lineage-tagged rows to
+    `raw_public.public_filings_raw` and `raw_documents.document_sources_raw`.
+
+    Requires `EDGAR_USER_AGENT` env var (SEC fair-use policy).
+    """
+    from app.refinery.filings_ingestor import ingest_edgar_filings
+    run = _new_run("edgar_filings_ingest")
+    background_tasks.add_task(
+        ingest_edgar_filings,
+        run["run_id"],
+        req.symbols_or_ciks,
+        req.days_back,
+        req.forms,
+    )
+    return {
+        "run_id": run["run_id"],
+        "status": "queued",
+        "symbols_or_ciks": req.symbols_or_ciks,
+        "days_back": req.days_back,
+    }
 
 
 @router.get("/status/{run_id}")

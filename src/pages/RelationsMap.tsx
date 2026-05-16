@@ -31,6 +31,8 @@ import {
 import { buildSeedRelationsGraph } from '../lib/quant/relations/seed';
 import { buildFocalContext, type FocalContextLoad } from '../lib/quant/relations/context';
 import { composeRelationsGraph } from '../lib/quant/relations/compose';
+import type { QuantArtifactBase, QuantArtifactKind } from '../lib/quant/artifacts';
+import type { ConfidenceLevel, IntelligenceArtifact } from '../types';
 import type { EdgeKind, NodeKind, RelationsGraphSnapshot, RelationsNode } from '../lib/quant/relations/types';
 
 const ALL_EDGE_KINDS: EdgeKind[] = [
@@ -41,6 +43,43 @@ const ALL_EDGE_KINDS: EdgeKind[] = [
 ];
 
 type Mode = 'live' | 'seed';
+
+function toQuantArtifact(a: IntelligenceArtifact): QuantArtifactBase {
+  const confidence = a.confidenceScore ?? a.confidence ?? 0.5;
+  return {
+    id: a.id,
+    kind: toQuantArtifactKind(a),
+    ts: a.createdAt,
+    recordedAt: a.updatedAt ?? a.createdAt,
+    symbols: a.symbols,
+    relatedSymbols: a.relatedSymbols,
+    confidence,
+    confidenceLevel: toConfidenceLevel(confidence),
+    significance: a.significance ?? 0.5,
+    evidence: { metrics: {} },
+    narrative: a.narrative,
+    tags: a.tags ?? [],
+    providerLineage: ['firestore'],
+    workspaceId: a.workspaceId,
+    projectId: a.projectId,
+  };
+}
+
+function toQuantArtifactKind(a: IntelligenceArtifact): QuantArtifactKind {
+  if (a.artifactType === 'correlation_breakdown') return 'correlation_breakdown';
+  if (a.artifactType === 'volatility_anomaly') return 'volatility_event';
+  if (a.category === 'macro') return 'macro_alignment_change';
+  if (a.category === 'anomaly') return 'anomaly_event';
+  if (a.category === 'risk') return 'statistical_extreme';
+  return 'regime_pattern';
+}
+
+function toConfidenceLevel(score: number): ConfidenceLevel {
+  if (score >= 0.85) return 'very-high';
+  if (score >= 0.65) return 'high';
+  if (score >= 0.4) return 'medium';
+  return 'low';
+}
 
 export const RelationsMap: React.FC = () => {
   const drawer = useDrawer();
@@ -73,10 +112,11 @@ export const RelationsMap: React.FC = () => {
 
   const liveSnapshot: RelationsGraphSnapshot | null = useMemo(() => {
     if (mode !== 'live' || !live.data) return null;
+    const relationArtifacts = artifacts.items.map(toQuantArtifact);
     const ctx = {
       ...live.data.context,
       asOfTs: replayAsOf ?? undefined,
-      artifacts: artifacts.items,
+      artifacts: relationArtifacts,
     };
     const snapshot = composeRelationsGraph(ctx);
     snapshot.skipped.push(...live.data.skipped);

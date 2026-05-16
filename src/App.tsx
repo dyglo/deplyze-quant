@@ -13,7 +13,7 @@ import { IntelligenceTerminal } from './pages/IntelligenceTerminal';
 import { InstrumentIntelligence } from './pages/InstrumentIntelligence';
 import { InstrumentDetail } from './pages/InstrumentDetail';
 import { MacroRegimeDesk } from './pages/MacroRegimeDesk';
-import { CrossAssetMatrix } from './pages/CrossAssetMatrix';
+import { RelationsMap } from './pages/RelationsMap';
 import { PositioningSentiment } from './pages/PositioningSentiment';
 import { ModelObservatory } from './pages/ModelObservatory';
 import { QuantLab } from './pages/QuantLab';
@@ -68,7 +68,8 @@ export default function App() {
             <Route path="/instruments"          element={<ProtectedRoute><InstrumentIntelligence /></ProtectedRoute>} />
             <Route path="/instruments/:symbol"  element={<ProtectedRoute><InstrumentDetail /></ProtectedRoute>} />
             <Route path="/macro"                element={<ProtectedRoute><MacroRegimeDesk /></ProtectedRoute>} />
-            <Route path="/cross-asset"          element={<ProtectedRoute><CrossAssetMatrix /></ProtectedRoute>} />
+            <Route path="/relations-map"        element={<ProtectedRoute><RelationsMap /></ProtectedRoute>} />
+            <Route path="/cross-asset"          element={<Navigate to="/relations-map" replace />} />
             <Route path="/positioning"          element={<ProtectedRoute><PositioningSentiment /></ProtectedRoute>} />
             <Route path="/models"               element={<ProtectedRoute><ModelObservatory /></ProtectedRoute>} />
             <Route path="/lab"                  element={<ProtectedRoute><QuantLab /></ProtectedRoute>} />

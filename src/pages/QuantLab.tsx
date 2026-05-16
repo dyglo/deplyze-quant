@@ -5,6 +5,9 @@ import { Disclaimer } from '../components/quant/Disclaimer';
 import { RiskPanel } from '../components/quant/RiskPanel';
 import { AlphaPanel } from '../components/quant/AlphaPanel';
 import { PortfolioPanel } from '../components/quant/PortfolioPanel';
+import { RollingCorrelationPanel } from '../components/quant/RollingCorrelationPanel';
+import { BenchmarkOverlayPanel } from '../components/quant/BenchmarkOverlayPanel';
+import { AnalogBrowserPanel } from '../components/quant/AnalogBrowserPanel';
 import { LabSessionsTab } from '../components/quant/LabSessionsTab';
 import { useWorkspace } from '../components/WorkspaceContext';
 import { useAuth } from '../components/AuthProvider';
@@ -12,7 +15,7 @@ import { useLabSessions } from '../hooks/useLabSessions';
 import { createArtifactFromQuantLab } from '../services/artifactService';
 import type { LabPanel, LabSession } from '../types';
 
-type LabTab = 'risk' | 'alpha' | 'portfolio' | 'sessions';
+type LabTab = 'risk' | 'alpha' | 'portfolio' | 'correlation' | 'benchmark' | 'analogs' | 'sessions';
 
 const TABS: { id: LabTab; label: string; description: string }[] = [
   {
@@ -29,6 +32,21 @@ const TABS: { id: LabTab; label: string; description: string }[] = [
     id: 'portfolio',
     label: 'Portfolio Analytics',
     description: 'Multi-asset basket, correlation matrix, risk contributions, portfolio equity curve',
+  },
+  {
+    id: 'correlation',
+    label: 'Cross-Asset',
+    description: 'Rolling correlation between any two assets with baseline drift detection (tightening / loosening / breakdown).',
+  },
+  {
+    id: 'benchmark',
+    label: 'Benchmark',
+    description: 'Rebased price overlay plus beta, alpha, tracking error, info ratio, capture ratios, and rolling-beta drift.',
+  },
+  {
+    id: 'analogs',
+    label: 'Analog Browser',
+    description: 'Historical windows whose 6-feature fingerprint most closely matches the current regime for any symbol.',
   },
   {
     id: 'sessions',
@@ -209,6 +227,15 @@ export const QuantLab: React.FC = () => {
         <PortfolioPanel
           onSaveSession={(p) => handleSaveSession(p)}
         />
+      </div>
+      <div style={{ display: activeTab === 'correlation' ? 'block' : 'none' }}>
+        <RollingCorrelationPanel onSaveSession={(p) => handleSaveSession(p)} />
+      </div>
+      <div style={{ display: activeTab === 'benchmark' ? 'block' : 'none' }}>
+        <BenchmarkOverlayPanel onSaveSession={(p) => handleSaveSession(p)} />
+      </div>
+      <div style={{ display: activeTab === 'analogs' ? 'block' : 'none' }}>
+        <AnalogBrowserPanel onSaveSession={(p) => handleSaveSession(p)} />
       </div>
 
       {/* Saved Sessions tab — rich cards */}

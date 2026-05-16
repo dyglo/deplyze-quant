@@ -13,6 +13,7 @@ import { AssetIcon } from '../components/quant/AssetIcon';
 import { FreshnessBadge, SourceBadge } from '../components/quant/FreshnessBadge';
 import { Disclaimer } from '../components/quant/Disclaimer';
 import { RelatedIntelligencePanel } from '../components/quant/RelatedIntelligencePanel';
+import { BenchmarkIntelligencePanel } from '../components/quant/BenchmarkIntelligencePanel';
 import { ArtifactDetailDrawerBody } from '../components/quant/ArtifactDetailDrawerBody';
 import { useDrawer } from '../components/quant/DataDrawer';
 import { closes, logReturns, annualisedVol, maxDrawdown, trendLabel } from '../lib/quant';
@@ -264,6 +265,10 @@ export const InstrumentDetail: React.FC = () => {
           )}
         </aside>
       </div>
+
+      <section style={{ marginTop: 24 }}>
+        <BenchmarkIntelligencePanel symbol={sym} />
+      </section>
 
       <RelatedIntelligencePanel
         symbols={sym ? [sym] : []}

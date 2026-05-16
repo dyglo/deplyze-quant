@@ -15,6 +15,7 @@
 import React, { useMemo } from 'react';
 import type { RegimeRibbonBlock } from './RegimeRibbon';
 import { paletteForRegime } from './regimePalette';
+import './PriceWithRegime.css';
 
 export interface PriceEventMarker {
   ts: number;
@@ -26,10 +27,18 @@ export interface PriceEventMarker {
   annotation?: string;
 }
 
+interface BenchmarkSeries {
+  ts: number[];
+  close: number[];
+  label: string;
+}
+
 interface Props {
   /** Parallel arrays — ts ascending. */
   ts: number[];
   close: number[];
+  /** Optional second series (benchmark) drawn rebased-to-100 on the same axis. */
+  benchmark?: BenchmarkSeries;
   /** Optional regime blocks rendered as background bands. */
   regimes?: RegimeRibbonBlock[];
   /** Optional event markers projected onto the x-axis. */
@@ -45,29 +54,48 @@ interface Props {
 }
 
 export const PriceWithRegime: React.FC<Props> = ({
-  ts, close, regimes = [], events = [],
+  ts, close, benchmark, regimes = [], events = [],
   height = 220, logScale = true, title, caption,
 }) => {
   const W = 1000;
   const H = height;
   const PAD = { top: 24, right: 64, bottom: 24, left: 8 };
 
-  const { points, xFor, yFor, axisYears, yTicks, xMin, xMax, minClose, maxClose } = useMemo(() => {
+  const { points, benchPoints, xFor, axisYears, yTicks, xMin, xMax, minClose, maxClose } = useMemo(() => {
     if (!ts.length || ts.length !== close.length) {
       return {
-        points: '',
+        points: '', benchPoints: '',
         xFor: (_t: number) => 0,
-        yFor: (_v: number) => 0,
         axisYears: [] as number[],
         yTicks: [] as Array<{ value: number; y: number }>,
         xMin: 0, xMax: 0, minClose: 0, maxClose: 0,
       };
     }
+
+    // Find overlap start for rebasing both series to 100
     const xMin = ts[0], xMax = ts[ts.length - 1];
     const xSpan = Math.max(1, xMax - xMin);
-    const valid = close.filter(c => c > 0);
-    const minClose = Math.min(...valid);
-    const maxClose = Math.max(...valid);
+
+    // Rebase primary to 100 at first bar
+    const base0 = close.find(c => c > 0) ?? 1;
+    const rebased = close.map(c => c > 0 ? (c / base0) * 100 : NaN);
+
+    // Rebase benchmark to 100 at its first bar that falls within primary range
+    let benchRebased: Array<{ t: number; v: number }> = [];
+    if (benchmark && benchmark.ts.length && benchmark.close.length) {
+      const bBase = benchmark.close.find((c, i) => c > 0 && benchmark.ts[i] >= xMin) ?? 1;
+      for (let i = 0; i < benchmark.ts.length; i++) {
+        const t = benchmark.ts[i], c = benchmark.close[i];
+        if (t < xMin || t > xMax || !(c > 0)) continue;
+        benchRebased.push({ t, v: (c / bBase) * 100 });
+      }
+    }
+
+    // Y scale across both series
+    const allVals = rebased.filter(v => !isNaN(v)).concat(benchRebased.map(b => b.v));
+    const minClose = Math.min(...allVals);
+    const maxClose = Math.max(...allVals);
+    const valid = close.filter(c => c > 0);  // keep raw for axis labels
 
     const transform = logScale
       ? (v: number) => Math.log(Math.max(v, 1e-9))
@@ -84,10 +112,17 @@ export const PriceWithRegime: React.FC<Props> = ({
     const xFor = (t: number) => innerLeft + ((t - xMin) / xSpan) * (innerRight - innerLeft);
     const yFor = (v: number) => innerBottom - ((transform(v) - yMin) / ySpan) * (innerBottom - innerTop);
 
+    // Primary path
     const parts: string[] = [];
     for (let i = 0; i < ts.length; i++) {
-      if (!(close[i] > 0)) continue;
-      parts.push(`${i === 0 ? 'M' : 'L'} ${xFor(ts[i]).toFixed(1)} ${yFor(close[i]).toFixed(1)}`);
+      if (isNaN(rebased[i])) continue;
+      parts.push(`${parts.length === 0 ? 'M' : 'L'} ${xFor(ts[i]).toFixed(1)} ${yFor(rebased[i]).toFixed(1)}`);
+    }
+
+    // Benchmark path
+    const bParts: string[] = [];
+    for (const { t, v } of benchRebased) {
+      bParts.push(`${bParts.length === 0 ? 'M' : 'L'} ${xFor(t).toFixed(1)} ${yFor(v).toFixed(1)}`);
     }
 
     // X-axis years
@@ -98,7 +133,7 @@ export const PriceWithRegime: React.FC<Props> = ({
     const axisYears: number[] = [];
     for (let y = Math.ceil(startYear / stride) * stride; y <= endYear; y += stride) axisYears.push(y);
 
-    // Y-axis ticks: 4 evenly spaced on the transformed scale
+    // Y-axis ticks: show rebased scale (100 = start)
     const yTicks: Array<{ value: number; y: number }> = [];
     const N = 4;
     for (let k = 0; k <= N; k++) {
@@ -108,8 +143,14 @@ export const PriceWithRegime: React.FC<Props> = ({
       yTicks.push({ value: tVal, y: yFor(tVal) });
     }
 
-    return { points: parts.join(' '), xFor, yFor, axisYears, yTicks, xMin, xMax, minClose, maxClose };
-  }, [ts, close, logScale, H]);
+    return {
+      points: parts.join(' '),
+      benchPoints: bParts.join(' '),
+      xFor, axisYears, yTicks, xMin, xMax,
+      minClose: Math.min(...valid),
+      maxClose: Math.max(...valid),
+    };
+  }, [ts, close, benchmark, logScale, H]);
 
   if (!ts.length || !close.length) {
     return (
@@ -217,7 +258,21 @@ export const PriceWithRegime: React.FC<Props> = ({
           );
         })}
 
-        {/* Price line */}
+        {/* Benchmark line — drawn before primary so primary is always on top */}
+        {benchPoints && (
+          <path
+            d={benchPoints}
+            fill="none"
+            stroke="var(--chart-2, #4a90d9)"
+            strokeWidth={1.4}
+            strokeDasharray="5 3"
+            strokeLinejoin="round"
+            strokeLinecap="round"
+            opacity={0.85}
+          />
+        )}
+
+        {/* Primary price line */}
         <path d={points} fill="none" stroke="var(--foreground)" strokeWidth={1.4} strokeLinejoin="round" strokeLinecap="round" />
 
         {/* X-axis year ticks */}
@@ -258,16 +313,28 @@ export const PriceWithRegime: React.FC<Props> = ({
         <span>{formatYear(xMin)}–{formatYear(xMax)}</span>
       </div>
 
+      {/* Benchmark legend */}
+      {benchmark && (
+        <div className="pwr-bench-legend">
+          <span className="pwr-bench-leg-item">
+            <span className="pwr-bench-leg-swatch" />
+            {title ? title.split('·')[0].trim() : 'Primary'}
+            <span className="pwr-bench-leg-sub">rebased 100</span>
+          </span>
+          <span className="pwr-bench-leg-item">
+            <span className="pwr-bench-leg-swatch-bench" />
+            {benchmark.label}
+            <span className="pwr-bench-leg-sub">rebased 100</span>
+          </span>
+        </div>
+      )}
+
       {/* Annotated event below the chart (most significant marker) */}
       {events.find(e => e.annotation) && (
-        <p className="ds-caption" style={{
-          marginTop: 6, marginBottom: 0,
-          color: 'var(--muted-foreground)',
-          fontSize: 11,
-        }}>
+        <p className="ds-caption pwr-annotation">
           {events.filter(e => e.annotation).slice(0, 1).map(e => (
             <span key={e.ts}>
-              <strong style={{ color: 'var(--foreground)' }}>{e.label}:</strong> {e.annotation}
+              <strong className="pwr-annotation-label">{e.label}:</strong> {e.annotation}
             </span>
           ))}
         </p>

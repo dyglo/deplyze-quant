@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useSymbolSearch } from '../../hooks/useMarket';
 import { Search, Plus } from 'lucide-react';
 
@@ -10,10 +10,28 @@ export const InstrumentSelector: React.FC<{
   placeholder?: string;
 }> = ({ value, onSelect, onAdd, addLabel = 'Add', placeholder = 'Search symbol (AAPL, EUR/USD, BTC/USD…)' }) => {
   const [q, setQ] = useState(value ?? '');
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
   const { data, loading } = useSymbolSearch(q.length >= 2 ? q : '');
 
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const handleSelect = (symbol: string) => {
+    onSelect(symbol);
+    setQ(symbol);
+    setOpen(false);
+  };
+
   return (
-    <div style={{ position: 'relative' }}>
+    <div ref={containerRef} style={{ position: 'relative' }}>
       <div style={{
         display: 'flex',
         alignItems: 'center',
@@ -26,7 +44,8 @@ export const InstrumentSelector: React.FC<{
         <Search size={14} color="var(--muted-foreground)" />
         <input
           value={q}
-          onChange={(e) => setQ(e.target.value)}
+          onChange={(e) => { setQ(e.target.value); setOpen(true); }}
+          onFocus={() => q.length >= 2 && setOpen(true)}
           placeholder={placeholder}
           className="ds-body"
           style={{
@@ -36,7 +55,7 @@ export const InstrumentSelector: React.FC<{
         />
       </div>
 
-      {q.length >= 2 && (
+      {open && q.length >= 2 && (
         <div style={{
           position: 'absolute',
           left: 0, right: 0, top: 'calc(100% + 4px)',
@@ -58,7 +77,7 @@ export const InstrumentSelector: React.FC<{
                 style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid var(--border)' }}
               >
                 <button
-                  onClick={() => { onSelect(m.symbol); setQ(m.symbol); }}
+                  onClick={() => handleSelect(m.symbol)}
                   className="ds-row"
                   style={{
                     flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',

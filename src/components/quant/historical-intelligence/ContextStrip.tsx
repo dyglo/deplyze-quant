@@ -13,6 +13,7 @@
  */
 
 import React, { useMemo } from 'react';
+import './ContextStrip.css';
 import { useOHLCV } from '../../../hooks/useMarket';
 import {
   classifyMarketRegime,
@@ -24,7 +25,6 @@ import { PriceWithRegime, type PriceEventMarker } from '../charts/PriceWithRegim
 import { RegimeRibbon, type RegimeRibbonBlock } from '../charts/RegimeRibbon';
 import { paletteForRegime as paletteFor } from '../charts/regimePalette';
 
-const HISTORY_BARS = 2520;       // ~10 years daily
 const REGIME_STEP = 63;          // ~quarterly re-classification — keeps blocks readable
 const REGIME_MIN_BARS = 280;
 const ANALOG_TOP_K = 4;
@@ -32,11 +32,12 @@ const ANALOG_TOP_K = 4;
 interface Props {
   symbol: string;
   benchmark: string;
+  historyBars?: number;
 }
 
-export const ContextStrip: React.FC<Props> = ({ symbol, benchmark }) => {
-  const primary = useOHLCV(symbol, '1day', HISTORY_BARS);
-  const benchOhlcv = useOHLCV(benchmark, '1day', HISTORY_BARS);
+export const ContextStrip: React.FC<Props> = ({ symbol, benchmark, historyBars = 2520 }) => {
+  const primary = useOHLCV(symbol, '1day', historyBars);
+  const benchOhlcv = useOHLCV(benchmark, '1day', historyBars);
   const primaryBars = primary.data?.bars ?? [];
 
   const { regimeBlocks, events, regimeLabels } = useMemo(() => {
@@ -112,11 +113,19 @@ export const ContextStrip: React.FC<Props> = ({ symbol, benchmark }) => {
   const closes = primaryBars.map(b => b.close);
   const tsArr = primaryBars.map(b => b.ts);
 
+  const benchBarsForChart = benchOhlcv.data?.bars ?? [];
+  const benchSeries = benchBarsForChart.length >= 2 ? {
+    ts: benchBarsForChart.map(b => b.ts),
+    close: benchBarsForChart.map(b => b.close),
+    label: benchmark,
+  } : undefined;
+
   return (
-    <section style={{ display: 'grid', gap: 8 }}>
+    <section className="cs-root">
       <PriceWithRegime
         ts={tsArr}
         close={closes}
+        benchmark={benchSeries}
         regimes={regimeBlocks}
         events={events}
         height={230}
@@ -124,12 +133,10 @@ export const ContextStrip: React.FC<Props> = ({ symbol, benchmark }) => {
         title={`${symbol} · long-horizon context`}
         caption={`${primaryBars.length} daily bars · regime-shaded background · ${events.length} analog marker${events.length === 1 ? '' : 's'}`}
       />
-      <div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
-          <span className="ds-caption" style={{ fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 700, color: 'var(--muted-foreground)' }}>
-            Composite regime ribbon
-          </span>
-          <span className="ds-caption" style={{ fontSize: 10, color: 'var(--muted-foreground)' }}>
+      <div className="cs-ribbon-wrap">
+        <div className="cs-ribbon-header">
+          <span className="ds-caption cs-ribbon-label">Composite regime ribbon</span>
+          <span className="ds-caption cs-ribbon-meta">
             {regimeBlocks.length} historical regime epoch{regimeBlocks.length === 1 ? '' : 's'} · re-classified every ~{REGIME_STEP} bars
           </span>
         </div>
@@ -154,18 +161,13 @@ const RegimeLegend: React.FC<{ blocks: RegimeRibbonBlock[]; labels: Record<strin
     if (order.length >= 6) break;
   }
   return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
+    <div className="cs-legend">
       {order.map((k) => (
-        <span key={k} style={{
-          display: 'inline-flex', alignItems: 'center', gap: 6,
-          fontSize: 10, color: 'var(--muted-foreground)',
-          padding: '2px 8px', borderRadius: 999,
-          background: 'var(--muted)', border: '1px solid var(--border)',
-        }}>
-          <span style={{ width: 8, height: 8, borderRadius: 2, background: paletteFor(k) }} />
-          <code style={{ fontSize: 10 }}>{k.replace(/\|/g, ' · ')}</code>
+        <span key={k} className="cs-legend-pill">
+          <span className="cs-legend-dot" style={{ background: paletteFor(k) }} />
+          <code className="cs-legend-code">{k.replace(/\|/g, ' · ')}</code>
           {labels[k] && labels[k] !== k && (
-            <span style={{ color: 'var(--muted-foreground)' }}>· {truncate(labels[k], 48)}</span>
+            <span className="cs-legend-name">· {truncate(labels[k], 48)}</span>
           )}
         </span>
       ))}
@@ -178,11 +180,7 @@ function truncate(s: string, n: number): string {
 }
 
 const EmptyStrip: React.FC<{ label: string }> = ({ label }) => (
-  <div style={{
-    height: 230, borderRadius: 12, background: 'var(--card)',
-    border: '1px solid var(--border)', display: 'flex',
-    alignItems: 'center', justifyContent: 'center',
-  }}>
-    <p className="ds-caption" style={{ margin: 0, color: 'var(--muted-foreground)' }}>{label}</p>
+  <div className="cs-empty">
+    <p className="ds-caption cs-empty-msg">{label}</p>
   </div>
 );

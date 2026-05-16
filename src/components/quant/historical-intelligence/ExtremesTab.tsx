@@ -21,7 +21,6 @@ import {
   type ForwardReturnDistribution,
 } from '../../../lib/quant';
 
-const HISTORY_BARS = 2520;
 const HORIZONS = [5, 20, 60] as const;
 const Z_TRIGGER_THRESHOLD = 2;
 const PCT_TRIGGER_THRESHOLD = 0.9;   // 90th/10th percentile tails
@@ -37,8 +36,8 @@ const METRIC_LABELS: Record<ExtremeMetric, string> = {
 
 const METRIC_USES_PCT: ExtremeMetric[] = ['volatility_pct', 'drawdown_pct'];
 
-export const ExtremesTab: React.FC<{ symbol: string }> = ({ symbol }) => {
-  const ohlcv = useOHLCV(symbol, '1day', HISTORY_BARS);
+export const ExtremesTab: React.FC<{ symbol: string; historyBars?: number }> = ({ symbol, historyBars = 2520 }) => {
+  const ohlcv = useOHLCV(symbol, '1day', historyBars);
   const bars = ohlcv.data?.bars ?? [];
 
   const snapshot = useMemo<ExtremesSnapshot | null>(

@@ -19,10 +19,8 @@ import {
 } from '../../../lib/quant';
 import { ConfidenceBadge } from '../ConfidenceBadge';
 
-const HISTORY_BARS = 2520;
-
-export const ReversionTab: React.FC<{ symbol: string }> = ({ symbol }) => {
-  const ohlcv = useOHLCV(symbol, '1day', HISTORY_BARS);
+export const ReversionTab: React.FC<{ symbol: string; historyBars?: number }> = ({ symbol, historyBars = 2520 }) => {
+  const ohlcv = useOHLCV(symbol, '1day', historyBars);
   const bars = ohlcv.data?.bars ?? [];
 
   const profile = useMemo<ReversionProfile | null>(

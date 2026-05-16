@@ -19,12 +19,10 @@ import {
 } from '../../../lib/quant';
 import { ConfidenceBadge } from '../ConfidenceBadge';
 
-const HISTORY_BARS = 2520; // ~10 years daily
-
 const HORIZONS = [5, 20, 60] as const;
 
-export const AnalogsTab: React.FC<{ symbol: string }> = ({ symbol }) => {
-  const ohlcv = useOHLCV(symbol, '1day', HISTORY_BARS);
+export const AnalogsTab: React.FC<{ symbol: string; historyBars?: number }> = ({ symbol, historyBars = 2520 }) => {
+  const ohlcv = useOHLCV(symbol, '1day', historyBars);
   const bars = ohlcv.data?.bars ?? [];
 
   const { matches, perMatchForward } = useMemo(() => {

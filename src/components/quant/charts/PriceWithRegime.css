@@ -1,0 +1,46 @@
+/* PriceWithRegime component styles */
+
+.pwr-bench-legend {
+  display: flex;
+  gap: 16px;
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--muted-foreground);
+}
+
+.pwr-bench-leg-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.pwr-bench-leg-swatch {
+  display: inline-block;
+  width: 18px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--foreground);
+}
+
+.pwr-bench-leg-swatch-bench {
+  display: inline-block;
+  width: 18px;
+  height: 0;
+  border-top: 2px dashed var(--chart-2, #4a90d9);
+}
+
+.pwr-bench-leg-sub {
+  color: var(--muted-foreground);
+  margin-left: 2px;
+}
+
+.pwr-annotation {
+  margin-top: 6px;
+  margin-bottom: 0;
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+
+.pwr-annotation-label {
+  color: var(--foreground);
+}

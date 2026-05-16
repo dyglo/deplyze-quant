@@ -1,0 +1,82 @@
+/* ContextStrip component styles */
+
+.cs-root {
+  display: grid;
+  gap: 8px;
+}
+
+.cs-ribbon-wrap {
+  /* contains ribbon header + ribbon + legend */
+}
+
+.cs-ribbon-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 4px;
+}
+
+.cs-ribbon-label {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--muted-foreground);
+}
+
+.cs-ribbon-meta {
+  font-size: 10px;
+  color: var(--muted-foreground);
+}
+
+/* Regime legend pills */
+.cs-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.cs-legend-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--muted-foreground);
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--muted);
+  border: 1px solid var(--border);
+}
+
+.cs-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex-shrink: 0;
+  /* background set via inline style — data-driven colour from palette */
+}
+
+.cs-legend-code {
+  font-size: 10px;
+}
+
+.cs-legend-name {
+  color: var(--muted-foreground);
+}
+
+/* Empty state */
+.cs-empty {
+  height: 230px;
+  border-radius: 12px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cs-empty-msg {
+  margin: 0;
+  color: var(--muted-foreground);
+}

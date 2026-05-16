@@ -1,0 +1,141 @@
+/* BenchmarkOverlayPanel component styles */
+
+/* ── Chart ───────────────────────────────────────────────────────────────── */
+
+.bop-chart-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bop-chart-svg {
+  display: block;
+  cursor: crosshair;
+  overflow: visible;
+}
+
+.bop-series-path {
+  transition: opacity 0.2s;
+}
+
+.bop-chart-empty {
+  height: var(--chart-h, 300px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+
+/* ── Period selector ─────────────────────────────────────────────────────── */
+
+.bop-period-row {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+}
+
+.bop-period-pill {
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--muted-foreground);
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.bop-period-pill:hover {
+  background: var(--muted);
+  border-color: var(--border);
+  color: var(--foreground);
+}
+.bop-period-pill[data-active] {
+  background: var(--muted);
+  border-color: var(--border);
+  color: var(--foreground);
+  font-weight: 700;
+}
+
+/* ── Interactive legend row ──────────────────────────────────────────────── */
+
+.bop-legend-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.bop-legend-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--foreground);
+  transition: opacity 0.15s, background 0.15s;
+}
+.bop-legend-chip:hover {
+  background: var(--muted);
+}
+.bop-legend-chip[data-hidden] {
+  opacity: 0.4;
+  text-decoration: line-through;
+}
+
+.bop-legend-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 2.5px;
+  border-radius: 2px;
+  background: var(--swatch, var(--foreground));
+  flex-shrink: 0;
+}
+
+.bop-legend-meta {
+  margin-left: auto;
+  color: var(--muted-foreground);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bop-legend-reset {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 10px;
+  color: var(--primary);
+  padding: 0;
+  text-decoration: underline;
+}
+.bop-legend-reset:hover {
+  opacity: 0.75;
+}
+
+/* ── Benchmark chips + add button ────────────────────────────────────────── */
+
+.bop-bench-chip-remove {
+  display: inline-flex;
+  align-items: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  color: var(--muted-foreground);
+  margin-left: 2px;
+}
+.bop-bench-chip-remove:hover {
+  color: var(--foreground);
+}
+
+.bop-add-search {
+  width: 200px;
+}

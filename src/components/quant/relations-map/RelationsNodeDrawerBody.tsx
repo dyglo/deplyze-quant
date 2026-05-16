@@ -4,6 +4,7 @@ import type {
   RelationsGraphSnapshot, RelationsNode, RelationsEdge,
 } from '../../../lib/quant/relations/types';
 import { edgeColor } from './nodePalette';
+import { CopilotSummary } from './CopilotSummary';
 
 interface Props {
   snapshot: RelationsGraphSnapshot;
@@ -75,6 +76,8 @@ export const RelationsNodeDrawerBody: React.FC<Props> = ({
           {node.meta}
         </p>
       )}
+
+      <CopilotSummary snapshot={snapshot} node={node} />
 
       {/* Make focal action */}
       {focalId !== node.id && node.kind === 'company' && (

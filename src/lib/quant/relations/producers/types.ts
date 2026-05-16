@@ -11,6 +11,7 @@
  * missing series, etc.). It must NEVER fabricate edge strengths.
  */
 import type { OHLCVBar } from '../../../../types';
+import type { QuantArtifactBase } from '../../artifacts';
 import type { RelationsEdge, RelationsNode } from '../types';
 
 export interface ProducerContext {
@@ -22,6 +23,9 @@ export interface ProducerContext {
   /** When set, producers should derive relationships using only bars
    *  whose timestamp is ≤ this value. Powers the replay timeline. */
   asOfTs?: number;
+  /** Optional workspace research artifacts the artifactProducer can
+   *  attach to the graph as artifact-link edges. */
+  artifacts?: QuantArtifactBase[];
 }
 
 /** Slice a chronological bar series to bars with ts ≤ asOf. */

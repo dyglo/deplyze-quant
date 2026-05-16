@@ -17,6 +17,8 @@ import { FreshnessBadge } from '../components/quant/FreshnessBadge';
 import { InstrumentSelector } from '../components/quant/InstrumentSelector';
 import { useDrawer } from '../components/quant/DataDrawer';
 import { useSWR } from '../hooks/useSWR';
+import { useArtifacts } from '../hooks/useArtifacts';
+import { useWorkspace } from '../components/WorkspaceContext';
 import {
   RelationsGraphCanvas,
   RelationsSidePanel,
@@ -42,6 +44,8 @@ type Mode = 'live' | 'seed';
 
 export const RelationsMap: React.FC = () => {
   const drawer = useDrawer();
+  const { currentWorkspace, currentProject } = useWorkspace();
+  const artifacts = useArtifacts(currentWorkspace?.id ?? null, currentProject?.id ?? null);
   const [mode, setMode] = useState<Mode>('live');
   const [focal, setFocal] = useState('NVDA');
   const [windowDays, setWindowDays] = useState(63);
@@ -69,12 +73,16 @@ export const RelationsMap: React.FC = () => {
 
   const liveSnapshot: RelationsGraphSnapshot | null = useMemo(() => {
     if (mode !== 'live' || !live.data) return null;
-    const ctx = { ...live.data.context, asOfTs: replayAsOf ?? undefined };
+    const ctx = {
+      ...live.data.context,
+      asOfTs: replayAsOf ?? undefined,
+      artifacts: artifacts.items,
+    };
     const snapshot = composeRelationsGraph(ctx);
     snapshot.skipped.push(...live.data.skipped);
     snapshot.asOf = replayAsOf ?? live.data.asOf ?? snapshot.asOf;
     return snapshot;
-  }, [mode, live.data, replayAsOf]);
+  }, [mode, live.data, replayAsOf, artifacts.items]);
 
   const seed = useMemo(() => buildSeedRelationsGraph(), []);
   const baseSnapshot: RelationsGraphSnapshot = mode === 'live' ? (liveSnapshot ?? seed) : seed;

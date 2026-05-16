@@ -14,15 +14,19 @@ import { correlationProducer } from './producers/correlationProducer';
 import { benchmarkProducer } from './producers/benchmarkProducer';
 import { volTransmissionProducer } from './producers/volTransmissionProducer';
 import { sectorPeerProducer } from './producers/sectorPeerProducer';
+import { artifactProducer } from './producers/artifactProducer';
 import type { Producer, ProducerContext, ProducerOutput } from './producers/types';
 import type { RelationsCluster, RelationsEdge, RelationsGraphSnapshot, RelationsNode } from './types';
 
-/** Structural producers first so derived edges attach to known nodes. */
+/** Structural producers first so derived edges attach to known nodes.
+ *  Artifact producer runs last so its `artifact-link` edges only attach
+ *  to instrument nodes already emitted by upstream producers. */
 export const DEFAULT_PRODUCERS: Producer[] = [
   sectorPeerProducer,
   correlationProducer,
   benchmarkProducer,
   volTransmissionProducer,
+  artifactProducer,
 ];
 
 export function composeRelationsGraph(

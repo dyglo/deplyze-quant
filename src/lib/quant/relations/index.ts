@@ -8,3 +8,4 @@ export { correlationProducer } from './producers/correlationProducer';
 export { benchmarkProducer } from './producers/benchmarkProducer';
 export { volTransmissionProducer } from './producers/volTransmissionProducer';
 export { sectorPeerProducer } from './producers/sectorPeerProducer';
+export { artifactProducer } from './producers/artifactProducer';

@@ -58,6 +58,12 @@ class EdgarIngestRequest(BaseModel):
     forms: Optional[List[str]] = None
 
 
+class FredIngestRequest(BaseModel):
+    series_ids: Optional[List[str]] = None      # defaults to DEFAULT_SERIES
+    since_date: Optional[str] = None            # YYYY-MM-DD
+    days_back: int = 1825                       # 5y default if no since_date
+
+
 def _new_run(pipeline_name: str) -> dict:
     run_id = str(uuid.uuid4())
     run = {
@@ -152,6 +158,33 @@ async def ingest_edgar(req: EdgarIngestRequest, background_tasks: BackgroundTask
         "run_id": run["run_id"],
         "status": "queued",
         "symbols_or_ciks": req.symbols_or_ciks,
+        "days_back": req.days_back,
+    }
+
+
+@router.post("/ingest/fred")
+async def ingest_fred(req: FredIngestRequest, background_tasks: BackgroundTasks):
+    """
+    V3 Phase 2 · Wave C — FRED + Treasury yield macro ingestion.
+
+    Pulls FRED series (defaults to ~30 institutional macro/yield series),
+    writes to `raw_public.public_macro_raw` and `cleaned.macro_cleaned`
+    (with YoY/MoM changes pre-computed).
+    """
+    from app.refinery.macro_ingestor import ingest_fred_macro
+    run = _new_run("fred_macro_ingest")
+    background_tasks.add_task(
+        ingest_fred_macro,
+        run["run_id"],
+        req.series_ids,
+        req.since_date,
+        req.days_back,
+    )
+    return {
+        "run_id": run["run_id"],
+        "status": "queued",
+        "series_count": len(req.series_ids) if req.series_ids else "default",
+        "since_date": req.since_date,
         "days_back": req.days_back,
     }
 

@@ -7,7 +7,7 @@ import { alignClosesByTs, pearson } from '../../correlation';
 import { beta } from '../../benchmark';
 import { logReturns } from '../../returns';
 import type { RelationsEdge } from '../types';
-import { edgeId, type Producer, type ProducerContext, type ProducerOutput } from './types';
+import { edgeId, sliceAsOf, type Producer, type ProducerContext, type ProducerOutput } from './types';
 
 const MIN_OVERLAP = 30;
 
@@ -17,8 +17,10 @@ export const benchmarkProducer: Producer = {
     const edges: RelationsEdge[] = [];
     const skipped: ProducerOutput['skipped'] = [];
 
-    for (const [bench, benchBars] of Object.entries(ctx.benchmarks)) {
-      const aligned = alignClosesByTs(ctx.focal.bars, benchBars);
+    const focalBars = sliceAsOf(ctx.focal.bars, ctx.asOfTs);
+    for (const [bench, benchBarsRaw] of Object.entries(ctx.benchmarks)) {
+      const benchBars = sliceAsOf(benchBarsRaw, ctx.asOfTs);
+      const aligned = alignClosesByTs(focalBars, benchBars);
       if (aligned.ts.length < MIN_OVERLAP) {
         skipped.push({ id: `bench:${ctx.focal.symbol}-${bench}`, reason: 'insufficient overlap' });
         continue;

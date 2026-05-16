@@ -1,42 +1,59 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Graph from 'graphology';
-import { circular } from 'graphology-layout';
-import forceAtlas2 from 'graphology-layout-forceatlas2';
 import Sigma from 'sigma';
 import type { RelationsGraphSnapshot, RelationsNode, RelationsEdge } from '../../../lib/quant/relations/types';
-import { nodeColor, nodeSize, edgeColor, edgeWidth } from './nodePalette';
+import { edgeColor, edgeWidth } from './nodePalette';
+import { applyRadialLayout, defaultCategories, type RadialCategory } from './radialLayout';
+import { NodeCardOverlay } from './NodeCardOverlay';
+import { ClusterBackdrop } from './ClusterBackdrop';
+import { SPOTLIGHT_KINDS, type SpotlightMode } from './OverlayControls';
 
 interface Props {
   snapshot: RelationsGraphSnapshot;
+  focalId?: string | null;
   hoveredNodeId?: string | null;
   selectedNodeId?: string | null;
+  spotlight?: SpotlightMode;
+  strengthThreshold?: number;
   onHoverNode?: (id: string | null) => void;
   onSelectNode?: (id: string | null) => void;
+  onInspectNode?: (id: string) => void;
 }
 
 /**
- * Mounts a sigma renderer over a graphology graph for the snapshot.
- * Layout: circular seed → ForceAtlas2 (50 iterations, scaled). We do not
- * mutate the snapshot — node x/y are computed locally on each rebuild.
- *
- * Re-renders are cheap: identity of `snapshot` controls full rebuilds;
- * hover/select changes update sigma reducers without rebuilding the graph.
+ * Sigma renders the EDGES of the relationship graph; institutional
+ * "node cards" are layered as a DOM overlay (see NodeCardOverlay) on
+ * top so each node displays its full label + meta in a labelled box,
+ * reinterpreting the Bloomberg relationship-map pattern in the Deplyze
+ * design system. Sigma's own node fill is set transparent — sigma still
+ * owns layout, hit-testing, and edge rendering.
  */
 export const RelationsGraphCanvas: React.FC<Props> = ({
   snapshot,
+  focalId,
   hoveredNodeId,
   selectedNodeId,
+  spotlight = 'none',
+  strengthThreshold = 0,
   onHoverNode,
   onSelectNode,
+  onInspectNode,
 }) => {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const sigmaRef = useRef<Sigma | null>(null);
-  const graphRef = useRef<Graph | null>(null);
+  const [sigmaInst, setSigmaInst] = useState<Sigma | null>(null);
   const hoverRef = useRef<string | null>(null);
   const selectRef = useRef<string | null>(null);
+  const spotlightRef = useRef<SpotlightMode>(spotlight);
+  const thresholdRef = useRef<number>(strengthThreshold);
+  const categories = useRef<RadialCategory[]>(defaultCategories()).current;
 
-  // Build the graph whenever the snapshot identity changes.
-  const graph = useMemo(() => {
+  // Sync spotlight + threshold into refs so edgeReducer sees fresh values
+  // without rebuilding the graph. Refresh forces reducers to re-run.
+  useEffect(() => { spotlightRef.current = spotlight; sigmaRef.current?.refresh(); }, [spotlight]);
+  useEffect(() => { thresholdRef.current = strengthThreshold; sigmaRef.current?.refresh(); }, [strengthThreshold]);
+
+  const { graph, focalUsed } = useMemo(() => {
     const g = new Graph({ multi: false, allowSelfLoops: false, type: 'undirected' });
     for (const n of snapshot.nodes) addNode(g, n);
     for (const e of snapshot.edges) {
@@ -46,98 +63,78 @@ export const RelationsGraphCanvas: React.FC<Props> = ({
       g.addEdgeWithKey(e.id, e.source, e.target, {
         size: edgeWidth(e.strength),
         color: edgeColor(e.kind, e.strength),
-        label: edgeKindLabel(e.kind),
+        label: '',
         kind: e.kind,
         strength: e.strength,
         zScore: e.zScore,
       });
     }
-    circular.assign(g, { scale: 100 });
-    if (g.order > 0) {
-      try {
-        forceAtlas2.assign(g, {
-          iterations: 80,
-          settings: {
-            gravity: 1.2,
-            scalingRatio: 8,
-            slowDown: 4,
-            barnesHutOptimize: g.order > 80,
-            strongGravityMode: true,
-          },
-        });
-      } catch {
-        /* FA2 occasionally fails on near-degenerate graphs — fall back to circular. */
-      }
-    }
-    return g;
-  }, [snapshot]);
+    const assignment = applyRadialLayout(g, snapshot, { focalId: focalId ?? undefined });
+    return { graph: g, focalUsed: assignment.focalId };
+  }, [snapshot, focalId]);
 
-  // Sigma mount / teardown bound to the graph identity.
   useEffect(() => {
     if (!hostRef.current) return;
-    graphRef.current = graph;
     const sigma = new Sigma(graph, hostRef.current, {
       renderEdgeLabels: false,
       defaultEdgeType: 'line',
-      labelFont: 'Inter, ui-sans-serif, system-ui, sans-serif',
-      labelSize: 11,
-      labelWeight: '500',
-      labelColor: { attribute: 'labelColor', color: getCssVar('--foreground', '#1a1a1a') },
-      minCameraRatio: 0.2,
-      maxCameraRatio: 4,
+      // Disable sigma's own node labels — DOM cards carry them.
+      renderLabels: false,
+      labelGridCellSize: 70,
+      labelRenderedSizeThreshold: 1e9,
+      minCameraRatio: 0.3,
+      maxCameraRatio: 3,
     });
     sigmaRef.current = sigma;
+    setSigmaInst(sigma);
 
-    sigma.setSetting('nodeReducer', (id, data) => {
-      const d = { ...data } as Record<string, unknown> & { hidden?: boolean; color?: string; size?: number; label?: string };
-      const hov = hoverRef.current;
-      const sel = selectRef.current;
-      if (hov && hov !== id && !graph.hasEdge(hov, id) && !graph.hasEdge(id, hov)) {
-        d.color = fade(String(data.color ?? '#8b8b8b'), 0.18);
-        d.label = '';
-      }
-      if (sel && sel !== id && !graph.hasEdge(sel, id) && !graph.hasEdge(id, sel)) {
-        d.color = fade(String(data.color ?? '#8b8b8b'), 0.12);
-      }
-      if (sel === id || hov === id) {
-        d.size = (typeof data.size === 'number' ? data.size : 8) * 1.18;
-      }
-      return d as Record<string, unknown>;
+    sigma.setSetting('nodeReducer', (_id, data) => {
+      // Render nodes as invisible anchors — cards do the visuals.
+      return { ...data, color: 'rgba(0,0,0,0)', size: 1 } as Record<string, unknown>;
     });
 
     sigma.setSetting('edgeReducer', (id, data) => {
-      const d = { ...data } as Record<string, unknown> & { hidden?: boolean; color?: string; size?: number };
-      const hov = hoverRef.current;
-      const sel = selectRef.current;
-      const [s, t] = graph.extremities(id);
-      const focus = hov ?? sel;
-      if (focus && focus !== s && focus !== t) {
-        d.color = fade(String(data.color ?? '#8b8b8b'), 0.08);
-      } else if (focus) {
-        d.size = (typeof data.size === 'number' ? data.size : 1) * 1.6;
+      const d = { ...data } as Record<string, unknown> & { color?: string; size?: number; hidden?: boolean };
+      const focusId = hoverRef.current ?? selectRef.current;
+      const kind = data.kind as string | undefined;
+      const strength = typeof data.strength === 'number' ? data.strength : 0;
+      const spot = spotlightRef.current;
+      const thresh = thresholdRef.current;
+
+      // Hide edges below strength threshold.
+      if (Math.abs(strength) < thresh) { d.hidden = true; return d as Record<string, unknown>; }
+
+      // Spotlight dimming: edges outside the selected family fade.
+      const spotKinds = SPOTLIGHT_KINDS[spot];
+      const inSpotlight = spotKinds.length === 0 || (kind && spotKinds.includes(kind as never));
+      if (!inSpotlight) {
+        d.color = fade(String(data.color ?? '#8b8b8b'), 0.07);
+      }
+
+      if (focusId) {
+        const [s, t] = graph.extremities(id);
+        if (focusId !== s && focusId !== t) {
+          d.color = fade(String(data.color ?? '#8b8b8b'), 0.06);
+        } else {
+          d.size = (typeof data.size === 'number' ? data.size : 1) * 1.55;
+        }
       }
       return d as Record<string, unknown>;
     });
 
-    const handleEnter = ({ node }: { node: string }) => { hoverRef.current = node; onHoverNode?.(node); sigma.refresh(); };
-    const handleLeave = () => { hoverRef.current = null; onHoverNode?.(null); sigma.refresh(); };
-    const handleClick = ({ node }: { node: string }) => { selectRef.current = node; onSelectNode?.(node); sigma.refresh(); };
     const handleStageClick = () => { selectRef.current = null; onSelectNode?.(null); sigma.refresh(); };
-
-    sigma.on('enterNode', handleEnter);
-    sigma.on('leaveNode', handleLeave);
-    sigma.on('clickNode', handleClick);
     sigma.on('clickStage', handleStageClick);
 
     return () => {
       sigma.removeAllListeners();
       sigma.kill();
       sigmaRef.current = null;
+      setSigmaInst(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [graph]);
 
-  // Sync external hover/select into sigma reducers.
+  // Sync hover/select into sigma reducers so edges respond.
   useEffect(() => {
     hoverRef.current = hoveredNodeId ?? null;
     sigmaRef.current?.refresh();
@@ -147,24 +144,71 @@ export const RelationsGraphCanvas: React.FC<Props> = ({
     sigmaRef.current?.refresh();
   }, [selectedNodeId]);
 
+  // Map active spotlight onto the matching backdrop wedge id, if any.
+  const highlightCategoryId = spotlightToCategory(spotlight);
+
   return (
-    <div
-      ref={hostRef}
-      role="img"
-      aria-label="Relations Map graph"
-      style={{
-        width: '100%',
-        height: '100%',
-        minHeight: 520,
-        background:
-          'radial-gradient(ellipse at center, color-mix(in srgb, var(--muted) 35%, transparent) 0%, transparent 70%), var(--card)',
-        borderRadius: 10,
-        position: 'relative',
-        overflow: 'hidden',
-      }}
-    />
+    <div style={{ position: 'relative', width: '100%', height: '100%', minHeight: 540 }}>
+      <ClusterBackdrop categories={categories} highlightCategoryId={highlightCategoryId} />
+      <div
+        ref={hostRef}
+        role="img"
+        aria-label="Relations Map graph"
+        style={{
+          width: '100%',
+          height: '100%',
+          minHeight: 540,
+          background: 'transparent',
+          borderRadius: 10,
+          overflow: 'hidden',
+          position: 'relative',
+        }}
+      />
+      <NodeCardOverlay
+        sigma={sigmaInst}
+        graph={graph}
+        snapshot={snapshot}
+        focalId={focalUsed ?? null}
+        hoveredId={hoveredNodeId ?? null}
+        selectedId={selectedNodeId ?? null}
+        spotlight={spotlight}
+        onSelect={(id) => onSelectNode?.(id)}
+        onHover={(id) => onHoverNode?.(id)}
+        onInspect={(id) => onInspectNode?.(id)}
+      />
+      <CategoryOverlay categories={categories} />
+    </div>
   );
 };
+
+const CategoryOverlay: React.FC<{ categories: RadialCategory[] }> = ({ categories }) => (
+  <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+    {categories.map((c) => (
+      <span
+        key={c.id}
+        style={{
+          position: 'absolute',
+          left: '50%',
+          top: '50%',
+          transform: `translate(-50%, -50%) rotate(${c.angle}rad) translateX(46%) rotate(${-c.angle}rad)`,
+          fontSize: 10,
+          fontWeight: 700,
+          letterSpacing: '0.1em',
+          textTransform: 'uppercase',
+          color: 'var(--muted-foreground)',
+          background: 'color-mix(in srgb, var(--card) 88%, transparent)',
+          border: '1px solid var(--border)',
+          borderRadius: 6,
+          padding: '3px 9px',
+          whiteSpace: 'nowrap',
+          backdropFilter: 'blur(2px)',
+        }}
+      >
+        {c.label}
+      </span>
+    ))}
+  </div>
+);
 
 function addNode(g: Graph, n: RelationsNode) {
   if (g.hasNode(n.id)) return;
@@ -174,37 +218,31 @@ function addNode(g: Graph, n: RelationsNode) {
     cluster: n.cluster,
     sector: n.sector,
     meta: n.meta,
-    size: nodeSize(n.kind, n.weight),
-    color: nodeColor(n.kind),
-    x: Math.random(),
-    y: Math.random(),
+    // size only used by sigma for hit-testing; cards do visuals.
+    size: 8,
+    color: 'rgba(0,0,0,0)',
+    x: 0,
+    y: 0,
   });
-}
-
-function edgeKindLabel(k: RelationsEdge['kind']): string {
-  switch (k) {
-    case 'correlation': return 'correlation';
-    case 'inverse-correlation': return 'inverse';
-    case 'supplier': return 'supplier';
-    case 'customer': return 'customer';
-    case 'benchmark-dependency': return 'benchmark';
-    case 'sector-dependency': return 'sector';
-    case 'volatility-transmission': return 'vol transmit';
-    case 'macro-dependency': return 'macro';
-    case 'earnings-influence': return 'earnings';
-    case 'thematic': return 'thematic';
-    case 'artifact-link': return 'artifact';
-    case 'historical': return 'historical';
-    case 'regime': return 'regime';
-  }
-}
-
-function getCssVar(name: string, fallback: string): string {
-  if (typeof window === 'undefined') return fallback;
-  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-  return v || fallback;
 }
 
 function fade(hexOrRgb: string, alpha: number): string {
   return `color-mix(in srgb, ${hexOrRgb} ${Math.round(alpha * 100)}%, transparent)`;
 }
+
+/** Map a spotlight selection to the backdrop wedge that should stay lit. */
+function spotlightToCategory(spot: SpotlightMode): string | null {
+  switch (spot) {
+    case 'benchmark':   return 'benchmarks';
+    case 'volatility':  return 'volatility';
+    case 'macro':       return 'macro';
+    case 'sector':      return 'sector';
+    case 'inverse':
+    case 'correlation':
+    case 'none':
+    default:
+      return null;
+  }
+}
+
+export type { RelationsEdge };

@@ -15,6 +15,8 @@ import {
   FileText,
   Telescope,
   Library,
+  History,
+  Sparkles,
   ChevronLeft,
   ChevronDown,
   Check,
@@ -61,7 +63,7 @@ const menuItems = [
   { id: 'positioning', label: 'Positioning & Sentiment', icon: Users,          path: '/positioning' },
   { id: 'models',      label: 'Model Observatory',      icon: Telescope,       path: '/models' },
   { id: 'lab',         label: 'Quant Lab',              icon: Beaker,          path: '/lab' },
-  { id: 'copilot',     label: 'Research Copilot',       icon: MessageSquare,   path: '/copilot' },
+  { id: 'history',     label: 'Historical Intelligence Terminal', icon: History, path: '/historical-intelligence' },
   { id: 'warehouse',   label: 'Data Warehouse',         icon: Database,        path: '/warehouse' },
   { id: 'briefings',   label: 'Briefings',              icon: FileText,        path: '/briefings' },
   { id: 'library',    label: 'Research Library',       icon: Library,         path: '/library' },
@@ -611,6 +613,50 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              {/* Deplyze Assistant (Copilot) */}
+              <Link
+                to="/copilot"
+                title="Deplyze Assistant — context-aware research copilot"
+                className="ds-transition-fast"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.375rem',
+                  padding: '0.25rem 0.625rem',
+                  height: '1.75rem',
+                  borderRadius: '999px',
+                  border: '1px solid',
+                  borderColor: location.pathname.startsWith('/copilot')
+                    ? 'color-mix(in srgb, var(--primary) 40%, transparent)'
+                    : 'var(--border)',
+                  background: location.pathname.startsWith('/copilot')
+                    ? 'color-mix(in srgb, var(--primary) 12%, transparent)'
+                    : 'var(--card)',
+                  color: location.pathname.startsWith('/copilot')
+                    ? 'var(--primary)'
+                    : 'var(--foreground)',
+                  textDecoration: 'none',
+                  fontSize: '0.6875rem',
+                  fontWeight: 600,
+                  letterSpacing: '0.02em',
+                }}
+                onMouseEnter={(e) => {
+                  if (!location.pathname.startsWith('/copilot')) {
+                    (e.currentTarget as HTMLElement).style.background = 'var(--muted)';
+                    (e.currentTarget as HTMLElement).style.color = 'var(--primary)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!location.pathname.startsWith('/copilot')) {
+                    (e.currentTarget as HTMLElement).style.background = 'var(--card)';
+                    (e.currentTarget as HTMLElement).style.color = 'var(--foreground)';
+                  }
+                }}
+              >
+                <Sparkles size={12} style={{ color: 'var(--primary)' }} />
+                <span>Deplyze Assistant</span>
+              </Link>
+
               {/* Theme Toggle Button */}
               <button
                 onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}

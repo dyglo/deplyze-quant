@@ -73,6 +73,7 @@ import briefingsRouter from './routes/briefings';
 import fundamentalsRouter from './routes/fundamentals';
 import earningsRouter from './routes/earnings';
 import edgarRouter from './routes/edgar';
+import intelligenceRouter from './routes/intelligence';
 
 // ─── Firebase Admin init (idempotent) ──────────────────────────────────────
 
@@ -142,6 +143,7 @@ router.use('/briefings', briefingsRouter);
 router.use('/fundamentals', fundamentalsRouter);
 router.use('/earnings', earningsRouter);
 router.use('/edgar', edgarRouter);
+router.use('/intelligence', intelligenceRouter);
 
 // Mount router on both paths to handle local dev (/v1) and prod proxy (/api/v1)
 app.use(['/v1', '/api/v1'], router);

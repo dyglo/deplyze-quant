@@ -1,0 +1,130 @@
+"""Pipeline orchestration endpoints."""
+
+import uuid
+from datetime import datetime, timezone
+from typing import Optional, List
+
+import structlog
+from fastapi import APIRouter, BackgroundTasks
+from pydantic import BaseModel
+
+from app.core.config import settings
+
+log = structlog.get_logger("quant_engine.api.pipelines")
+router = APIRouter()
+
+# In-memory run registry (process-scoped; replace with BQ model_runs for persistence)
+_runs: dict = {}
+
+
+class IngestRequest(BaseModel):
+    symbols: List[str]
+    providers: Optional[List[str]] = None
+    timeframe: str = "1day"
+    days_back: int = 30
+
+
+class RefineRequest(BaseModel):
+    symbols: List[str]
+    dataset: str = "ohlcv_cleaned"
+
+
+class FeaturesRequest(BaseModel):
+    symbols: List[str]
+    feature_types: Optional[List[str]] = None  # returns, volatility, momentum, etc.
+
+
+class ArtifactsRequest(BaseModel):
+    symbols: List[str]
+    artifact_types: Optional[List[str]] = None
+
+
+class DailyRunRequest(BaseModel):
+    symbols: List[str]
+    dry_run: bool = False
+
+
+class BackfillRequest(BaseModel):
+    symbols: List[str]
+    start_date: str   # YYYY-MM-DD
+    end_date: str     # YYYY-MM-DD
+    providers: Optional[List[str]] = None
+
+
+def _new_run(pipeline_name: str) -> dict:
+    run_id = str(uuid.uuid4())
+    run = {
+        "run_id": run_id,
+        "pipeline_name": pipeline_name,
+        "status": "queued",
+        "started_at": datetime.now(timezone.utc).isoformat(),
+        "completed_at": None,
+        "records_processed": 0,
+        "artifacts_generated": 0,
+        "errors": [],
+    }
+    _runs[run_id] = run
+    return run
+
+
+@router.post("/ingest")
+async def ingest(req: IngestRequest, background_tasks: BackgroundTasks):
+    """Trigger data ingestion from configured providers."""
+    from app.refinery.ingestor import run_ingest
+    run = _new_run("ingest")
+    background_tasks.add_task(run_ingest, run["run_id"], req.symbols, req.providers, req.timeframe, req.days_back)
+    return {"run_id": run["run_id"], "status": "queued", "symbols": req.symbols}
+
+
+@router.post("/refine")
+async def refine(req: RefineRequest, background_tasks: BackgroundTasks):
+    """Normalize and deduplicate raw data into cleaned dataset."""
+    from app.refinery.refiner import run_refine
+    run = _new_run("refine")
+    background_tasks.add_task(run_refine, run["run_id"], req.symbols)
+    return {"run_id": run["run_id"], "status": "queued"}
+
+
+@router.post("/features")
+async def features(req: FeaturesRequest, background_tasks: BackgroundTasks):
+    """Compute feature vectors from cleaned data."""
+    from app.features.engine import run_features
+    run = _new_run("features")
+    background_tasks.add_task(run_features, run["run_id"], req.symbols, req.feature_types)
+    return {"run_id": run["run_id"], "status": "queued"}
+
+
+@router.post("/artifacts")
+async def artifacts(req: ArtifactsRequest, background_tasks: BackgroundTasks):
+    """Generate research artifacts from feature outputs."""
+    from app.artifacts.generator import run_artifacts
+    run = _new_run("artifacts")
+    background_tasks.add_task(run_artifacts, run["run_id"], req.symbols, req.artifact_types)
+    return {"run_id": run["run_id"], "status": "queued"}
+
+
+@router.post("/daily-run")
+async def daily_run(req: DailyRunRequest, background_tasks: BackgroundTasks):
+    """Full daily pipeline: ingest → refine → features → artifacts."""
+    from app.schedulers.daily import run_daily_pipeline
+    run = _new_run("daily_run")
+    background_tasks.add_task(run_daily_pipeline, run["run_id"], req.symbols, req.dry_run)
+    return {"run_id": run["run_id"], "status": "queued", "dry_run": req.dry_run}
+
+
+@router.post("/backfill")
+async def backfill(req: BackfillRequest, background_tasks: BackgroundTasks):
+    """Historical backfill for a date range."""
+    from app.schedulers.backfill import run_backfill
+    run = _new_run("backfill")
+    background_tasks.add_task(run_backfill, run["run_id"], req.symbols, req.start_date, req.end_date)
+    return {"run_id": run["run_id"], "status": "queued"}
+
+
+@router.get("/status/{run_id}")
+async def pipeline_status(run_id: str):
+    """Get status of a pipeline run."""
+    if run_id not in _runs:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+    return _runs[run_id]

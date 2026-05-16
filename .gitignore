@@ -24,3 +24,13 @@ firebase-applet-config.json
 # OS
 .DS_Store
 Thumbs.db
+
+# Firebase local cache
+.firebase/
+
+# Vite temporary files
+vite.config.ts.timestamp-*
+
+# Python compiled cache
+__pycache__/
+*.pyc

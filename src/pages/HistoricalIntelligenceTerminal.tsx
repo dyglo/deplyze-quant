@@ -29,6 +29,9 @@ import { InstrumentSelector } from '../components/quant/InstrumentSelector';
 import { AnalogsTab } from '../components/quant/historical-intelligence/AnalogsTab';
 import { RegimeTab } from '../components/quant/historical-intelligence/RegimeTab';
 import { ExtremesTab } from '../components/quant/historical-intelligence/ExtremesTab';
+import { CrossAssetTab } from '../components/quant/historical-intelligence/CrossAssetTab';
+import { ForwardReturnsTab } from '../components/quant/historical-intelligence/ForwardReturnsTab';
+import { ReversionTab } from '../components/quant/historical-intelligence/ReversionTab';
 
 /** Tab definitions. The IDs are stable — tab bodies wire onto them. */
 const TABS = [
@@ -184,6 +187,12 @@ export const HistoricalIntelligenceTerminal: React.FC = () => {
           <RegimeTab symbol={symbol} benchmark={benchmark} />
         ) : tab === 'extremes' ? (
           <ExtremesTab symbol={symbol} />
+        ) : tab === 'cross-asset' ? (
+          <CrossAssetTab symbol={symbol} />
+        ) : tab === 'forward' ? (
+          <ForwardReturnsTab symbol={symbol} />
+        ) : tab === 'reversion' ? (
+          <ReversionTab symbol={symbol} />
         ) : (
           <TabPlaceholder tab={tab} symbol={symbol} benchmark={benchmark} lookback={lookback} />
         )}

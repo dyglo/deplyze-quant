@@ -9,6 +9,7 @@ import { useMacroSeries } from '../hooks/useMacro';
 import { useArtifacts, useBriefings } from '../hooks/useArtifacts';
 import { useInsights } from '../hooks/useInsights';
 import { useResearchContext } from '../hooks/useResearchContext';
+import { useQuantCopilotContext } from '../hooks/useQuantCopilotContext';
 import { useWorkspace } from '../components/WorkspaceContext';
 import { useAuth } from '../components/AuthProvider';
 import { PageHeader } from '../components/quant/PageHeader';
@@ -50,6 +51,7 @@ export const ResearchCopilot: React.FC = () => {
   }, [pulse.data]);
 
   const ctx = useResearchContext(activeSymbol);
+  const quantContext = useQuantCopilotContext(activeSymbol);
 
   const buildSnapshot = useCallback(() => {
     const lines: string[] = [
@@ -98,9 +100,13 @@ export const ResearchCopilot: React.FC = () => {
         lines.push(`  - Pinned: ${a.title} (${a.category})`);
       }
     }
+    if (quantContext.snapshot) {
+      lines.push('');
+      lines.push(quantContext.snapshot);
+    }
     lines.push('Use this snapshot as grounding evidence. Cite values explicitly. Probabilistic language only.');
     return lines.join('\n');
-  }, [location.pathname, pulse.data, fedFunds.data, dgs10.data, cpi.data, artifacts.items, briefings.items, ctx.pinnedArtifacts]);
+  }, [location.pathname, pulse.data, fedFunds.data, dgs10.data, cpi.data, artifacts.items, briefings.items, ctx.pinnedArtifacts, quantContext.snapshot]);
 
   const contextResolver = useCallback(() => ({
     context: {

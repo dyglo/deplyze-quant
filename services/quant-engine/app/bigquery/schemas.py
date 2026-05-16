@@ -399,6 +399,146 @@ COPILOT_CONTEXT = _base() + [
     S("updated_at", "TIMESTAMP", "NULLABLE"),
 ]
 
+# ─── V3 Phase 2 · cleaned (filings + narrative) ──────────────────────────────
+
+FILINGS_CLEANED = _base() + [
+    S("cik", "STRING", "NULLABLE"),
+    S("accession_number", "STRING", "NULLABLE"),
+    S("form_type", "STRING", "NULLABLE"),
+    S("filing_date", "DATE", "NULLABLE"),
+    S("period_of_report", "DATE", "NULLABLE"),
+    S("entity_name", "STRING", "NULLABLE"),
+    S("primary_document_url", "STRING", "NULLABLE"),
+    S("primary_document_mime", "STRING", "NULLABLE"),
+    S("related_symbols", "STRING", "REPEATED"),
+    S("themes", "STRING", "REPEATED"),
+    S("is_amended", "BOOL", "NULLABLE"),
+    S("dedup_hash", "STRING", "NULLABLE"),
+    S("updated_at", "TIMESTAMP", "NULLABLE"),
+]
+
+NARRATIVE_CLEANED = _base() + [
+    S("theme_id", "STRING", "NULLABLE"),
+    S("theme_label", "STRING", "NULLABLE"),
+    S("source_document_id", "STRING", "NULLABLE"),
+    S("polarity", "FLOAT64", "NULLABLE"),
+    S("intensity", "FLOAT64", "NULLABLE"),
+    S("salience", "FLOAT64", "NULLABLE"),
+    S("excerpt", "STRING", "NULLABLE"),
+    S("published_at", "TIMESTAMP", "NULLABLE"),
+    S("related_symbols", "STRING", "REPEATED"),
+    S("related_entities", "STRING", "REPEATED"),
+    S("dedup_hash", "STRING", "NULLABLE"),
+    S("updated_at", "TIMESTAMP", "NULLABLE"),
+]
+
+# ─── V3 Phase 2 · features (macro + narrative + filing + ontology) ───────────
+
+MACRO_FEATURES = _base() + [
+    S("series_id", "STRING", "NULLABLE"),
+    S("series_name", "STRING", "NULLABLE"),
+    S("frequency", "STRING", "NULLABLE"),
+    S("value", "FLOAT64", "NULLABLE"),
+    S("yoy_change", "FLOAT64", "NULLABLE"),
+    S("mom_change", "FLOAT64", "NULLABLE"),
+    S("zscore_36m", "FLOAT64", "NULLABLE"),
+    S("percentile_120m", "FLOAT64", "NULLABLE"),
+    S("trend_label", "STRING", "NULLABLE"),
+    S("regime_label", "STRING", "NULLABLE"),
+    S("regime_confidence", "FLOAT64", "NULLABLE"),
+    S("updated_at", "TIMESTAMP", "NULLABLE"),
+]
+
+NARRATIVE_FEATURES = _base() + [
+    S("theme_id", "STRING", "NULLABLE"),
+    S("theme_label", "STRING", "NULLABLE"),
+    S("window_days", "INT64", "NULLABLE"),
+    S("mentions", "INT64", "NULLABLE"),
+    S("mentions_7d", "INT64", "NULLABLE"),
+    S("mentions_30d", "INT64", "NULLABLE"),
+    S("emergence_score", "FLOAT64", "NULLABLE"),
+    S("recurrence_score", "FLOAT64", "NULLABLE"),
+    S("polarity_mean", "FLOAT64", "NULLABLE"),
+    S("intensity_mean", "FLOAT64", "NULLABLE"),
+    S("related_symbols", "STRING", "REPEATED"),
+    S("updated_at", "TIMESTAMP", "NULLABLE"),
+]
+
+FILING_FEATURES = _base() + [
+    S("cik", "STRING", "NULLABLE"),
+    S("accession_number", "STRING", "NULLABLE"),
+    S("form_type", "STRING", "NULLABLE"),
+    S("filing_date", "DATE", "NULLABLE"),
+    S("sentiment_score", "FLOAT64", "NULLABLE"),
+    S("novelty_score", "FLOAT64", "NULLABLE"),
+    S("urgency_score", "FLOAT64", "NULLABLE"),
+    S("length_zscore", "FLOAT64", "NULLABLE"),
+    S("risk_factor_delta", "FLOAT64", "NULLABLE"),
+    S("topic_tags", "STRING", "REPEATED"),
+    S("related_symbols", "STRING", "REPEATED"),
+    S("updated_at", "TIMESTAMP", "NULLABLE"),
+]
+
+ONTOLOGY_FEATURES = _base() + [
+    S("entity_id", "STRING", "NULLABLE"),
+    S("entity_label", "STRING", "NULLABLE"),
+    S("entity_type", "STRING", "NULLABLE"),
+    S("salience", "FLOAT64", "NULLABLE"),
+    S("link_density", "FLOAT64", "NULLABLE"),
+    S("first_seen_at", "TIMESTAMP", "NULLABLE"),
+    S("last_seen_at", "TIMESTAMP", "NULLABLE"),
+    S("mention_count", "INT64", "NULLABLE"),
+    S("co_entities", "STRING", "REPEATED"),
+    S("related_symbols", "STRING", "REPEATED"),
+    S("updated_at", "TIMESTAMP", "NULLABLE"),
+]
+
+# ─── V3 Phase 2 · research (macro/narrative/filing memory) ───────────────────
+
+MACRO_OBSERVATIONS = _base() + [
+    S("observation_type", "STRING", "NULLABLE"),
+    S("regime_state", "STRING", "NULLABLE"),
+    S("title", "STRING", "NULLABLE"),
+    S("summary", "STRING", "NULLABLE"),
+    S("body", "STRING", "NULLABLE"),
+    S("related_series", "STRING", "REPEATED"),
+    S("related_symbols", "STRING", "REPEATED"),
+    S("tags", "STRING", "REPEATED"),
+    S("severity", "STRING", "NULLABLE"),
+    S("updated_at", "TIMESTAMP", "NULLABLE"),
+]
+
+NARRATIVE_MEMORY = _base() + [
+    S("theme_id", "STRING", "NULLABLE"),
+    S("theme_label", "STRING", "NULLABLE"),
+    S("emergence_at", "TIMESTAMP", "NULLABLE"),
+    S("last_seen_at", "TIMESTAMP", "NULLABLE"),
+    S("recurrence_count", "INT64", "NULLABLE"),
+    S("lifetime_score", "FLOAT64", "NULLABLE"),
+    S("polarity_mean", "FLOAT64", "NULLABLE"),
+    S("intensity_mean", "FLOAT64", "NULLABLE"),
+    S("related_symbols", "STRING", "REPEATED"),
+    S("related_entities", "STRING", "REPEATED"),
+    S("tags", "STRING", "REPEATED"),
+    S("updated_at", "TIMESTAMP", "NULLABLE"),
+]
+
+FILING_OBSERVATIONS = _base() + [
+    S("filing_id", "STRING", "NULLABLE"),
+    S("cik", "STRING", "NULLABLE"),
+    S("accession_number", "STRING", "NULLABLE"),
+    S("form_type", "STRING", "NULLABLE"),
+    S("observation_type", "STRING", "NULLABLE"),
+    S("title", "STRING", "NULLABLE"),
+    S("summary", "STRING", "NULLABLE"),
+    S("body", "STRING", "NULLABLE"),
+    S("key_metrics", "JSON", "NULLABLE"),
+    S("related_symbols", "STRING", "REPEATED"),
+    S("tags", "STRING", "REPEATED"),
+    S("severity", "STRING", "NULLABLE"),
+    S("updated_at", "TIMESTAMP", "NULLABLE"),
+]
+
 # ─── artifacts ────────────────────────────────────────────────────────────────
 
 RESEARCH_ARTIFACTS = [
@@ -428,6 +568,12 @@ CORRELATION_ARTIFACTS = _artifact_table()
 VOLATILITY_ARTIFACTS = _artifact_table()
 HISTORICAL_ANALOG_ARTIFACTS = _artifact_table()
 RELATIONSHIP_ARTIFACTS = _artifact_table()
+
+# V3 Phase 2 artifact tables — reuse the canonical RESEARCH_ARTIFACTS shape
+# so all artifact tables stay query-compatible across the warehouse.
+MACRO_ARTIFACTS = _artifact_table()
+NARRATIVE_ARTIFACTS = _artifact_table()
+FILING_ARTIFACTS = _artifact_table()
 
 # ─── model_outputs ────────────────────────────────────────────────────────────
 

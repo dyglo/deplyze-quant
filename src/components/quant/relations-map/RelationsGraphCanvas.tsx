@@ -1,13 +1,13 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Graph from 'graphology';
 import Sigma from 'sigma';
 import type { RelationsGraphSnapshot, RelationsNode, RelationsEdge } from '../../../lib/quant/relations/types';
-import { nodeColor, nodeSize, edgeColor, edgeWidth } from './nodePalette';
+import { edgeColor, edgeWidth } from './nodePalette';
 import { applyRadialLayout, defaultCategories, type RadialCategory } from './radialLayout';
+import { NodeCardOverlay } from './NodeCardOverlay';
 
 interface Props {
   snapshot: RelationsGraphSnapshot;
-  /** Which node should be treated as the focal hub (centred). */
   focalId?: string | null;
   hoveredNodeId?: string | null;
   selectedNodeId?: string | null;
@@ -16,14 +16,12 @@ interface Props {
 }
 
 /**
- * Sigma renderer over a graphology graph laid out radially.
- *
- * Layout: focal at origin, sibling categories assigned to angular wedges
- * (Benchmarks top, Sector ETFs upper-right, Peers lower-right, Vol bottom,
- * Macro lower-left, Themes left). No force simulation, no perpetual refresh.
- *
- * Interaction: hover dims non-neighbours and surfaces the node to the
- * side panel via `onHoverNode`. Click selects; click on empty stage clears.
+ * Sigma renders the EDGES of the relationship graph; institutional
+ * "node cards" are layered as a DOM overlay (see NodeCardOverlay) on
+ * top so each node displays its full label + meta in a labelled box,
+ * reinterpreting the Bloomberg relationship-map pattern in the Deplyze
+ * design system. Sigma's own node fill is set transparent — sigma still
+ * owns layout, hit-testing, and edge rendering.
  */
 export const RelationsGraphCanvas: React.FC<Props> = ({
   snapshot,
@@ -35,12 +33,11 @@ export const RelationsGraphCanvas: React.FC<Props> = ({
 }) => {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const sigmaRef = useRef<Sigma | null>(null);
-  const graphRef = useRef<Graph | null>(null);
+  const [sigmaInst, setSigmaInst] = useState<Sigma | null>(null);
   const hoverRef = useRef<string | null>(null);
   const selectRef = useRef<string | null>(null);
-  const categoriesRef = useRef<RadialCategory[]>(defaultCategories());
+  const categories = useRef<RadialCategory[]>(defaultCategories()).current;
 
-  // Build the graph + layout when the snapshot identity changes.
   const { graph, focalUsed } = useMemo(() => {
     const g = new Graph({ multi: false, allowSelfLoops: false, type: 'undirected' });
     for (const n of snapshot.nodes) addNode(g, n);
@@ -61,36 +58,24 @@ export const RelationsGraphCanvas: React.FC<Props> = ({
     return { graph: g, focalUsed: assignment.focalId };
   }, [snapshot, focalId]);
 
-  // Sigma mount / teardown bound to the graph identity.
   useEffect(() => {
     if (!hostRef.current) return;
-    graphRef.current = graph;
     const sigma = new Sigma(graph, hostRef.current, {
       renderEdgeLabels: false,
       defaultEdgeType: 'line',
-      labelFont: 'Inter, ui-sans-serif, system-ui, sans-serif',
-      labelSize: 11,
-      labelWeight: '500',
-      labelColor: { color: getCssVar('--foreground', '#1a1a1a') },
+      // Disable sigma's own node labels — DOM cards carry them.
+      renderLabels: false,
       labelGridCellSize: 70,
-      labelRenderedSizeThreshold: 4,
+      labelRenderedSizeThreshold: 1e9,
       minCameraRatio: 0.3,
       maxCameraRatio: 3,
     });
     sigmaRef.current = sigma;
+    setSigmaInst(sigma);
 
-    sigma.setSetting('nodeReducer', (id, data) => {
-      const d = { ...data } as Record<string, unknown> & { color?: string; size?: number; label?: string };
-      const focusId = hoverRef.current ?? selectRef.current;
-      if (focusId && focusId !== id && !graph.hasEdge(focusId, id) && !graph.hasEdge(id, focusId)) {
-        d.color = fade(String(data.color ?? '#8b8b8b'), 0.22);
-      }
-      if (id === focalUsed) {
-        d.size = (typeof data.size === 'number' ? data.size : 8) * 1.35;
-      } else if (focusId === id) {
-        d.size = (typeof data.size === 'number' ? data.size : 8) * 1.18;
-      }
-      return d as Record<string, unknown>;
+    sigma.setSetting('nodeReducer', (_id, data) => {
+      // Render nodes as invisible anchors — cards do the visuals.
+      return { ...data, color: 'rgba(0,0,0,0)', size: 1 } as Record<string, unknown>;
     });
 
     sigma.setSetting('edgeReducer', (id, data) => {
@@ -101,30 +86,25 @@ export const RelationsGraphCanvas: React.FC<Props> = ({
         if (focusId !== s && focusId !== t) {
           d.color = fade(String(data.color ?? '#8b8b8b'), 0.08);
         } else {
-          d.size = (typeof data.size === 'number' ? data.size : 1) * 1.5;
+          d.size = (typeof data.size === 'number' ? data.size : 1) * 1.55;
         }
       }
       return d as Record<string, unknown>;
     });
 
-    const handleEnter = ({ node }: { node: string }) => { hoverRef.current = node; onHoverNode?.(node); sigma.refresh(); };
-    const handleLeave = () => { hoverRef.current = null; onHoverNode?.(null); sigma.refresh(); };
-    const handleClick = ({ node }: { node: string }) => { selectRef.current = node; onSelectNode?.(node); sigma.refresh(); };
     const handleStageClick = () => { selectRef.current = null; onSelectNode?.(null); sigma.refresh(); };
-
-    sigma.on('enterNode', handleEnter);
-    sigma.on('leaveNode', handleLeave);
-    sigma.on('clickNode', handleClick);
     sigma.on('clickStage', handleStageClick);
 
     return () => {
       sigma.removeAllListeners();
       sigma.kill();
       sigmaRef.current = null;
+      setSigmaInst(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [graph]);
 
+  // Sync hover/select into sigma reducers so edges respond.
   useEffect(() => {
     hoverRef.current = hoveredNodeId ?? null;
     sigmaRef.current?.refresh();
@@ -145,21 +125,26 @@ export const RelationsGraphCanvas: React.FC<Props> = ({
           height: '100%',
           minHeight: 540,
           background:
-            'radial-gradient(ellipse at center, color-mix(in srgb, var(--muted) 35%, transparent) 0%, transparent 70%), var(--card)',
+            'radial-gradient(ellipse at center, color-mix(in srgb, var(--muted) 30%, transparent) 0%, transparent 70%), var(--card)',
           borderRadius: 10,
           overflow: 'hidden',
         }}
       />
-      <CategoryOverlay categories={categoriesRef.current} />
+      <NodeCardOverlay
+        sigma={sigmaInst}
+        graph={graph}
+        snapshot={snapshot}
+        focalId={focalUsed ?? null}
+        hoveredId={hoveredNodeId ?? null}
+        selectedId={selectedNodeId ?? null}
+        onSelect={(id) => onSelectNode?.(id)}
+        onHover={(id) => onHoverNode?.(id)}
+      />
+      <CategoryOverlay categories={categories} />
     </div>
   );
 };
 
-/**
- * Renders the Bloomberg-style category labels around the perimeter.
- * Each label sits at the same angle as its category wedge so the user
- * can scan "Benchmarks / Peers / Macro" at a glance.
- */
 const CategoryOverlay: React.FC<{ categories: RadialCategory[] }> = ({ categories }) => (
   <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
     {categories.map((c) => (
@@ -169,18 +154,18 @@ const CategoryOverlay: React.FC<{ categories: RadialCategory[] }> = ({ categorie
           position: 'absolute',
           left: '50%',
           top: '50%',
-          // Use angular positioning at fixed visual radius (50% of half-min-side).
           transform: `translate(-50%, -50%) rotate(${c.angle}rad) translateX(46%) rotate(${-c.angle}rad)`,
           fontSize: 10,
           fontWeight: 700,
-          letterSpacing: '0.08em',
+          letterSpacing: '0.1em',
           textTransform: 'uppercase',
           color: 'var(--muted-foreground)',
-          background: 'color-mix(in srgb, var(--card) 86%, transparent)',
+          background: 'color-mix(in srgb, var(--card) 88%, transparent)',
           border: '1px solid var(--border)',
           borderRadius: 6,
-          padding: '3px 8px',
+          padding: '3px 9px',
           whiteSpace: 'nowrap',
+          backdropFilter: 'blur(2px)',
         }}
       >
         {c.label}
@@ -197,22 +182,16 @@ function addNode(g: Graph, n: RelationsNode) {
     cluster: n.cluster,
     sector: n.sector,
     meta: n.meta,
-    size: nodeSize(n.kind, n.weight),
-    color: nodeColor(n.kind),
+    // size only used by sigma for hit-testing; cards do visuals.
+    size: 8,
+    color: 'rgba(0,0,0,0)',
     x: 0,
     y: 0,
   });
-}
-
-function getCssVar(name: string, fallback: string): string {
-  if (typeof window === 'undefined') return fallback;
-  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-  return v || fallback;
 }
 
 function fade(hexOrRgb: string, alpha: number): string {
   return `color-mix(in srgb, ${hexOrRgb} ${Math.round(alpha * 100)}%, transparent)`;
 }
 
-// Re-export edge kind helper so existing consumers keep working.
 export type { RelationsEdge };

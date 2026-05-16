@@ -37,3 +37,4 @@ export * from './anomalies';
 export * from './analog';
 export * from './crossAsset';
 export * from './benchmarkIntel';
+export * from './copilotContext';

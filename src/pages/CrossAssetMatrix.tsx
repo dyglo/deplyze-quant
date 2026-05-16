@@ -8,6 +8,7 @@ import { FreshnessBadge } from '../components/quant/FreshnessBadge';
 import { useDrawer } from '../components/quant/DataDrawer';
 import { CorrelationDrawerBody } from '../components/quant/CorrelationDrawerBody';
 import { RelatedIntelligencePanel } from '../components/quant/RelatedIntelligencePanel';
+import { DependencyShiftPanel } from '../components/quant/DependencyShiftPanel';
 import { ArtifactDetailDrawerBody } from '../components/quant/ArtifactDetailDrawerBody';
 import { useArtifacts, useBriefings } from '../hooks/useArtifacts';
 import { useWorkspace } from '../components/WorkspaceContext';
@@ -179,6 +180,16 @@ export const CrossAssetMatrix: React.FC = () => {
             {' '}{MIN_BARS} aligned bars are dimmed; cells touching them are omitted rather than zero-padded.
           </p>
         </section>
+      )}
+
+      {bundle.data && (
+        <DependencyShiftPanel
+          basket={Object.fromEntries(
+            bundle.data
+              .filter((r) => r.bars.length > 0)
+              .map((r) => [r.sym, r.bars]),
+          )}
+        />
       )}
 
       {(artifacts.items.length > 0 || briefings.items.length > 0) && (

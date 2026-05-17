@@ -98,6 +98,12 @@ class NarrativeIntelligenceRequest(BaseModel):
     lookback_days: int = 180
 
 
+class BriefingsRequest(BaseModel):
+    # Subset of {daily_market_intelligence, weekly_regime_brief, anomaly_summary}.
+    # None / empty → generate all three.
+    briefing_types: Optional[List[str]] = None
+
+
 def _new_run(pipeline_name: str) -> dict:
     run_id = str(uuid.uuid4())
     run = {
@@ -314,6 +320,20 @@ async def intelligence_narratives(req: NarrativeIntelligenceRequest, background_
     run = _new_run("narrative_intelligence")
     background_tasks.add_task(compute_narrative_intelligence, run["run_id"], lookback_days=req.lookback_days)
     return {"run_id": run["run_id"], "status": "queued", "lookback_days": req.lookback_days}
+
+
+@router.post("/briefings/generate")
+async def generate_briefings_route(req: BriefingsRequest, background_tasks: BackgroundTasks):
+    """
+    V3 Phase 2 · Wave K — generate daily/weekly/anomaly briefings into
+    research.generated_briefings. Deterministic, template-based — no LLM
+    calls, fully reproducible per as-of date.
+    """
+    from app.briefings.generators import generate_briefings
+    run = _new_run("briefings")
+    background_tasks.add_task(generate_briefings, run["run_id"], req.briefing_types)
+    return {"run_id": run["run_id"], "status": "queued",
+            "types": req.briefing_types or ["daily_market_intelligence", "weekly_regime_brief", "anomaly_summary"]}
 
 
 @router.get("/status/{run_id}")

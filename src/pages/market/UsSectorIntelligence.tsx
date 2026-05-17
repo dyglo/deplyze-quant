@@ -12,8 +12,9 @@ import { DashboardPageTabs } from '../../components/market-dashboards/DashboardP
 import { DashboardFilterBar } from '../../components/market-dashboards/DashboardFilterBar';
 import { InstrumentDetailDrawer, useInstrumentDrawer } from '../../components/market-dashboards/InstrumentDetailDrawer';
 import { DashboardLoadingState, DashboardErrorState, SourceFreshnessBadge } from '../../components/market-dashboards/DashboardStates';
-import { SummaryStrip } from '../../components/intelligence-drawer';
+import { SummaryStrip, ArtifactStrip } from '../../components/intelligence-drawer';
 import { sectorSummary } from '../../lib/intelligence/summaries';
+import { useDashboardArtifacts } from '../../hooks/useDashboardArtifacts';
 import { useSectorDashboard } from '../../hooks/useDashboard';
 import { SECTOR_ETF_SYMBOLS, classifySectors, type DashboardQuote } from '../../services/dashboardService';
 import type { PerformanceRow } from '../../components/market-dashboards/CompactPerformanceTable';
@@ -204,6 +205,8 @@ export const UsSectorIntelligence: React.FC = () => {
     : 0;
 
   const summary = useMemo(() => quotes ? sectorSummary(quotes) : null, [quotes]);
+  const sectorSymbols = useMemo(() => SECTOR_ETF_SYMBOLS.map((s) => s.symbol).concat('SPY'), []);
+  const { artifacts, loading: artifactsLoading } = useDashboardArtifacts(sectorSymbols);
 
   return (
     <>
@@ -213,6 +216,7 @@ export const UsSectorIntelligence: React.FC = () => {
         actions={quotes ? <SourceFreshnessBadge source="Market Data" status={status} fetchedAt={fetchedAt} /> : undefined}
       >
         <SummaryStrip payload={summary} />
+        <ArtifactStrip artifacts={artifacts} loading={artifactsLoading} />
         {/* KPI Strip */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 10, marginBottom: 16 }}>
           {spy && (

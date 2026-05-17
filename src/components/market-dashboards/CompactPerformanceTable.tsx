@@ -103,8 +103,8 @@ export const CompactPerformanceTable: React.FC<CompactPerformanceTableProps> = (
           {sorted.map((row, i) => {
             const pos = row.changePercent > 0;
             const neg = row.changePercent < 0;
-            const clr = pos ? '#4E6040' : neg ? 'var(--primary)' : 'var(--muted-foreground)';
-            const bgChg = pos ? 'rgba(78,96,64,0.08)' : neg ? 'rgba(193,95,60,0.08)' : 'transparent';
+            const clr = pos ? 'var(--ds-gain)' : neg ? 'var(--ds-loss)' : 'var(--muted-foreground)';
+            const bgChg = pos ? 'var(--ds-gain-muted)' : neg ? 'var(--ds-loss-muted)' : 'transparent';
             const isSelected = selectedSymbol === row.symbol;
             return (
               <tr

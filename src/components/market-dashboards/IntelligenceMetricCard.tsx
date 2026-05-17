@@ -24,7 +24,7 @@ export const IntelligenceMetricCard: React.FC<IntelligenceMetricCardProps> = ({
 }) => {
   const pos = changePercent != null && changePercent > 0;
   const neg = changePercent != null && changePercent < 0;
-  const changeColor = pos ? '#4E6040' : neg ? 'var(--primary)' : 'var(--muted-foreground)';
+  const changeColor = pos ? 'var(--ds-gain)' : neg ? 'var(--ds-loss)' : 'var(--muted-foreground)';
 
   return (
     <div

@@ -17,17 +17,17 @@ export interface HeatmapGridGroup {
 function heatColor(pct: number): { bg: string; text: string } {
   const abs = Math.abs(pct);
   if (pct > 0) {
-    if (abs > 4)   return { bg: '#3A4E2D', text: '#C8E0B8' };
-    if (abs > 2)   return { bg: '#4E6040', text: '#D8EDCA' };
-    if (abs > 1)   return { bg: 'rgba(78,96,64,0.55)', text: '#2D3D24' };
-    if (abs > 0.3) return { bg: 'rgba(78,96,64,0.25)', text: '#3A5029' };
+    if (abs > 4)   return { bg: 'var(--ds-gain-strong)', text: 'var(--ds-gain-fg)' };
+    if (abs > 2)   return { bg: 'var(--ds-gain)',        text: 'var(--ds-gain-fg)' };
+    if (abs > 1)   return { bg: 'var(--ds-gain-muted)',  text: 'var(--ds-gain)' };
+    if (abs > 0.3) return { bg: 'var(--ds-gain-muted)',  text: 'var(--ds-gain)' };
     return { bg: 'var(--muted)', text: 'var(--muted-foreground)' };
   }
   if (pct < 0) {
-    if (abs > 4)   return { bg: '#7A2E14', text: '#F9D5CA' };
-    if (abs > 2)   return { bg: '#C15F3C', text: '#FCEEE9' };
-    if (abs > 1)   return { bg: 'rgba(193,95,60,0.55)', text: '#6B2710' };
-    if (abs > 0.3) return { bg: 'rgba(193,95,60,0.22)', text: '#8B3A1A' };
+    if (abs > 4)   return { bg: 'var(--ds-loss-strong)', text: 'var(--ds-loss-fg)' };
+    if (abs > 2)   return { bg: 'var(--ds-loss)',        text: 'var(--ds-loss-fg)' };
+    if (abs > 1)   return { bg: 'var(--ds-loss-muted)',  text: 'var(--ds-loss)' };
+    if (abs > 0.3) return { bg: 'var(--ds-loss-muted)',  text: 'var(--ds-loss)' };
     return { bg: 'var(--muted)', text: 'var(--muted-foreground)' };
   }
   return { bg: 'var(--muted)', text: 'var(--muted-foreground)' };
@@ -119,7 +119,8 @@ export const HeatmapGrid: React.FC<HeatmapGridProps> = ({ groups, onSelectCell, 
               <span style={{
                 fontSize: 9, fontWeight: 700, fontVariantNumeric: 'tabular-nums',
                 padding: '1px 5px', borderRadius: 999,
-                background: gc.bg, color: gc.text,
+                background: group.avgValue >= 0 ? 'var(--ds-gain-muted)' : 'var(--ds-loss-muted)',
+                color: group.avgValue >= 0 ? 'var(--ds-gain)' : 'var(--ds-loss)',
                 border: '1px solid rgba(0,0,0,0.06)',
               }}>
                 {group.avgValue >= 0 ? '+' : ''}{group.avgValue.toFixed(2)}%

@@ -10,6 +10,8 @@ import {
 import { MarketPulseStrip } from '../../components/quant/MarketPulseStrip';
 import { FreshnessBadge } from '../../components/quant/FreshnessBadge';
 import { DashboardErrorState } from '../../components/market-dashboards/DashboardStates';
+import { SummaryStrip } from '../../components/intelligence-drawer';
+import { countriesSummary } from '../../lib/intelligence/summaries';
 import { useCountryETFs } from '../../hooks/useDashboard';
 import { useBatchQuotes, useOHLCV, useNews } from '../../hooks/useMarket';
 import {
@@ -379,6 +381,19 @@ export const CountriesRegionalMarkets: React.FC = () => {
 
   const liveCount = Object.keys(liveMap).length;
 
+  const summary = useMemo(() => {
+    if (!liveQuotes) return null;
+    const symbolRegion: Record<string, 'developed' | 'emerging' | 'frontier'> = {};
+    for (const entry of COUNTRY_DATABASE) {
+      if (entry.etf) symbolRegion[entry.etf] = entry.region;
+    }
+    return countriesSummary({
+      liveQuotes: liveQuotes.map((q) => ({ symbol: q.symbol, changePercent: q.changePercent, ok: q.ok })),
+      totalCountries: COUNTRY_DATABASE.length,
+      symbolRegion,
+    });
+  }, [liveQuotes]);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
       <MarketPulseStrip />
@@ -399,6 +414,8 @@ export const CountriesRegionalMarkets: React.FC = () => {
           </button>
         </div>
       </div>
+
+      <SummaryStrip payload={summary} />
 
       {/* Filter bar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 20px', borderBottom: '1px solid var(--border)', background: 'var(--card)', flexShrink: 0, flexWrap: 'wrap' }}>

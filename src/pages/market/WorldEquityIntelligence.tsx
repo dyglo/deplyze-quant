@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Globe, ArrowUpDown, ArrowUp, ArrowDown, RefreshCw, Search, X, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { MarketPulseStrip } from '../../components/quant/MarketPulseStrip';
 import { Sparkline } from '../../components/quant/Sparkline';
@@ -67,7 +67,7 @@ const ColHeader: React.FC<{
 
 // ─── Instrument detail panel (persistent) ────────────────────────────────────
 
-const InstrumentPanel: React.FC<{ quote: DashboardQuote }> = ({ quote }) => {
+const InstrumentPanel: React.FC<{ quote: DashboardQuote; onClose: () => void }> = ({ quote, onClose }) => {
   const pos = quote.changePercent > 0;
   const neg = quote.changePercent < 0;
   const changeColor = pos ? 'var(--ds-gain)' : neg ? 'var(--ds-loss)' : 'var(--muted-foreground)';
@@ -84,20 +84,25 @@ const InstrumentPanel: React.FC<{ quote: DashboardQuote }> = ({ quote }) => {
   const GROUP_LABELS: Record<string, string> = { us: 'US Index', global: 'Global', developed: 'Developed', emerging: 'Emerging' };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
       <div style={{ padding: '18px 16px 14px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
           <div>
             <p style={{ margin: 0, fontSize: 18, fontWeight: 700, color: 'var(--foreground)', letterSpacing: '-0.02em', fontFamily: 'monospace' }}>{quote.symbol}</p>
-            <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--muted-foreground)' }}>{quote.name}</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3 }}>
+              <p style={{ margin: 0, fontSize: 11, color: 'var(--muted-foreground)' }}>{quote.name}</p>
+              <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 999, background: 'var(--muted)', color: 'var(--muted-foreground)', border: '1px solid var(--border)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                {GROUP_LABELS[group] ?? group}
+              </span>
+            </div>
           </div>
-          <span style={{
-            fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 999,
-            background: 'var(--muted)', color: 'var(--muted-foreground)',
-            border: '1px solid var(--border)', textTransform: 'uppercase', letterSpacing: '0.05em',
-          }}>
-            {GROUP_LABELS[group] ?? group}
-          </span>
+          <button
+            onClick={onClose}
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 26, borderRadius: 6, border: '1px solid var(--border)', background: 'var(--muted)', cursor: 'pointer', color: 'var(--muted-foreground)', flexShrink: 0 }}
+            title="Close"
+          >
+            <X size={12} />
+          </button>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
@@ -138,7 +143,7 @@ const InstrumentPanel: React.FC<{ quote: DashboardQuote }> = ({ quote }) => {
         </div>
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '10px 16px' }}>
+      <div style={{ padding: '10px 16px 20px' }}>
         <p style={{ margin: '0 0 7px', fontSize: 9, fontWeight: 700, color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Related News</p>
         {news.loading && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
@@ -224,6 +229,12 @@ export const WorldEquityIntelligence: React.FC = () => {
   const [search, setSearch] = useState('');
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
   const [view, setView] = useState<ViewMode>('table');
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setSelectedSymbol(null); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'));
@@ -418,18 +429,20 @@ export const WorldEquityIntelligence: React.FC = () => {
             )}
           </div>
 
-          {/* Persistent right panel */}
-          {selectedQuote ? (
-            <div style={{ width: 290, borderLeft: '2px solid var(--border)', background: 'var(--card)', flexShrink: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-              <InstrumentPanel quote={selectedQuote} />
-            </div>
-          ) : (
-            <div style={{ width: 220, borderLeft: '1px solid var(--border)', background: 'var(--card)', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--muted-foreground)' }}>
-              <Globe size={28} style={{ opacity: 0.2 }} />
-              <p style={{ margin: 0, fontSize: 12, fontWeight: 600, textAlign: 'center', padding: '0 20px' }}>Select an instrument</p>
-              <p style={{ margin: 0, fontSize: 10, textAlign: 'center', padding: '0 24px', lineHeight: 1.5 }}>Click any row to open price chart, stats, and news</p>
-            </div>
-          )}
+          {/* Persistent right panel — width:0 by default, slides in on selection */}
+          <div style={{
+            width: selectedQuote ? 320 : 0,
+            flexShrink: 0,
+            overflowX: 'hidden',
+            transition: 'width 240ms cubic-bezier(0.16,1,0.3,1)',
+            borderLeft: selectedQuote ? '2px solid var(--border)' : 'none',
+          }}>
+            {selectedQuote && (
+              <div style={{ minWidth: 320, height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--card)', overflowY: 'auto' }}>
+                <InstrumentPanel quote={selectedQuote} onClose={() => setSelectedSymbol(null)} />
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

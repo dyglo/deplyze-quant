@@ -183,7 +183,7 @@ async def parse_unprocessed_documents(
             "source_url": src.get("document_url"),
             "source_type": src.get("source_type"),
             "ingestion_time": now,
-            "observation_time": src.get("observation_time"),
+            "observation_time": src.get("observation_time").isoformat() if isinstance(src.get("observation_time"), datetime) else src.get("observation_time"),
             "lineage_id": src.get("lineage_id"),
             "confidence": res["extraction_quality"],
             "data_quality_score": res["extraction_quality"],

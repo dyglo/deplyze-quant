@@ -146,7 +146,7 @@ class CalendarClient:
                     "source_url": f"https://fred.stlouisfed.org/release?rid={rid}",
                     "source_type": "calendar",
                     "ingestion_time": ingestion,
-                    "observation_time": event_date,
+                    "observation_time": f"{event_date}T00:00:00Z" if event_date else None,
                     "lineage_id": f"fred_release:{rid}:{event_date}",
                     "confidence": 1.0,
                     "event_type": "macro_release",

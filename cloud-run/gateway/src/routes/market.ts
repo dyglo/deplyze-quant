@@ -27,9 +27,13 @@ const router = Router();
 router.get('/quote/:symbol', async (req, res, next) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
+    // FX, commodities and crypto use XX/YY format — Polygon (US equities only)
+    // and Finnhub return all-zeros for them, masking the real error. Skip
+    // directly to Twelve Data (which supports FX/metals/energy pairs natively).
+    const isCrossAsset = symbol.includes('/');
     const data = await withCache(`quote:v2:${symbol}`, TTL.quote, async () => {
       const { result, providerId } = await withFallback(quoteChain({
-        polygon: async () => {
+        polygon: !isCrossAsset ? async () => {
           const s = await polygon.getSnapshot(symbol);
           const price = s.lastTrade?.p ?? s.day?.c ?? 0;
           return {
@@ -44,18 +48,21 @@ router.get('/quote/:symbol', async (req, res, next) => {
             ts: s.updated ? Math.floor(s.updated / 1_000_000) : Date.now(),
             source: 'polygon',
           };
-        },
-        finnhub: async () => {
+        } : undefined,
+        finnhub: !isCrossAsset ? async () => {
           const q = await finnhub.getQuote(symbol);
+          // Finnhub returns all-zeros for unknown symbols (HTTP 200, not an error).
+          // Treat a zero price as "no data" so Twelve Data is tried instead.
+          if (q.c === 0 && q.pc === 0) throw new Error('Finnhub: no data for symbol');
           return {
             symbol, price: q.c, open: q.o, high: q.h, low: q.l,
             previousClose: q.pc, change: q.d, changePercent: q.dp,
             ts: q.t * 1000, source: 'finnhub',
           };
-        },
+        } : undefined,
         twelve_data: async () => {
-          const q = await td.getQuote(symbol);
-          return { ...q, source: 'twelve_data' };
+          const q = await td.getQuote(td.normalizeTdSymbol(symbol));
+          return { ...q, symbol, source: 'twelve_data' };
         },
       }));
       return { ...result, source: providerId };
@@ -72,10 +79,11 @@ router.get('/quotes', async (req, res, next) => {
     const list = symbols.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean).slice(0, 25);
     const out = await Promise.all(
       list.map(async (sym) => {
+        const isCrossAsset = sym.includes('/');
         try {
           const data = await withCache(`quote:v2:${sym}`, TTL.quote, async () => {
             const { result, providerId } = await withFallback(quoteChain({
-              polygon: async () => {
+              polygon: !isCrossAsset ? async () => {
                 const s = await polygon.getSnapshot(sym);
                 const price = s.lastTrade?.p ?? s.day?.c ?? 0;
                 return {
@@ -84,18 +92,19 @@ router.get('/quotes', async (req, res, next) => {
                   change: s.todaysChange, changePercent: s.todaysChangePerc,
                   ts: s.updated ? Math.floor(s.updated / 1_000_000) : Date.now(), source: 'polygon',
                 };
-              },
-              finnhub: async () => {
+              } : undefined,
+              finnhub: !isCrossAsset ? async () => {
                 const q = await finnhub.getQuote(sym);
+                if (q.c === 0 && q.pc === 0) throw new Error('Finnhub: no data for symbol');
                 return {
                   symbol: sym, price: q.c, open: q.o, high: q.h, low: q.l,
                   previousClose: q.pc, change: q.d, changePercent: q.dp,
                   ts: q.t * 1000, source: 'finnhub',
                 };
-              },
+              } : undefined,
               twelve_data: async () => {
-                const q = await td.getQuote(sym);
-                return { ...q, source: 'twelve_data' };
+                const q = await td.getQuote(td.normalizeTdSymbol(sym));
+                return { ...q, symbol: sym, source: 'twelve_data' };
               },
             }));
             return { ...result, source: providerId };
@@ -157,7 +166,7 @@ router.get('/ohlcv/:symbol', async (req, res, next) => {
             close: b.adjusted_close ?? b.close, volume: b.volume,
           }));
         } : undefined,
-        twelve_data: async () => td.getTimeSeries(symbol, tdInterval, outputsize),
+        twelve_data: async () => td.getTimeSeries(td.normalizeTdSymbol(symbol), tdInterval, outputsize),
         fmp: isDaily ? async () => {
           const rawBars = await fmp.getHistoricalPrice(symbol, pastDate, today, outputsize);
           if (!rawBars.length) throw new Error('FMP: empty response');

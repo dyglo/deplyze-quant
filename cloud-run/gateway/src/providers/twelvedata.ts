@@ -33,6 +33,20 @@ async function _throttle<T>(fn: () => Promise<T>): Promise<T> {
   try { return await fn(); } finally { _release(); }
 }
 
+// ─── Symbol normalisation ─────────────────────────────────────────────────
+// Twelve Data uses standard FX slash-format (EUR/USD) for FX pairs and precious
+// metals (XAU/USD, XAG/USD). Energy and industrial metals may need remapping.
+const TD_SYMBOL_MAP: Record<string, string> = {
+  'BCO/USD':  'BRENT/USD', // Brent crude — Twelve Data uses BRENT not BCO
+  'NG/USD':   'XNG/USD',   // Natural gas
+  // WTI/USD, HG/USD, XAU/USD, XAG/USD are recognised as-is by Twelve Data
+};
+
+/** Translates our internal symbol format to whatever Twelve Data expects. */
+export function normalizeTdSymbol(symbol: string): string {
+  return TD_SYMBOL_MAP[symbol] ?? symbol;
+}
+
 export type TdInterval =
   | '1min' | '5min' | '15min' | '30min' | '45min'
   | '1h' | '2h' | '4h' | '1day' | '1week' | '1month';

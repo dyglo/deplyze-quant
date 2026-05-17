@@ -45,8 +45,8 @@ export async function fetchNews(opts: {
   category?: 'general' | 'forex' | 'crypto' | 'merger';
   limit?: number;
 } = {}): Promise<GatewayNewsItem[]> {
-  const r = await gatewayGet<{ items: GatewayNewsItem[] }>('/market/news', opts, ClientTTL.news);
-  return r.items;
+  const r = await gatewayGet<{ items?: GatewayNewsItem[] | null }>('/market/news', opts, ClientTTL.news);
+  return Array.isArray(r?.items) ? r.items : [];
 }
 
 export interface SymbolMatch {

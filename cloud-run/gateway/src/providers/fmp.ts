@@ -7,6 +7,7 @@
 import { getJson, requireEnv } from './http';
 
 const BASE = 'https://financialmodelingprep.com/api';
+const STABLE = 'https://financialmodelingprep.com/stable';
 function key() { return requireEnv('FMP_API_KEY'); }
 
 // ─── Quote ────────────────────────────────────────────────────────────────
@@ -216,32 +217,41 @@ export async function getHistoricalPrice(
   to?: string,
   limit = 500,
 ): Promise<FmpHistoricalBar[]> {
-  let url = `${BASE}/v3/historical-price-full/${encodeURIComponent(symbol)}?serietype=line&apikey=${key()}`;
-  if (from) url += `&from=${from}`;
-  if (to) url += `&to=${to}`;
-  const r = await getJson<{ historical?: FmpHistoricalBar[] }>('fmp', url);
-  // FMP returns newest-first; reverse to ascending
-  return (r.historical ?? []).slice(0, limit).reverse();
+  // Use stable endpoint — v3/historical-price-full is a legacy endpoint
+  const params = new URLSearchParams({ symbol, apikey: key() });
+  if (from) params.set('from', from);
+  if (to) params.set('to', to);
+  const url = `${STABLE}/historical-price-eod/full?${params}`;
+  const r = await getJson<FmpHistoricalBar[]>('fmp', url);
+  // Stable endpoint returns newest-first; reverse to ascending
+  return (Array.isArray(r) ? r : []).slice(0, limit).reverse();
 }
 
 // ─── Market Movers ────────────────────────────────────────────────────────
 
 export interface FmpMover {
-  ticker: string;
-  changes: number;
+  // Stable API fields
+  symbol: string;
+  name?: string;
   price: number;
-  changesPercentage: string;
-  companyName?: string;
+  change: number;
+  changesPercentage: number;
 }
 
 export async function getGainers(): Promise<FmpMover[]> {
-  return getJson<FmpMover[]>('fmp', `${BASE}/v3/stock_market/gainers?apikey=${key()}`);
+  // Use stable endpoint — v3/stock_market/gainers is a legacy endpoint
+  const r = await getJson<FmpMover[]>('fmp', `${STABLE}/biggest-gainers?apikey=${key()}`);
+  return Array.isArray(r) ? r : [];
 }
 
 export async function getLosers(): Promise<FmpMover[]> {
-  return getJson<FmpMover[]>('fmp', `${BASE}/v3/stock_market/losers?apikey=${key()}`);
+  // Use stable endpoint — v3/stock_market/losers is a legacy endpoint
+  const r = await getJson<FmpMover[]>('fmp', `${STABLE}/biggest-losers?apikey=${key()}`);
+  return Array.isArray(r) ? r : [];
 }
 
 export async function getMostActive(): Promise<FmpMover[]> {
-  return getJson<FmpMover[]>('fmp', `${BASE}/v3/stock_market/actives?apikey=${key()}`);
+  // Use stable endpoint — v3/stock_market/actives is a legacy endpoint
+  const r = await getJson<FmpMover[]>('fmp', `${STABLE}/most-actives?apikey=${key()}`);
+  return Array.isArray(r) ? r : [];
 }

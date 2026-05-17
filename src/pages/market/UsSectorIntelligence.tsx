@@ -20,12 +20,14 @@ import { useSectorDashboard } from '../../hooks/useDashboard';
 import { SECTOR_ETF_SYMBOLS, classifySectors, type DashboardQuote } from '../../services/dashboardService';
 import type { PerformanceRow } from '../../components/market-dashboards/CompactPerformanceTable';
 
+// Wave H — dropped the Relative-Strength and Intelligence tabs. The bar chart
+// already lives in Overview alongside the rotation summary, and the persistent
+// SummaryStrip + ArtifactStrip + NarrativeOverlay supersede the Intelligence
+// tab that previously duplicated the rotation banner.
 const TABS = [
-  { id: 'overview',         label: 'Overview' },
-  { id: 'performance',      label: 'Performance' },
-  { id: 'relative-strength',label: 'Relative Strength' },
-  { id: 'heatmap',          label: 'Heatmap' },
-  { id: 'intelligence',     label: 'Intelligence' },
+  { id: 'overview',    label: 'Overview' },
+  { id: 'performance', label: 'Performance' },
+  { id: 'heatmap',     label: 'Heatmap' },
 ];
 
 const CATEGORY_OPTIONS = [
@@ -256,21 +258,9 @@ export const UsSectorIntelligence: React.FC = () => {
           </DashboardSectionCard>
         )}
 
-        {quotes && activeTab === 'relative-strength' && (
-          <DashboardSectionCard title="Relative Strength vs SPY" subtitle="Click any bar to open sector detail" onRefresh={refresh}>
-            <RelativeStrengthChart quotes={quotes} onBarClick={handleBarClick} />
-          </DashboardSectionCard>
-        )}
-
         {quotes && activeTab === 'heatmap' && (
           <DashboardSectionCard title="Sector Heatmap" subtitle="Grouped by offense/defense/cyclical — click to open detail" onRefresh={refresh}>
             <HeatmapGrid groups={heatmapGroups} onSelectCell={handleCellClick} selectedCell={selectedCell} />
-          </DashboardSectionCard>
-        )}
-
-        {quotes && activeTab === 'intelligence' && (
-          <DashboardSectionCard title="Intelligence Summary">
-            <IntelligenceSummaryView quotes={quotes} />
           </DashboardSectionCard>
         )}
       </DashboardShell>

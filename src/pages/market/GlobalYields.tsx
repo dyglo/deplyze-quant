@@ -19,12 +19,13 @@ import {
   classifyYieldCurve, YIELD_SERIES, type YieldCurveData, type YieldPoint,
 } from '../../services/dashboardService';
 
+// Wave H — dropped the standalone Intelligence tab; the persistent SummaryStrip
+// + IntelligenceView already surfaces curve regime context across all tabs.
 const TABS = [
-  { id: 'curve',        label: 'Yield Curve' },
-  { id: 'table',        label: 'Sovereign Yields' },
-  { id: 'spread',       label: 'Spread History' },
-  { id: 'history',      label: 'Series Charts' },
-  { id: 'intelligence', label: 'Intelligence' },
+  { id: 'curve',   label: 'Yield Curve' },
+  { id: 'table',   label: 'Sovereign Yields' },
+  { id: 'spread',  label: 'Spread History' },
+  { id: 'history', label: 'Series Charts' },
 ];
 
 const CURVE_TERMS = ['3M', '2Y', '5Y', '10Y', '30Y'];
@@ -338,11 +339,6 @@ export const GlobalYields: React.FC = () => {
         </div>
       )}
 
-      {data && activeTab === 'intelligence' && (
-        <DashboardSectionCard title="Macro Intelligence Panel" subtitle="Yield curve regime and liquidity assessment">
-          <IntelligenceView data={data} />
-        </DashboardSectionCard>
-      )}
     </DashboardShell>
   );
 };

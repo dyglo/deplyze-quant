@@ -17,13 +17,12 @@ import { useCommodityDashboard } from '../../hooks/useDashboard';
 import { COMMODITY_SYMBOLS, classifyCommodities, type DashboardQuote } from '../../services/dashboardService';
 import type { PerformanceRow } from '../../components/market-dashboards/CompactPerformanceTable';
 
+// Wave H — dropped Energy / Metals tabs (filter-only duplicates of Overview)
+// and the Intelligence tab (replaced by persistent SummaryStrip band above).
 const TABS = [
-  { id: 'overview',     label: 'Overview' },
-  { id: 'energy',       label: 'Energy' },
-  { id: 'metals',       label: 'Metals' },
-  { id: 'heatmap',      label: 'Heatmap' },
-  { id: 'cross-asset',  label: 'Cross-Asset' },
-  { id: 'intelligence', label: 'Intelligence' },
+  { id: 'overview',    label: 'Overview' },
+  { id: 'heatmap',     label: 'Heatmap' },
+  { id: 'cross-asset', label: 'Cross-Asset' },
 ];
 
 const CAT_OPTIONS = [
@@ -172,18 +171,6 @@ export const CommoditiesIntelligence: React.FC = () => {
           </div>
         )}
 
-        {quotes && activeTab === 'energy' && (
-          <DashboardSectionCard title="Energy Commodities" subtitle="Click any row to open detail" onRefresh={refresh}>
-            <CompactPerformanceTable rows={buildRows(quotes, 'energy')} showSparkline={false} onRowClick={handleRowClick} selectedSymbol={selectedCell} />
-          </DashboardSectionCard>
-        )}
-
-        {quotes && activeTab === 'metals' && (
-          <DashboardSectionCard title="Metals" subtitle="Click any row to open detail" onRefresh={refresh}>
-            <CompactPerformanceTable rows={buildRows(quotes, 'metals')} showSparkline={false} onRowClick={handleRowClick} selectedSymbol={selectedCell} />
-          </DashboardSectionCard>
-        )}
-
         {quotes && activeTab === 'heatmap' && (
           <DashboardSectionCard title="Commodity Heatmap" subtitle="Click any tile to open instrument detail" onRefresh={refresh}>
             <HeatmapGrid groups={heatmapGroups} onSelectCell={handleCellClick} selectedCell={selectedCell} />
@@ -223,9 +210,6 @@ export const CommoditiesIntelligence: React.FC = () => {
           </DashboardSectionCard>
         )}
 
-        {quotes && activeTab === 'intelligence' && (
-          <DashboardSectionCard title="Intelligence Summary"><IntelligenceSummaryView quotes={quotes} /></DashboardSectionCard>
-        )}
       </DashboardShell>
 
       <InstrumentDetailDrawer row={drawerState.row} open={drawerState.open} onClose={closeDrawer} />

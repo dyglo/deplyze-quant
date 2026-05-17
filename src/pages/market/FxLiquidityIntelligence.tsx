@@ -18,13 +18,14 @@ import { useFXDashboard } from '../../hooks/useDashboard';
 import { FX_SYMBOLS, classifyFX, type DashboardQuote } from '../../services/dashboardService';
 import type { PerformanceRow } from '../../components/market-dashboards/CompactPerformanceTable';
 
+// Wave H — dropped the standalone G10 tab (the chart already lives in Overview)
+// and the Intelligence tab (replaced by the persistent SummaryStrip +
+// NarrativeOverlay band above).
 const TABS = [
-  { id: 'overview',     label: 'Overview' },
-  { id: 'g10',          label: 'G10 FX' },
-  { id: 'performance',  label: 'All Pairs' },
-  { id: 'heatmap',      label: 'Heatmap' },
-  { id: 'liquidity',    label: 'Liquidity' },
-  { id: 'intelligence', label: 'Intelligence' },
+  { id: 'overview',    label: 'Overview' },
+  { id: 'performance', label: 'All Pairs' },
+  { id: 'heatmap',     label: 'Heatmap' },
+  { id: 'liquidity',   label: 'Liquidity' },
 ];
 
 function fmtFXPrice(n: number) {
@@ -119,55 +120,120 @@ const IntelligenceSummaryView: React.FC<{ quotes: DashboardQuote[] }> = ({ quote
   );
 };
 
+/**
+ * LiquidityPanel — Wave H rewrite.
+ *
+ * Replaces the four static text cards with live, data-grounded readouts.
+ * Each metric is derived from the FX universe we already fetch, and the
+ * interpretation line is short and conditional on the actual number — not
+ * boilerplate. If a value is unavailable we omit the card rather than
+ * fabricate context.
+ */
 const LiquidityPanel: React.FC<{ quotes: DashboardQuote[] }> = ({ quotes }) => {
-  const dxy = quotes.find((q) => q.symbol === 'UUP');
-  const intel = useMemo(() => classifyFX(quotes), [quotes]);
-  const isStrong = intel.regime === 'strengthening';
-  const isWeak   = intel.regime === 'weakening';
+  const dxy = quotes.find((q) => q.symbol === 'UUP' && q.ok);
+  const usdjpy = quotes.find((q) => q.symbol === 'USD/JPY' && q.ok);
+  const eurusd = quotes.find((q) => q.symbol === 'EUR/USD' && q.ok);
+  const gbpusd = quotes.find((q) => q.symbol === 'GBP/USD' && q.ok);
+  const usdchf = quotes.find((q) => q.symbol === 'USD/CHF' && q.ok);
 
-  const cards = [
-    {
+  // G10 dispersion proxies "monetary divergence" intensity.
+  const g10 = quotes.filter((q) => q.ok && q.symbol !== 'UUP');
+  const stdev = (() => {
+    if (g10.length < 2) return null;
+    const mean = g10.reduce((s, q) => s + q.changePercent, 0) / g10.length;
+    const variance = g10.reduce((s, q) => s + (q.changePercent - mean) ** 2, 0) / g10.length;
+    return Math.sqrt(variance);
+  })();
+
+  const dxyDir = dxy ? (dxy.changePercent > 0.3 ? 'strengthening' : dxy.changePercent < -0.3 ? 'weakening' : 'rangebound') : null;
+
+  type Card = { title: string; value: string; body: string; color: string };
+  const cards: Card[] = [];
+
+  // Global liquidity card — DXY direction as primary driver.
+  if (dxy && dxyDir) {
+    cards.push({
       title: 'Global Liquidity Condition',
-      body: isStrong
-        ? 'Dollar strength signals tighter global liquidity — elevated USD funding costs, EM stress risk, commodity headwinds.'
-        : isWeak
-        ? 'Dollar weakness supports looser global liquidity — cheaper USD funding, EM tailwind, commodity support.'
-        : 'Neutral liquidity conditions — no strong directional signal from dollar alone.',
-      color: isStrong ? 'var(--primary)' : isWeak ? '#4E6040' : 'var(--muted-foreground)',
-    },
-    {
-      title: 'EM Currency Risk',
-      body: isStrong
-        ? 'Strong dollar increases EM FX pressure, widening current account deficits and raising USD-denominated debt service costs.'
-        : 'Weaker dollar provides relief to EM FX — reduces debt burden and supports capital inflows.',
-      color: 'var(--muted-foreground)',
-    },
-    {
+      value: `DXY proxy ${dxy.changePercent >= 0 ? '+' : ''}${dxy.changePercent.toFixed(2)}%`,
+      body: dxyDir === 'strengthening'
+        ? 'Tighter — elevated USD funding costs, EM stress risk, commodity headwinds.'
+        : dxyDir === 'weakening'
+        ? 'Looser — cheaper USD funding, EM tailwind, commodity support.'
+        : 'Neutral — no strong directional signal from the dollar alone.',
+      color: dxyDir === 'strengthening' ? 'var(--primary)' : dxyDir === 'weakening' ? '#4E6040' : 'var(--muted-foreground)',
+    });
+  }
+
+  // Carry trade — USD/JPY level + direction. Up = carry-on.
+  if (usdjpy) {
+    const direction = usdjpy.changePercent > 0.2 ? 'carry-on' : usdjpy.changePercent < -0.2 ? 'carry-off' : 'flat';
+    cards.push({
       title: 'Carry Trade Conditions',
-      body: 'Carry trades involve borrowing low-yield currencies (JPY, CHF) to invest in higher-yield ones. USD/JPY direction proxies carry appetite — rising USD/JPY = carry-on.',
-      color: 'var(--chart-3)',
-    },
-    {
+      value: `USD/JPY ${usdjpy.price.toFixed(2)} (${usdjpy.changePercent >= 0 ? '+' : ''}${usdjpy.changePercent.toFixed(2)}%)`,
+      body: direction === 'carry-on'
+        ? 'USDJPY rising — risk appetite for carry; JPY funding flows out.'
+        : direction === 'carry-off'
+        ? 'USDJPY falling — carry unwind risk; JPY repatriation pressure.'
+        : 'USDJPY range-bound — carry appetite neutral.',
+      color: direction === 'carry-on' ? 'var(--ds-gain, #4E6040)' : direction === 'carry-off' ? 'var(--primary)' : 'var(--muted-foreground)',
+    });
+  }
+
+  // Central bank divergence — proxied by G10 cross-sectional dispersion.
+  if (stdev != null && eurusd && usdjpy) {
+    const eurUsdJpy = eurusd.changePercent - usdjpy.changePercent;
+    cards.push({
       title: 'Central Bank Divergence',
-      body: 'FX moves are driven by relative monetary policy. A widening rate differential (Fed vs ECB vs BoJ) accelerates divergence trades. Monitor central bank guidance for directional shifts.',
-      color: 'var(--muted-foreground)',
-    },
-  ];
+      value: `G10 dispersion σ ${stdev.toFixed(2)}% · EUR–JPY gap ${eurUsdJpy >= 0 ? '+' : ''}${eurUsdJpy.toFixed(2)}%`,
+      body: stdev > 0.4
+        ? 'High dispersion — monetary divergence is driving cross-FX moves.'
+        : stdev > 0.2
+        ? 'Moderate dispersion — pairs trading on rate differentials.'
+        : 'Low dispersion — G10 moving together; risk-on/off dominating policy.',
+      color: stdev > 0.4 ? 'var(--primary)' : 'var(--muted-foreground)',
+    });
+  }
+
+  // EM currency risk — best-effort from majors as we don't fetch EM FX here.
+  if (dxy) {
+    const pressure = dxy.changePercent;
+    cards.push({
+      title: 'EM Currency Risk Proxy',
+      value: `DXY ${pressure >= 0 ? '+' : ''}${pressure.toFixed(2)}% · ${pressure > 0.3 ? 'pressuring' : pressure < -0.3 ? 'relieving' : 'neutral for'} EM FX`,
+      body: pressure > 0.3
+        ? 'Stronger dollar widens EM funding costs and raises USD-debt service.'
+        : pressure < -0.3
+        ? 'Weaker dollar reduces EM debt burden and supports inflows.'
+        : 'No directional dollar pressure on EM FX today.',
+      color: pressure > 0.3 ? 'var(--primary)' : pressure < -0.3 ? '#4E6040' : 'var(--muted-foreground)',
+    });
+  }
+
+  // Major-pair direction summary (one-line context, not its own card).
+  const majorParts = [
+    eurusd ? `EUR/USD ${eurusd.changePercent >= 0 ? '+' : ''}${eurusd.changePercent.toFixed(2)}%` : null,
+    gbpusd ? `GBP/USD ${gbpusd.changePercent >= 0 ? '+' : ''}${gbpusd.changePercent.toFixed(2)}%` : null,
+    usdchf ? `USD/CHF ${usdchf.changePercent >= 0 ? '+' : ''}${usdchf.changePercent.toFixed(2)}%` : null,
+  ].filter(Boolean);
+
+  if (!cards.length) {
+    return <p style={{ fontSize: 11, color: 'var(--muted-foreground)' }}>FX data unavailable.</p>;
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {dxy && (
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '10px 12px', borderRadius: 8, background: 'var(--muted)', border: '1px solid var(--border)', marginBottom: 4 }}>
-          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--foreground)' }}>DXY Proxy (UUP)</span>
-          <span style={{ fontSize: 14, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: dxy.changePercent >= 0 ? 'var(--primary)' : '#4E6040' }}>
-            {dxy.changePercent >= 0 ? '+' : ''}{dxy.changePercent.toFixed(2)}%
-          </span>
-          <span style={{ fontSize: 10, color: 'var(--muted-foreground)', marginLeft: 'auto' }}>UUP ETF — dollar index proxy</span>
-        </div>
+      {majorParts.length > 0 && (
+        <p style={{
+          margin: 0, fontSize: 10, color: 'var(--muted-foreground)',
+          fontVariantNumeric: 'tabular-nums', letterSpacing: '0.01em',
+        }}>
+          {majorParts.join(' · ')}
+        </p>
       )}
       {cards.map((c) => (
         <div key={c.title} style={{ padding: '10px 12px', borderRadius: 8, background: 'var(--muted)', border: '1px solid var(--border)' }}>
-          <p style={{ margin: '0 0 4px', fontSize: 11, fontWeight: 700, color: c.color }}>{c.title}</p>
+          <p style={{ margin: '0 0 2px', fontSize: 11, fontWeight: 700, color: c.color }}>{c.title}</p>
+          <p style={{ margin: '0 0 4px', fontSize: 12, fontWeight: 600, color: 'var(--foreground)', fontVariantNumeric: 'tabular-nums' }}>{c.value}</p>
           <p style={{ margin: 0, fontSize: 11, color: 'var(--muted-foreground)', lineHeight: 1.5 }}>{c.body}</p>
         </div>
       ))}
@@ -249,12 +315,6 @@ export const FxLiquidityIntelligence: React.FC = () => {
           </div>
         )}
 
-        {quotes && activeTab === 'g10' && (
-          <DashboardSectionCard title="G10 FX Ranked" subtitle="Click any bar to open pair detail" onRefresh={refresh}>
-            <G10BarChart quotes={quotes} onBarClick={handleBarClick} />
-          </DashboardSectionCard>
-        )}
-
         {quotes && activeTab === 'performance' && (
           <DashboardSectionCard title="All FX Pairs" subtitle="Click a row to open detail" onRefresh={refresh}>
             <DashboardFilterBar search={search} onSearchChange={setSearch} searchPlaceholder="Search pair…" resultCount={filteredRows.length} />
@@ -272,10 +332,6 @@ export const FxLiquidityIntelligence: React.FC = () => {
           <DashboardSectionCard title="Liquidity Pressure Panel" subtitle="Dollar regime and global liquidity conditions">
             <LiquidityPanel quotes={quotes} />
           </DashboardSectionCard>
-        )}
-
-        {quotes && activeTab === 'intelligence' && (
-          <DashboardSectionCard title="FX Intelligence Summary"><IntelligenceSummaryView quotes={quotes} /></DashboardSectionCard>
         )}
       </DashboardShell>
 

@@ -6,6 +6,7 @@ import { usePins } from '../hooks/usePins';
 import { useDrawer } from '../components/quant/DataDrawer';
 import { useLibraryStats } from '../hooks/useLibraryStats';
 import { PageHeader } from '../components/quant/PageHeader';
+import { V3P2LatestBriefingsPanel } from '../components/quant/V3P2LatestBriefingsPanel';
 import { LibraryCharts, type ChartSelection } from '../components/quant/LibraryCharts';
 import { LibraryCard } from '../components/quant/LibraryCard';
 import { ArtifactDetailDrawerBody } from '../components/quant/ArtifactDetailDrawerBody';
@@ -177,6 +178,10 @@ export const ResearchLibrary: React.FC = () => {
         title="Research Library"
         subtitle="Your manually saved intelligence — snapshots, briefings, lab sessions, and insights."
       />
+
+      {/* V3 Phase 2 — warehouse-backed deterministic briefings (separate from
+          the user's manually saved library below). */}
+      <V3P2LatestBriefingsPanel />
 
       {isEmpty ? (
         <div className="ds-empty" style={{ minHeight: 320 }}>

@@ -35,6 +35,7 @@ export * from './artifacts';
 export * from './regimes';
 export * from './anomalies';
 export * from './analog';
+export * from './contextualAnalog';
 export * from './crossAsset';
 export * from './benchmarkIntel';
 export * from './copilotContext';

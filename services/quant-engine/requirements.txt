@@ -47,6 +47,9 @@ pytz==2024.2
 
 # V3 Phase 2 — public-source refinery
 feedparser==6.0.11        # RSS/Atom parsing for narrative ingestion
+beautifulsoup4==4.12.3    # HTML parsing for document extraction
+lxml==5.3.0               # fast XML/HTML backend for bs4
+pypdf==5.1.0              # PDF text extraction (pure-Python, no system libs)
 
 # Testing (keep in same file; pin to allow dev installs)
 pytest==8.3.4

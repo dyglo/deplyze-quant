@@ -10,6 +10,8 @@ import { DashboardPageTabs } from '../../components/market-dashboards/DashboardP
 import { DashboardFilterBar } from '../../components/market-dashboards/DashboardFilterBar';
 import { InstrumentDetailDrawer, useInstrumentDrawer } from '../../components/market-dashboards/InstrumentDetailDrawer';
 import { DashboardLoadingState, DashboardErrorState, SourceFreshnessBadge } from '../../components/market-dashboards/DashboardStates';
+import { SummaryStrip } from '../../components/intelligence-drawer';
+import { fxSummary } from '../../lib/intelligence/summaries';
 import { useFXDashboard } from '../../hooks/useDashboard';
 import { FX_SYMBOLS, classifyFX, type DashboardQuote } from '../../services/dashboardService';
 import type { PerformanceRow } from '../../components/market-dashboards/CompactPerformanceTable';
@@ -208,6 +210,8 @@ export const FxLiquidityIntelligence: React.FC = () => {
     if (q) { openDrawer(q, 'fx'); setSelectedCell(sym); }
   };
 
+  const summary = useMemo(() => quotes ? fxSummary(quotes) : null, [quotes]);
+
   return (
     <>
       <DashboardShell
@@ -215,6 +219,7 @@ export const FxLiquidityIntelligence: React.FC = () => {
         subtitle="Currency and dollar monitoring — click any pair for full detail, or any bar to open its intelligence panel."
         actions={quotes ? <SourceFreshnessBadge source="Market Data" status={status} fetchedAt={fetchedAt} /> : undefined}
       >
+        <SummaryStrip payload={summary} />
         {/* KPI Strip */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(148px, 1fr))', gap: 10, marginBottom: 16 }}>
           {dxy    && <IntelligenceMetricCard label="DXY (UUP proxy)" value={fmtFXPrice(dxy.price)}    changePercent={dxy.changePercent}    status={status} fetchedAt={fetchedAt} hint="Dollar index ETF" onClick={() => openDrawer(dxy, 'fx')} />}

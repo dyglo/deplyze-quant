@@ -10,6 +10,8 @@ import { IntelligenceMetricCard } from '../../components/market-dashboards/Intel
 import { DashboardPageTabs } from '../../components/market-dashboards/DashboardPageTabs';
 import { DashboardLoadingState, DashboardErrorState, SourceFreshnessBadge } from '../../components/market-dashboards/DashboardStates';
 import { MiniTrendChart } from '../../components/market-dashboards/MiniTrendChart';
+import { SummaryStrip } from '../../components/intelligence-drawer';
+import { yieldsSummary } from '../../lib/intelligence/summaries';
 import { useYieldCurve } from '../../hooks/useDashboard';
 import {
   classifyYieldCurve, YIELD_SERIES, type YieldCurveData, type YieldPoint,
@@ -239,12 +241,15 @@ export const GlobalYields: React.FC = () => {
     setActiveTab('history');
   };
 
+  const summary = useMemo(() => data ? yieldsSummary(data) : null, [data]);
+
   return (
     <DashboardShell
       title={<span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><TrendingUp size={18} />Global Yields</span>}
       subtitle="Macro rates and yield regime monitoring — click any tenor to view its full history."
       actions={data ? <SourceFreshnessBadge source="FRED / Alpha Vantage" status={status} fetchedAt={fetchedAt} /> : undefined}
     >
+      <SummaryStrip payload={summary} />
       {/* KPI Strip */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 10, marginBottom: 16 }}>
         {key10y && <IntelligenceMetricCard label="US 10Y Treasury" value={key10y.value !== null ? `${key10y.value.toFixed(3)}%` : 'N/A'} status={status} fetchedAt={fetchedAt} hint="Click table for history" onClick={() => handlePointClick(key10y)} />}

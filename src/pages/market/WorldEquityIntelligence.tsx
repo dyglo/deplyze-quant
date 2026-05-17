@@ -6,6 +6,8 @@ import { FreshnessBadge } from '../../components/quant/FreshnessBadge';
 import { NewsList } from '../../components/quant/NewsList';
 import { HeatmapGrid } from '../../components/market-dashboards/HeatmapGrid';
 import { DashboardErrorState } from '../../components/market-dashboards/DashboardStates';
+import { SummaryStrip } from '../../components/intelligence-drawer';
+import { worldEquitySummary } from '../../lib/intelligence/summaries';
 import { useWorldEquity } from '../../hooks/useDashboard';
 import { useOHLCV, useNews } from '../../hooks/useMarket';
 import {
@@ -288,6 +290,8 @@ export const WorldEquityIntelligence: React.FC = () => {
 
   const ok = quotes?.filter((q) => q.ok) ?? [];
 
+  const summary = useMemo(() => quotes ? worldEquitySummary(quotes) : null, [quotes]);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
       <MarketPulseStrip />
@@ -306,6 +310,8 @@ export const WorldEquityIntelligence: React.FC = () => {
           </button>
         </div>
       </div>
+
+      <SummaryStrip payload={summary} />
 
       {/* Filter + view-mode bar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 20px', borderBottom: '1px solid var(--border)', background: 'var(--card)', flexShrink: 0, flexWrap: 'wrap' }}>

@@ -74,6 +74,7 @@ import fundamentalsRouter from './routes/fundamentals';
 import earningsRouter from './routes/earnings';
 import edgarRouter from './routes/edgar';
 import intelligenceRouter from './routes/intelligence';
+import v3p2Router from './routes/v3p2';
 
 // ─── Firebase Admin init (idempotent) ──────────────────────────────────────
 
@@ -144,6 +145,11 @@ router.use('/fundamentals', fundamentalsRouter);
 router.use('/earnings', earningsRouter);
 router.use('/edgar', edgarRouter);
 router.use('/intelligence', intelligenceRouter);
+// V3 Phase 2 routes — multi-prefix (/macro/regimes, /filings/*, /narratives/*,
+// /research/macro-observations, /relations/context, /briefings/latest).
+// Mounted last so the established /macro and /briefings routers handle their
+// existing sub-paths first; v3p2Router fills in the new V3P2 ones.
+router.use('/', v3p2Router);
 
 // Mount router on both paths to handle local dev (/v1) and prod proxy (/api/v1)
 app.use(['/v1', '/api/v1'], router);

@@ -12,7 +12,7 @@ function fmtPrice(n: number): string {
 }
 
 const STATUS_CONFIG: Record<MarketStatus, { label: string; color: string; dot: string }> = {
-  'open':        { label: 'Market Open',   color: '#4E6040', dot: '#4E6040' },
+  'open':        { label: 'Market Open',   color: 'var(--ds-gain)', dot: 'var(--ds-gain)' },
   'pre-market':  { label: 'Pre-Market',    color: '#9A7B1D', dot: '#C9A227' },
   'after-hours': { label: 'After Hours',   color: '#6A9BCC', dot: '#6A9BCC' },
   'closed':      { label: 'Market Closed', color: '#8A8680', dot: '#B1ADA1' },
@@ -83,7 +83,7 @@ export const MarketPulseStrip: React.FC = () => {
         {(data?.indices ?? []).map((idx) => {
           const pos = idx.changePercent > 0;
           const neg = idx.changePercent < 0;
-          const clr = pos ? '#4E6040' : neg ? 'var(--primary)' : 'var(--muted-foreground)';
+          const clr = pos ? 'var(--ds-gain)' : neg ? 'var(--ds-loss)' : 'var(--muted-foreground)';
           return (
             <div key={idx.symbol} style={{
               display: 'flex', alignItems: 'center', gap: 6,
@@ -114,16 +114,16 @@ export const MarketPulseStrip: React.FC = () => {
               Breadth
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <span style={{ fontSize: 10, color: '#4E6040', fontWeight: 700 }}>▲{data.advancers}</span>
+              <span style={{ fontSize: 10, color: 'var(--ds-gain)', fontWeight: 700 }}>▲{data.advancers}</span>
               <span style={{ fontSize: 10, color: 'var(--muted-foreground)' }}>·</span>
-              <span style={{ fontSize: 10, color: 'var(--primary)', fontWeight: 700 }}>▼{data.decliners}</span>
+              <span style={{ fontSize: 10, color: 'var(--ds-loss)', fontWeight: 700 }}>▼{data.decliners}</span>
             </div>
             <div style={{
               width: 40, height: 4, borderRadius: 999, background: 'var(--muted)', overflow: 'hidden',
             }}>
               <div style={{
                 height: '100%', width: `${data.breadthPct}%`,
-                background: data.breadthPct > 50 ? '#4E6040' : 'var(--primary)',
+                background: data.breadthPct > 50 ? 'var(--ds-gain)' : 'var(--primary)',
                 borderRadius: 999, transition: 'width 0.5s ease',
               }} />
             </div>

@@ -55,8 +55,18 @@
   --popover-foreground: #1F1E1D;
 
   /* Brand */
-  --primary:          #C15F3C;  /* Crail – terracotta */
+  --primary:          #C15F3C;  /* Crail – terracotta (brand accent only) */
   --primary-foreground: #F4F3EE;
+
+  /* Performance — gain/loss system (separate from brand) */
+  --ds-gain:          #5A7052;  /* Olive green – advancing */
+  --ds-gain-muted:    rgba(90, 112, 82, 0.18);
+  --ds-gain-strong:   #3D5A34;
+  --ds-gain-fg:       #D4E8CC;  /* Text on dark gain bg */
+  --ds-loss:          #B03A2E;  /* Brick red – declining */
+  --ds-loss-muted:    rgba(176, 58, 46, 0.18);
+  --ds-loss-strong:   #7A2515;
+  --ds-loss-fg:       #F5D5D0;  /* Text on dark loss bg */
 
   /* UI */
   --secondary:        #EDECD8;
@@ -100,6 +110,16 @@
 }
 
 .dark {
+  /* Performance — dark mode adjustments */
+  --ds-gain:          #6B8A5E;
+  --ds-gain-muted:    rgba(107, 138, 94, 0.20);
+  --ds-gain-strong:   #4A6741;
+  --ds-gain-fg:       #C8E0BC;
+  --ds-loss:          #C4503F;
+  --ds-loss-muted:    rgba(196, 80, 63, 0.20);
+  --ds-loss-strong:   #8B2E20;
+  --ds-loss-fg:       #F5CFC9;
+
   /* Core surfaces — Moonlit cozy charcoal dark */
   --background:       #191919;  /* Cozy dark charcoal background */
   --foreground:       #E6DFD5;  /* Soft warm off-white main text */

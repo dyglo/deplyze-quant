@@ -103,7 +103,7 @@ export const IntelligenceSidePanel: React.FC<Props> = ({ row, onClose, onSave, i
 
   const volState = computeVolatilityState(cp);
   const momentumScore = computeMomentumScore(cp);
-  const anomalyTag = computeAnomalyTag(cp, q?.volume);
+  const anomalyTag = computeAnomalyTag(cp, undefined);
 
   const explanation = deriveExplanation(
     row,
@@ -233,7 +233,7 @@ export const IntelligenceSidePanel: React.FC<Props> = ({ row, onClose, onSave, i
 
             {/* Regime */}
             {regime.regime?.label && (
-              <RegimeBadge regime={regime.regime.label} />
+              <RegimeBadge regime={regime.regime.label as import('../../types').RegimeLabel} />
             )}
           </div>
         </section>
@@ -262,9 +262,9 @@ export const IntelligenceSidePanel: React.FC<Props> = ({ row, onClose, onSave, i
               <div style={{ fontSize: 11, color: 'var(--foreground)', lineHeight: 1.5 }}>
                 {regime.volatilityEvent.narrative}
               </div>
-              {(regime.volatilityEvent as { percentileRank?: number }).percentileRank != null && (
+              {regime.volatilityEvent.payload.percentileRank != null && (
                 <div style={{ marginTop: 6, fontSize: 10, color: 'var(--muted-foreground)' }}>
-                  Volatility at {((regime.volatilityEvent as { percentileRank: number }).percentileRank * 100).toFixed(0)}th historical percentile.
+                  Volatility at {(regime.volatilityEvent.payload.percentileRank * 100).toFixed(0)}th historical percentile.
                 </div>
               )}
             </div>

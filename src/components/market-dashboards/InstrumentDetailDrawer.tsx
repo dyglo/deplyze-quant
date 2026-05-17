@@ -13,6 +13,7 @@ import { IntelligenceDrawer } from '../intelligence-drawer';
 import { IntelligenceSidePanel } from '../quant/IntelligenceSidePanel';
 import { useOHLCV } from '../../hooks/useMarket';
 import { buildHistoricalPayload } from '../../lib/intelligence/historicalContext';
+import { buildLinksForSymbol } from '../../lib/intelligence/crossLinks';
 import {
   computeVolatilityState,
   computeMomentumScore,
@@ -103,10 +104,19 @@ export const InstrumentDetailDrawer: React.FC<InstrumentDetailDrawerProps> = ({ 
     return buildHistoricalPayload(ohlcv.data?.bars ?? null);
   }, [supportsHistory, ohlcv.data]);
 
+  const linkedPayload = useMemo(() => {
+    if (!row) return null;
+    const dashboards = buildLinksForSymbol({ symbol: row.symbol, assetClass: row.assetClass });
+    return dashboards.length > 0 ? { dashboards } : null;
+  }, [row]);
+
   if (!open && !row) return null;
 
-  const sections = historicalPayload
-    ? { historical: { payload: historicalPayload } }
+  const sections = (historicalPayload || linkedPayload)
+    ? {
+        ...(historicalPayload ? { historical: { payload: historicalPayload } } : {}),
+        ...(linkedPayload ? { linked: { payload: linkedPayload } } : {}),
+      }
     : undefined;
 
   return (

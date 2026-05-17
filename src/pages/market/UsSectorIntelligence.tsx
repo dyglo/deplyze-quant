@@ -12,6 +12,8 @@ import { DashboardPageTabs } from '../../components/market-dashboards/DashboardP
 import { DashboardFilterBar } from '../../components/market-dashboards/DashboardFilterBar';
 import { InstrumentDetailDrawer, useInstrumentDrawer } from '../../components/market-dashboards/InstrumentDetailDrawer';
 import { DashboardLoadingState, DashboardErrorState, SourceFreshnessBadge } from '../../components/market-dashboards/DashboardStates';
+import { SummaryStrip } from '../../components/intelligence-drawer';
+import { sectorSummary } from '../../lib/intelligence/summaries';
 import { useSectorDashboard } from '../../hooks/useDashboard';
 import { SECTOR_ETF_SYMBOLS, classifySectors, type DashboardQuote } from '../../services/dashboardService';
 import type { PerformanceRow } from '../../components/market-dashboards/CompactPerformanceTable';
@@ -201,6 +203,8 @@ export const UsSectorIntelligence: React.FC = () => {
     ? quotes.filter((q) => ['XLU','XLP','XLV'].includes(q.symbol) && q.ok).reduce((s, q) => s + q.changePercent, 0) / 3
     : 0;
 
+  const summary = useMemo(() => quotes ? sectorSummary(quotes) : null, [quotes]);
+
   return (
     <>
       <DashboardShell
@@ -208,6 +212,7 @@ export const UsSectorIntelligence: React.FC = () => {
         subtitle="Sector rotation monitoring — click any bar, tile, or row for full instrument detail."
         actions={quotes ? <SourceFreshnessBadge source="Market Data" status={status} fetchedAt={fetchedAt} /> : undefined}
       >
+        <SummaryStrip payload={summary} />
         {/* KPI Strip */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 10, marginBottom: 16 }}>
           {spy && (

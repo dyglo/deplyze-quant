@@ -1,4 +1,5 @@
 export { IntelligenceDrawer } from './IntelligenceDrawer';
+export { SummaryStrip } from './SummaryStrip';
 export type {
   IntelligenceDrawerProps,
   IntelligenceDrawerSectionConfig,

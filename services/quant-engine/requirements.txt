@@ -45,6 +45,9 @@ apscheduler==3.10.4
 python-dateutil==2.9.0
 pytz==2024.2
 
+# V3 Phase 2 — public-source refinery
+feedparser==6.0.11        # RSS/Atom parsing for narrative ingestion
+
 # Testing (keep in same file; pin to allow dev installs)
 pytest==8.3.4
 pytest-asyncio==0.24.0

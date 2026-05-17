@@ -91,10 +91,11 @@ class EntityFeatureRequest(BaseModel):
 
 
 class MacroRegimeRequest(BaseModel):
-    # No knobs for now — the engine is deterministic over latest data. Kept as
-    # a model so future extensions (override series list, fix as-of-date) don't
-    # break the route shape.
     pass
+
+
+class NarrativeIntelligenceRequest(BaseModel):
+    lookback_days: int = 180
 
 
 def _new_run(pipeline_name: str) -> dict:
@@ -300,6 +301,19 @@ async def intelligence_macro_regime(req: MacroRegimeRequest, background_tasks: B
     run = _new_run("macro_regime")
     background_tasks.add_task(compute_macro_regimes, run["run_id"])
     return {"run_id": run["run_id"], "status": "queued"}
+
+
+@router.post("/intelligence/narratives")
+async def intelligence_narratives(req: NarrativeIntelligenceRequest, background_tasks: BackgroundTasks):
+    """
+    V3 Phase 2 · Wave H — narrative theme intelligence over the last
+    `lookback_days`. Writes narrative_features + narrative_memory +
+    narrative_artifacts + per-document narrative_cleaned rows.
+    """
+    from app.intelligence.narratives import compute_narrative_intelligence
+    run = _new_run("narrative_intelligence")
+    background_tasks.add_task(compute_narrative_intelligence, run["run_id"], lookback_days=req.lookback_days)
+    return {"run_id": run["run_id"], "status": "queued", "lookback_days": req.lookback_days}
 
 
 @router.get("/status/{run_id}")

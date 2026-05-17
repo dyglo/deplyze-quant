@@ -64,6 +64,22 @@ class FredIngestRequest(BaseModel):
     days_back: int = 1825                       # 5y default if no since_date
 
 
+class CotIngestRequest(BaseModel):
+    markets: Optional[List[str]] = None         # defaults to DEFAULT_MARKETS
+    since_date: Optional[str] = None            # YYYY-MM-DD
+
+
+class RssIngestRequest(BaseModel):
+    # Each entry: [feed_name, feed_url]. None → DEFAULT_FEEDS.
+    feeds: Optional[List[List[str]]] = None
+
+
+class CalendarIngestRequest(BaseModel):
+    releases: Optional[List[int]] = None        # FRED release_ids; None → DEFAULT_RELEASES
+    since_date: Optional[str] = None            # YYYY-MM-DD
+    days_ahead: int = 120
+
+
 def _new_run(pipeline_name: str) -> dict:
     run_id = str(uuid.uuid4())
     run = {
@@ -187,6 +203,44 @@ async def ingest_fred(req: FredIngestRequest, background_tasks: BackgroundTasks)
         "since_date": req.since_date,
         "days_back": req.days_back,
     }
+
+
+@router.post("/ingest/cot")
+async def ingest_cot(req: CotIngestRequest, background_tasks: BackgroundTasks):
+    """V3 Phase 2 · Wave D — CFTC Commitment of Traders ingestion."""
+    from app.refinery.public_ingestors import ingest_cot_reports
+    run = _new_run("cot_ingest")
+    background_tasks.add_task(ingest_cot_reports, run["run_id"], req.markets, req.since_date)
+    return {"run_id": run["run_id"], "status": "queued",
+            "markets": len(req.markets) if req.markets else "default"}
+
+
+@router.post("/ingest/rss")
+async def ingest_rss(req: RssIngestRequest, background_tasks: BackgroundTasks):
+    """V3 Phase 2 · Wave D — RSS / Atom feed ingestion."""
+    from app.refinery.public_ingestors import ingest_rss_feeds
+    feeds = [(f[0], f[1]) for f in (req.feeds or []) if len(f) >= 2] or None
+    run = _new_run("rss_ingest")
+    background_tasks.add_task(ingest_rss_feeds, run["run_id"], feeds)
+    return {"run_id": run["run_id"], "status": "queued",
+            "feed_count": len(feeds) if feeds else "default"}
+
+
+@router.post("/ingest/calendar")
+async def ingest_calendar(req: CalendarIngestRequest, background_tasks: BackgroundTasks):
+    """V3 Phase 2 · Wave D — Economic-release calendar ingestion (FRED-backed)."""
+    from app.refinery.public_ingestors import ingest_release_calendar
+    run = _new_run("calendar_ingest")
+    background_tasks.add_task(
+        ingest_release_calendar,
+        run["run_id"],
+        req.releases,
+        req.since_date,
+        req.days_ahead,
+    )
+    return {"run_id": run["run_id"], "status": "queued",
+            "release_count": len(req.releases) if req.releases else "default",
+            "days_ahead": req.days_ahead}
 
 
 @router.get("/status/{run_id}")

@@ -90,6 +90,13 @@ class EntityFeatureRequest(BaseModel):
     top_n_per_doc: int = 50
 
 
+class MacroRegimeRequest(BaseModel):
+    # No knobs for now — the engine is deterministic over latest data. Kept as
+    # a model so future extensions (override series list, fix as-of-date) don't
+    # break the route shape.
+    pass
+
+
 def _new_run(pipeline_name: str) -> dict:
     run_id = str(uuid.uuid4())
     run = {
@@ -281,6 +288,18 @@ async def refine_entities(req: EntityFeatureRequest, background_tasks: Backgroun
     run = _new_run("entity_features")
     background_tasks.add_task(extract_entity_features, run["run_id"], limit=req.limit, top_n_per_doc=req.top_n_per_doc)
     return {"run_id": run["run_id"], "status": "queued", "limit": req.limit}
+
+
+@router.post("/intelligence/macro-regime")
+async def intelligence_macro_regime(req: MacroRegimeRequest, background_tasks: BackgroundTasks):
+    """
+    V3 Phase 2 · Wave G — classify liquidity/inflation/rates/growth regimes
+    from cleaned.macro_cleaned and persist features + observations + artifacts.
+    """
+    from app.intelligence.macro_regime import compute_macro_regimes
+    run = _new_run("macro_regime")
+    background_tasks.add_task(compute_macro_regimes, run["run_id"])
+    return {"run_id": run["run_id"], "status": "queued"}
 
 
 @router.get("/status/{run_id}")

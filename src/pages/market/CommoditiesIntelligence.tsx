@@ -9,8 +9,9 @@ import { DashboardPageTabs } from '../../components/market-dashboards/DashboardP
 import { DashboardFilterBar } from '../../components/market-dashboards/DashboardFilterBar';
 import { InstrumentDetailDrawer, useInstrumentDrawer } from '../../components/market-dashboards/InstrumentDetailDrawer';
 import { DashboardLoadingState, DashboardErrorState, SourceFreshnessBadge } from '../../components/market-dashboards/DashboardStates';
-import { SummaryStrip } from '../../components/intelligence-drawer';
+import { SummaryStrip, ArtifactStrip } from '../../components/intelligence-drawer';
 import { commoditiesSummary } from '../../lib/intelligence/summaries';
+import { useDashboardArtifacts } from '../../hooks/useDashboardArtifacts';
 import { useCommodityDashboard } from '../../hooks/useDashboard';
 import { COMMODITY_SYMBOLS, classifyCommodities, type DashboardQuote } from '../../services/dashboardService';
 import type { PerformanceRow } from '../../components/market-dashboards/CompactPerformanceTable';
@@ -132,6 +133,8 @@ export const CommoditiesIntelligence: React.FC = () => {
   };
 
   const summary = useMemo(() => quotes ? commoditiesSummary(quotes) : null, [quotes]);
+  const commoditySymbolList = useMemo(() => COMMODITY_SYMBOLS.map((c) => c.symbol), []);
+  const { artifacts, loading: artifactsLoading } = useDashboardArtifacts(commoditySymbolList);
 
   return (
     <>
@@ -141,6 +144,7 @@ export const CommoditiesIntelligence: React.FC = () => {
         actions={quotes ? <SourceFreshnessBadge source="Market Data" status={status} fetchedAt={fetchedAt} /> : undefined}
       >
         <SummaryStrip payload={summary} />
+        <ArtifactStrip artifacts={artifacts} loading={artifactsLoading} />
         {/* KPI Strip */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(148px, 1fr))', gap: 10, marginBottom: 16 }}>
           {gold   && <IntelligenceMetricCard label="Gold (XAU)"    value={`$${fmtPrice(gold.price)}`}   changePercent={gold.changePercent}   status={status} fetchedAt={fetchedAt} hint="Safe-haven" onClick={() => openDrawer(gold, 'commodity')} />}

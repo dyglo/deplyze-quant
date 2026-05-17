@@ -1,5 +1,6 @@
 export { IntelligenceDrawer } from './IntelligenceDrawer';
 export { SummaryStrip } from './SummaryStrip';
+export { ArtifactStrip } from './ArtifactStrip';
 export type {
   IntelligenceDrawerProps,
   IntelligenceDrawerSectionConfig,

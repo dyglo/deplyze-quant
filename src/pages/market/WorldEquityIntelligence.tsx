@@ -6,8 +6,9 @@ import { FreshnessBadge } from '../../components/quant/FreshnessBadge';
 import { NewsList } from '../../components/quant/NewsList';
 import { HeatmapGrid } from '../../components/market-dashboards/HeatmapGrid';
 import { DashboardErrorState } from '../../components/market-dashboards/DashboardStates';
-import { SummaryStrip } from '../../components/intelligence-drawer';
+import { SummaryStrip, ArtifactStrip } from '../../components/intelligence-drawer';
 import { worldEquitySummary } from '../../lib/intelligence/summaries';
+import { useDashboardArtifacts } from '../../hooks/useDashboardArtifacts';
 import { useWorldEquity } from '../../hooks/useDashboard';
 import { useOHLCV, useNews } from '../../hooks/useMarket';
 import {
@@ -291,6 +292,8 @@ export const WorldEquityIntelligence: React.FC = () => {
   const ok = quotes?.filter((q) => q.ok) ?? [];
 
   const summary = useMemo(() => quotes ? worldEquitySummary(quotes) : null, [quotes]);
+  const worldEquitySymbolList = useMemo(() => WORLD_EQUITY_SYMBOLS.map((s) => s.symbol), []);
+  const { artifacts, loading: artifactsLoading } = useDashboardArtifacts(worldEquitySymbolList);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
@@ -312,6 +315,7 @@ export const WorldEquityIntelligence: React.FC = () => {
       </div>
 
       <SummaryStrip payload={summary} />
+      <ArtifactStrip artifacts={artifacts} loading={artifactsLoading} />
 
       {/* Filter + view-mode bar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 20px', borderBottom: '1px solid var(--border)', background: 'var(--card)', flexShrink: 0, flexWrap: 'wrap' }}>

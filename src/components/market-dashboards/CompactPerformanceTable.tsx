@@ -8,6 +8,8 @@ export interface PerformanceRow {
   price: number;
   changePercent: number;
   change?: number;
+  /** Raw DashboardQuote for click-through — attach for drawer support */
+  _raw?: import('../../services/dashboardService').DashboardQuote;
   volume?: number;
   sparkline?: number[];
   badge?: React.ReactNode;
@@ -38,10 +40,13 @@ interface CompactPerformanceTableProps {
   showSparkline?: boolean;
   showBadge?: boolean;
   emptyLabel?: string;
+  onRowClick?: (row: PerformanceRow) => void;
+  selectedSymbol?: string | null;
 }
 
 export const CompactPerformanceTable: React.FC<CompactPerformanceTableProps> = ({
   rows, showSparkline = true, showBadge = false, emptyLabel = 'No data',
+  onRowClick, selectedSymbol,
 }) => {
   const [sortKey, setSortKey] = useState<SortKey>('changePercent');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
@@ -100,10 +105,23 @@ export const CompactPerformanceTable: React.FC<CompactPerformanceTableProps> = (
             const neg = row.changePercent < 0;
             const clr = pos ? '#4E6040' : neg ? 'var(--primary)' : 'var(--muted-foreground)';
             const bgChg = pos ? 'rgba(78,96,64,0.08)' : neg ? 'rgba(193,95,60,0.08)' : 'transparent';
+            const isSelected = selectedSymbol === row.symbol;
             return (
               <tr
                 key={row.symbol}
-                style={{ borderBottom: i < sorted.length - 1 ? '1px solid var(--border)' : 'none' }}
+                onClick={() => onRowClick?.(row)}
+                style={{
+                  borderBottom: i < sorted.length - 1 ? '1px solid var(--border)' : 'none',
+                  cursor: onRowClick ? 'pointer' : 'default',
+                  background: isSelected ? 'color-mix(in srgb, var(--primary) 6%, var(--card))' : 'transparent',
+                  transition: 'background 100ms ease',
+                }}
+                onMouseEnter={(e) => {
+                  if (onRowClick && !isSelected) (e.currentTarget as HTMLElement).style.background = 'var(--muted)';
+                }}
+                onMouseLeave={(e) => {
+                  if (!isSelected) (e.currentTarget as HTMLElement).style.background = 'transparent';
+                }}
               >
                 <td style={{ padding: '8px 8px 8px 0', whiteSpace: 'nowrap' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>

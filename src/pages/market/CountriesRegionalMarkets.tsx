@@ -10,9 +10,10 @@ import {
 import { MarketPulseStrip } from '../../components/quant/MarketPulseStrip';
 import { FreshnessBadge } from '../../components/quant/FreshnessBadge';
 import { DashboardErrorState } from '../../components/market-dashboards/DashboardStates';
-import { SummaryStrip, ArtifactStrip } from '../../components/intelligence-drawer';
+import { SummaryStrip, ArtifactStrip, NarrativeOverlay } from '../../components/intelligence-drawer';
 import { countriesSummary } from '../../lib/intelligence/summaries';
 import { useDashboardArtifacts } from '../../hooks/useDashboardArtifacts';
+import { useDashboardNarratives } from '../../hooks/useDashboardNarratives';
 import { useCountryETFs } from '../../hooks/useDashboard';
 import { useBatchQuotes, useOHLCV, useNews } from '../../hooks/useMarket';
 import {
@@ -399,6 +400,7 @@ export const CountriesRegionalMarkets: React.FC = () => {
     COUNTRY_DATABASE.map((c) => c.etf).filter((s): s is string => !!s),
   []);
   const { artifacts, loading: artifactsLoading } = useDashboardArtifacts(countryEtfSymbols);
+  const { narratives, loading: narrativesLoading } = useDashboardNarratives(countryEtfSymbols);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
@@ -423,6 +425,7 @@ export const CountriesRegionalMarkets: React.FC = () => {
 
       <SummaryStrip payload={summary} />
       <ArtifactStrip artifacts={artifacts} loading={artifactsLoading} />
+      <NarrativeOverlay narratives={narratives} loading={narrativesLoading} />
 
       {/* Filter bar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 20px', borderBottom: '1px solid var(--border)', background: 'var(--card)', flexShrink: 0, flexWrap: 'wrap' }}>

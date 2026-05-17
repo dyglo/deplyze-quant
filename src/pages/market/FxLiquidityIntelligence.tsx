@@ -10,9 +10,10 @@ import { DashboardPageTabs } from '../../components/market-dashboards/DashboardP
 import { DashboardFilterBar } from '../../components/market-dashboards/DashboardFilterBar';
 import { InstrumentDetailDrawer, useInstrumentDrawer } from '../../components/market-dashboards/InstrumentDetailDrawer';
 import { DashboardLoadingState, DashboardErrorState, SourceFreshnessBadge } from '../../components/market-dashboards/DashboardStates';
-import { SummaryStrip, ArtifactStrip } from '../../components/intelligence-drawer';
+import { SummaryStrip, ArtifactStrip, NarrativeOverlay } from '../../components/intelligence-drawer';
 import { fxSummary } from '../../lib/intelligence/summaries';
 import { useDashboardArtifacts } from '../../hooks/useDashboardArtifacts';
+import { useDashboardNarratives } from '../../hooks/useDashboardNarratives';
 import { useFXDashboard } from '../../hooks/useDashboard';
 import { FX_SYMBOLS, classifyFX, type DashboardQuote } from '../../services/dashboardService';
 import type { PerformanceRow } from '../../components/market-dashboards/CompactPerformanceTable';
@@ -214,6 +215,7 @@ export const FxLiquidityIntelligence: React.FC = () => {
   const summary = useMemo(() => quotes ? fxSummary(quotes) : null, [quotes]);
   const fxSymbolList = useMemo(() => FX_SYMBOLS.map((f) => f.pair), []);
   const { artifacts, loading: artifactsLoading } = useDashboardArtifacts(fxSymbolList);
+  const { narratives, loading: narrativesLoading } = useDashboardNarratives(fxSymbolList);
 
   return (
     <>
@@ -224,6 +226,7 @@ export const FxLiquidityIntelligence: React.FC = () => {
       >
         <SummaryStrip payload={summary} />
         <ArtifactStrip artifacts={artifacts} loading={artifactsLoading} />
+        <NarrativeOverlay narratives={narratives} loading={narrativesLoading} />
         {/* KPI Strip */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(148px, 1fr))', gap: 10, marginBottom: 16 }}>
           {dxy    && <IntelligenceMetricCard label="DXY (UUP proxy)" value={fmtFXPrice(dxy.price)}    changePercent={dxy.changePercent}    status={status} fetchedAt={fetchedAt} hint="Dollar index ETF" onClick={() => openDrawer(dxy, 'fx')} />}

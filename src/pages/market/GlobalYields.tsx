@@ -10,9 +10,10 @@ import { IntelligenceMetricCard } from '../../components/market-dashboards/Intel
 import { DashboardPageTabs } from '../../components/market-dashboards/DashboardPageTabs';
 import { DashboardLoadingState, DashboardErrorState, SourceFreshnessBadge } from '../../components/market-dashboards/DashboardStates';
 import { MiniTrendChart } from '../../components/market-dashboards/MiniTrendChart';
-import { SummaryStrip, ArtifactStrip } from '../../components/intelligence-drawer';
+import { SummaryStrip, ArtifactStrip, NarrativeOverlay } from '../../components/intelligence-drawer';
 import { yieldsSummary } from '../../lib/intelligence/summaries';
 import { useDashboardArtifacts } from '../../hooks/useDashboardArtifacts';
+import { useDashboardNarratives } from '../../hooks/useDashboardNarratives';
 import { useYieldCurve } from '../../hooks/useDashboard';
 import {
   classifyYieldCurve, YIELD_SERIES, type YieldCurveData, type YieldPoint,
@@ -245,6 +246,8 @@ export const GlobalYields: React.FC = () => {
   const summary = useMemo(() => data ? yieldsSummary(data) : null, [data]);
   const yieldSymbols = useMemo(() => YIELD_SERIES.map((y) => y.id), []);
   const { artifacts, loading: artifactsLoading } = useDashboardArtifacts(yieldSymbols);
+  // Yields narratives often relate to broader macro symbols, not the FRED IDs.
+  const { narratives, loading: narrativesLoading } = useDashboardNarratives(['SPY', 'TLT', 'IEF', 'UUP', 'GLD', ...yieldSymbols]);
 
   return (
     <DashboardShell
@@ -254,6 +257,7 @@ export const GlobalYields: React.FC = () => {
     >
       <SummaryStrip payload={summary} />
       <ArtifactStrip artifacts={artifacts} loading={artifactsLoading} />
+      <NarrativeOverlay narratives={narratives} loading={narrativesLoading} />
       {/* KPI Strip */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 10, marginBottom: 16 }}>
         {key10y && <IntelligenceMetricCard label="US 10Y Treasury" value={key10y.value !== null ? `${key10y.value.toFixed(3)}%` : 'N/A'} status={status} fetchedAt={fetchedAt} hint="Click table for history" onClick={() => handlePointClick(key10y)} />}

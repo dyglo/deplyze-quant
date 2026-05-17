@@ -80,6 +80,11 @@ class CalendarIngestRequest(BaseModel):
     days_ahead: int = 120
 
 
+class DocumentParseRequest(BaseModel):
+    limit: int = 200
+    user_agent: Optional[str] = None
+
+
 def _new_run(pipeline_name: str) -> dict:
     run_id = str(uuid.uuid4())
     run = {
@@ -241,6 +246,21 @@ async def ingest_calendar(req: CalendarIngestRequest, background_tasks: Backgrou
     return {"run_id": run["run_id"], "status": "queued",
             "release_count": len(req.releases) if req.releases else "default",
             "days_ahead": req.days_ahead}
+
+
+@router.post("/refine/documents")
+async def parse_documents(req: DocumentParseRequest, background_tasks: BackgroundTasks):
+    """
+    V3 Phase 2 · Wave E — parse unprocessed document_sources_raw rows.
+
+    Pulls up to `limit` documents that have no corresponding parsed_documents_raw
+    record, fetches each, extracts text (PDF/HTML/XML/plain), and writes results
+    with an extraction_quality score.
+    """
+    from app.refinery.document_parser import parse_unprocessed_documents
+    run = _new_run("document_parse")
+    background_tasks.add_task(parse_unprocessed_documents, run["run_id"], limit=req.limit, user_agent=req.user_agent)
+    return {"run_id": run["run_id"], "status": "queued", "limit": req.limit}
 
 
 @router.get("/status/{run_id}")

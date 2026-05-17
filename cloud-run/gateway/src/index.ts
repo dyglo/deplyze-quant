@@ -20,6 +20,7 @@
  *   POLYGON_API_KEY
  *   FMP_API_KEY
  *   EODHD_API_KEY
+ *   FRED_API_KEY          (free key at fred.stlouisfed.org — macro fallback)
  *   SEC_EDGAR_USER_AGENT  ("AppName contact@email.com" format)
  */
 
@@ -103,7 +104,7 @@ if (missing.length > 0) {
 }
 
 // V2 optional providers — warn but don't block startup.
-const V2_OPTIONAL = ['POLYGON_API_KEY', 'FMP_API_KEY', 'EODHD_API_KEY', 'SEC_EDGAR_USER_AGENT'];
+const V2_OPTIONAL = ['POLYGON_API_KEY', 'FMP_API_KEY', 'EODHD_API_KEY', 'SEC_EDGAR_USER_AGENT', 'FRED_API_KEY'];
 const missingOptional = V2_OPTIONAL.filter((k) => !process.env[k]);
 if (missingOptional.length > 0) {
   console.warn(`[Gateway] V2 optional providers not configured: ${missingOptional.join(', ')} — these routes will use fallback providers.`);

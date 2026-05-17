@@ -130,6 +130,13 @@ async def extract_entity_features(
         text = doc.get("extracted_text") or ""
         if not text:
             continue
+
+        obs_time = doc.get("observation_time")
+        if isinstance(obs_time, datetime):
+            obs_time = obs_time.isoformat()
+        elif not obs_time:
+            obs_time = now
+
         mentions = extract_mentions(text, extra_companies=ticker_map)
         features = aggregate_features(mentions, text_length=len(text))[:top_n_per_doc]
 
@@ -142,7 +149,7 @@ async def extract_entity_features(
                 "source_url": doc.get("source_url"),
                 "source_type": doc.get("source_type"),
                 "ingestion_time": now,
-                "observation_time": doc.get("observation_time") or now,
+                "observation_time": obs_time,
                 "processing_time": now,
                 "lineage_id": doc.get("lineage_id"),
                 "confidence": doc.get("extraction_quality") or 1.0,
@@ -153,8 +160,8 @@ async def extract_entity_features(
                 "entity_type": feat.entity_type,
                 "salience": feat.salience,
                 "link_density": round(len(feat.co_entities) / 20.0, 4),  # normalized
-                "first_seen_at": doc.get("observation_time") or now,
-                "last_seen_at": doc.get("observation_time") or now,
+                "first_seen_at": obs_time,
+                "last_seen_at": obs_time,
                 "mention_count": feat.mention_count,
                 "co_entities": feat.co_entities[:20],
                 "related_symbols": [doc["symbol"]] if doc.get("symbol") else [],

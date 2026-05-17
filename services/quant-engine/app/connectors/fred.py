@@ -207,6 +207,7 @@ class FredClient:
                 ),
                 "lineage_id": f"fred:{series_id}:{obs_date}",
                 "confidence": 1.0,
+                "created_at": ingestion_iso,
                 # public_macro_raw extension fields
                 "series_id": series_id,
                 "series_name": series_name,

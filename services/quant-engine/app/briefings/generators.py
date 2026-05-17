@@ -266,8 +266,10 @@ _GENERATORS = {
 def _serialize(d: dict) -> dict:
     out = dict(d)
     for k, v in list(out.items()):
-        if isinstance(v, (dict, list)):
+        if isinstance(v, dict):
             out[k] = json.dumps(v)
+        elif isinstance(v, datetime):
+            out[k] = v.isoformat()
     return out
 
 

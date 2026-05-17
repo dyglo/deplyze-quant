@@ -157,7 +157,7 @@ const CountryDetailPanel: React.FC<{
   const news = useNews({ symbol: entry.etf ?? undefined, limit: 5 });
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
 
       {/* Panel header */}
       <div style={{
@@ -258,7 +258,7 @@ const CountryDetailPanel: React.FC<{
 
       {/* News */}
       {entry.etf && (
-        <div style={{ flex: 1, overflowY: 'auto', padding: '10px 16px' }}>
+        <div style={{ padding: '10px 16px 20px' }}>
           <p style={{ margin: '0 0 8px', fontSize: 9, fontWeight: 700, color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
             Related News
           </p>
@@ -562,35 +562,29 @@ export const CountriesRegionalMarkets: React.FC = () => {
         </div>
 
         {/* ── Persistent detail panel ─────────────────────────────────────── */}
+        {/*
+          Outer: clips the width animation (overflowX: hidden).
+          We do NOT set overflowY here so the inner panel can scroll.
+          Inner: fixed minWidth so content doesn't squish during transition.
+        */}
         <div style={{
-          width: selectedEntry ? 320 : 200,
-          borderLeft: `${selectedEntry ? 2 : 1}px solid var(--border)`,
-          background: 'var(--card)',
+          width: selectedEntry ? 340 : 0,
           flexShrink: 0,
-          overflow: 'hidden',
-          display: 'flex',
-          flexDirection: 'column',
-          transition: 'width 220ms cubic-bezier(0.16,1,0.3,1)',
+          overflowX: 'hidden',          /* clip width during slide animation */
+          transition: 'width 240ms cubic-bezier(0.16,1,0.3,1)',
+          borderLeft: selectedEntry ? '2px solid var(--border)' : 'none',
         }}>
-          {selectedEntry ? (
-            <CountryDetailPanel
-              entry={selectedEntry}
-              price={selectedEntry.etf ? liveMap[selectedEntry.etf]?.price : undefined}
-              changePercent={selectedEntry.etf ? liveMap[selectedEntry.etf]?.changePercent : undefined}
-              change={selectedEntry.etf ? liveMap[selectedEntry.etf]?.change : undefined}
-              high={selectedEntry.etf ? liveMap[selectedEntry.etf]?.high : undefined}
-              low={selectedEntry.etf ? liveMap[selectedEntry.etf]?.low : undefined}
-              onClose={() => setSelectedEntry(null)}
-            />
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 10, padding: '0 20px', color: 'var(--muted-foreground)' }}>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, justifyContent: 'center', marginBottom: 4 }}>
-                {['JP', 'DE', 'GB', 'CN', 'IN', 'BR', 'FR', 'AU', 'CA'].map((code) => (
-                  <CountryFlag key={code} isoCode={code} size={18} />
-                ))}
-              </div>
-              <p style={{ margin: 0, fontSize: 12, fontWeight: 600, textAlign: 'center' }}>Select a country</p>
-              <p style={{ margin: 0, fontSize: 10, textAlign: 'center', lineHeight: 1.5 }}>Click any row to view price chart, OHLC stats, and news</p>
+          {selectedEntry && (
+            <div style={{ minWidth: 340, height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--card)', overflowY: 'auto' }}>
+              <CountryDetailPanel
+                entry={selectedEntry}
+                price={selectedEntry.etf ? liveMap[selectedEntry.etf]?.price : undefined}
+                changePercent={selectedEntry.etf ? liveMap[selectedEntry.etf]?.changePercent : undefined}
+                change={selectedEntry.etf ? liveMap[selectedEntry.etf]?.change : undefined}
+                high={selectedEntry.etf ? liveMap[selectedEntry.etf]?.high : undefined}
+                low={selectedEntry.etf ? liveMap[selectedEntry.etf]?.low : undefined}
+                onClose={() => setSelectedEntry(null)}
+              />
             </div>
           )}
         </div>

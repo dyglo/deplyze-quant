@@ -17,7 +17,7 @@ import * as td from '../providers/twelvedata';
 import * as eodhd from '../providers/eodhd';
 import * as fmp from '../providers/fmp';
 import * as serper from '../providers/serper';
-import { withCache, TTL } from '../services/cache';
+import { withCache, cacheSet, TTL } from '../services/cache';
 import { withFallback, quoteChain, ohlcvChain, newsChain } from '../lib/providerRouter';
 import type { OHLCVBar } from '../providers/twelvedata';
 
@@ -146,10 +146,14 @@ router.get('/ohlcv/:symbol', async (req, res, next) => {
     const { interval, outputsize } = OhlcvQuery.parse(req.query);
     const isDaily = interval === '1day' || interval === '1week' || interval === '1month';
     const ttl = isDaily ? TTL.ohlcv_daily : TTL.ohlcv_intraday;
-    // Keep legacy cache key so warm entries remain valid after the V2 upgrade.
-    const cacheKey = `ohlcv:${symbol}:${interval}:${outputsize}`;
+    // v3: busts pre-sparse-guard cache entries that stored < 280 bars for long requests.
+    const cacheKey = `ohlcv:v3:${symbol}:${interval}:${outputsize}`;
 
-    const bars = await withCache(cacheKey, ttl, async () => {
+    // Minimum bar threshold: regime/scenario classification needs ≥280 bars.
+    // Any provider returning fewer for a large request is a sparse failure.
+    const SPARSE_MIN = outputsize >= 500 ? 280 : 0;
+
+    const fetchFresh = async (): Promise<OHLCVBar[]> => {
       const today = new Date().toISOString().slice(0, 10);
       const pastDate = new Date(Date.now() - outputsize * 1.5 * 86400_000).toISOString().slice(0, 10);
       const tdInterval = interval as Parameters<typeof td.getTimeSeries>[1];
@@ -160,13 +164,21 @@ router.get('/ohlcv/:symbol', async (req, res, next) => {
         eodhd: isDaily ? async () => {
           const rawBars = await eodhd.getHistoricalBars(symbol, { from: pastDate, to: today });
           if (!rawBars.length) throw new Error('EODHD: empty response');
-          return rawBars.slice(-outputsize).map((b) => ({
+          const bars = rawBars.slice(-outputsize).map((b) => ({
             ts: Date.parse(b.date),
             open: b.open, high: b.high, low: b.low,
             close: b.adjusted_close ?? b.close, volume: b.volume,
           }));
+          if (bars.length < SPARSE_MIN) throw new Error(`EODHD: sparse result (${bars.length}/${outputsize} bars)`);
+          return bars;
         } : undefined,
-        twelve_data: async () => td.getTimeSeries(td.normalizeTdSymbol(symbol), tdInterval, outputsize),
+        twelve_data: async () => {
+          const bars = await td.getTimeSeries(td.normalizeTdSymbol(symbol), tdInterval, outputsize);
+          // Twelve Data free plan silently caps daily history — reject sparse results
+          // so FMP fallback can serve the full history for regime/scenario analysis.
+          if (bars.length < SPARSE_MIN) throw new Error(`Twelve Data: sparse result (${bars.length}/${outputsize} bars)`);
+          return bars;
+        },
         fmp: isDaily ? async () => {
           const rawBars = await fmp.getHistoricalPrice(symbol, pastDate, today, outputsize);
           if (!rawBars.length) throw new Error('FMP: empty response');
@@ -176,9 +188,18 @@ router.get('/ohlcv/:symbol', async (req, res, next) => {
           }));
         } : undefined,
       }));
-
       return result;
-    });
+    };
+
+    let bars = await withCache(cacheKey, ttl, fetchFresh);
+
+    // Post-cache guard: if a stale sparse entry slipped in (race condition or old key),
+    // re-fetch immediately and overwrite the cache entry so all subsequent requests are clean.
+    if (bars.length < SPARSE_MIN) {
+      console.warn(`[ohlcv] stale sparse cache for ${symbol} (${bars.length} bars, need ${SPARSE_MIN}) — re-fetching`);
+      bars = await fetchFresh();
+      await cacheSet(cacheKey, bars, ttl);
+    }
 
     res.json({ symbol, interval, bars });
   } catch (err) { next(err); }

@@ -18,6 +18,7 @@ import { toast } from 'sonner';
 import { MacroYieldCurvePanel } from '../components/quant/MacroYieldCurvePanel';
 import { MacroRegimeQuadrant } from '../components/quant/MacroRegimeQuadrant';
 import { MacroRealRatesPanel } from '../components/quant/MacroRealRatesPanel';
+import { V3P2MacroRegimePanel } from '../components/quant/V3P2MacroRegimePanel';
 
 interface SeriesMeta {
   id: string;
@@ -401,6 +402,9 @@ export const MacroRegimeDesk: React.FC = () => {
           Regime quadrant requires CPI + GDP. Real rates panel requires 10Y Treasury + 5Y Breakeven. Enable UNRATE for labour-market overlay.
         </p>
       </section>
+
+      {/* ── V3 Phase 2: warehouse-backed regime classifier ──────────────────── */}
+      <V3P2MacroRegimePanel />
 
       {/* Macro web research */}
       <section>

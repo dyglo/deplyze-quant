@@ -24,7 +24,7 @@ function fmtVol(n?: number): string {
 
 const ChangeCell: React.FC<{ pct: number; abs?: number }> = ({ pct, abs }) => {
   const pos = pct > 0, neg = pct < 0;
-  const clr = pos ? '#4E6040' : neg ? '#C15F3C' : '#8A8680';
+  const clr = pos ? 'var(--ds-gain)' : neg ? 'var(--ds-loss)' : '#8A8680';
   const bg  = pos ? 'rgba(78,96,64,0.08)' : neg ? 'rgba(193,95,60,0.08)' : 'transparent';
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1 }}>
@@ -51,7 +51,7 @@ const VOL_DOT: Record<VolatilityState, { color: string; label: string }> = {
   low:      { color: '#B1ADA1', label: 'Low' },
   normal:   { color: '#6A9BCC', label: 'Normal' },
   elevated: { color: '#C9A227', label: 'Elevated' },
-  extreme:  { color: '#C15F3C', label: 'Extreme' },
+  extreme:  { color: 'var(--ds-loss)', label: 'Extreme' },
 };
 
 const IntelligenceCell: React.FC<{ row: ScreenerRow }> = ({ row }) => {
@@ -75,12 +75,12 @@ const IntelligenceCell: React.FC<{ row: ScreenerRow }> = ({ row }) => {
             left: pos ? '50%' : `calc(50% - ${barWidth} / 2)`,
             width: `calc(${barWidth} / 2)`,
             height: '100%',
-            background: pos ? '#4E6040' : '#C15F3C',
+            background: pos ? 'var(--ds-gain)' : 'var(--ds-loss)',
             borderRadius: 999,
           }} />
           <div style={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: 1, background: 'var(--border)' }} />
         </div>
-        <span style={{ fontSize: 9, fontVariantNumeric: 'tabular-nums', color: pos ? '#4E6040' : score < 0 ? '#C15F3C' : '#8A8680', fontWeight: 600 }}>
+        <span style={{ fontSize: 9, fontVariantNumeric: 'tabular-nums', color: pos ? 'var(--ds-gain)' : score < 0 ? 'var(--ds-loss)' : '#8A8680', fontWeight: 600 }}>
           {score > 0 ? '+' : ''}{score}
         </span>
       </div>

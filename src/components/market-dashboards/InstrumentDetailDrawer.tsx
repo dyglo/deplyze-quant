@@ -8,9 +8,11 @@
  * (Summary / Historical / Narrative / Macro / Linked) plug in here from
  * later waves via the `sections` prop on `IntelligenceDrawer`.
  */
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { IntelligenceDrawer } from '../intelligence-drawer';
 import { IntelligenceSidePanel } from '../quant/IntelligenceSidePanel';
+import { useOHLCV } from '../../hooks/useMarket';
+import { buildHistoricalPayload } from '../../lib/intelligence/historicalContext';
 import {
   computeVolatilityState,
   computeMomentumScore,
@@ -19,6 +21,11 @@ import {
 } from '../../services/screenerService';
 import type { ScreenerRow } from '../../services/screenerService';
 import type { DashboardQuote } from '../../services/dashboardService';
+
+// Asset classes for which the gateway returns reliable OHLCV used in analog
+// matching. FX/crypto bar history is patchier so we skip rather than show
+// shaky analogs.
+const OHLCV_ASSET_CLASSES = new Set<ScreenerRow['assetClass']>(['equity', 'etf', 'index']);
 
 function dashboardQuoteToScreenerRow(
   q: DashboardQuote,
@@ -86,10 +93,29 @@ interface InstrumentDetailDrawerProps {
 }
 
 export const InstrumentDetailDrawer: React.FC<InstrumentDetailDrawerProps> = ({ row, open, onClose }) => {
+  const supportsHistory = row != null && OHLCV_ASSET_CLASSES.has(row.assetClass);
+  // Pull a richer history than the side-panel's 90 bars so the analog engine
+  // has at least 3 × window to match against.
+  const ohlcv = useOHLCV(supportsHistory ? row!.symbol : null, '1day', 252);
+
+  const historicalPayload = useMemo(() => {
+    if (!supportsHistory) return null;
+    return buildHistoricalPayload(ohlcv.data?.bars ?? null);
+  }, [supportsHistory, ohlcv.data]);
+
   if (!open && !row) return null;
 
+  const sections = historicalPayload
+    ? { historical: { payload: historicalPayload } }
+    : undefined;
+
   return (
-    <IntelligenceDrawer open={open} onClose={onClose} drawerId="instrument-detail-drawer">
+    <IntelligenceDrawer
+      open={open}
+      onClose={onClose}
+      drawerId="instrument-detail-drawer"
+      sections={sections}
+    >
       {row && <IntelligenceSidePanel row={row} onClose={onClose} />}
     </IntelligenceDrawer>
   );

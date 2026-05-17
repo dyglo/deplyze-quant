@@ -21,7 +21,15 @@ import { RelatedSection } from './sections/RelatedSection';
 import { NarrativeSection } from './sections/NarrativeSection';
 import { MacroSection } from './sections/MacroSection';
 import { LinkedSection } from './sections/LinkedSection';
-import type { IntelligenceSectionProps } from './sections/types';
+import type {
+  IntelligenceSectionProps,
+  SummaryPayload,
+  HistoricalPayload,
+  RelatedPayload,
+  NarrativePayload,
+  MacroPayload,
+  LinkedPayload,
+} from './sections/types';
 
 export type IntelligenceSectionKey =
   | 'summary'
@@ -31,10 +39,22 @@ export type IntelligenceSectionKey =
   | 'macro'
   | 'linked';
 
-export interface IntelligenceDrawerSectionConfig extends IntelligenceSectionProps {
+interface BaseSectionConfig extends IntelligenceSectionProps {
   /** Hide this section even when its prop bag is present. */
   hidden?: boolean;
 }
+
+export interface IntelligenceDrawerSections {
+  summary?: BaseSectionConfig & { payload?: SummaryPayload };
+  historical?: BaseSectionConfig & { payload?: HistoricalPayload };
+  related?: BaseSectionConfig & { payload?: RelatedPayload };
+  narrative?: BaseSectionConfig & { payload?: NarrativePayload };
+  macro?: BaseSectionConfig & { payload?: MacroPayload };
+  linked?: BaseSectionConfig & { payload?: LinkedPayload };
+}
+
+/** @deprecated retained for backwards compatibility; prefer `IntelligenceDrawerSections`. */
+export type IntelligenceDrawerSectionConfig = BaseSectionConfig & { payload?: unknown };
 
 export interface IntelligenceDrawerProps {
   open: boolean;
@@ -50,7 +70,7 @@ export interface IntelligenceDrawerProps {
   /** Page-specific content rendered at the top of the scrollable body. */
   children?: React.ReactNode;
   /** Per-section props. Sections not present in the map are hidden. */
-  sections?: Partial<Record<IntelligenceSectionKey, IntelligenceDrawerSectionConfig>>;
+  sections?: IntelligenceDrawerSections;
   /** Footer slot pinned below the body. */
   footer?: React.ReactNode;
   /** Stable id for deep-linking / a11y. Defaults to 'intelligence-drawer'. */

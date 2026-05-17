@@ -9,3 +9,6 @@ export { benchmarkProducer } from './producers/benchmarkProducer';
 export { volTransmissionProducer } from './producers/volTransmissionProducer';
 export { sectorPeerProducer } from './producers/sectorPeerProducer';
 export { artifactProducer } from './producers/artifactProducer';
+export { filingsProducer } from './producers/filingsProducer';
+export { macroRegimeProducer } from './producers/macroRegimeProducer';
+export { narrativeProducer } from './producers/narrativeProducer';

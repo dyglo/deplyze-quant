@@ -15,10 +15,15 @@ import { benchmarkProducer } from './producers/benchmarkProducer';
 import { volTransmissionProducer } from './producers/volTransmissionProducer';
 import { sectorPeerProducer } from './producers/sectorPeerProducer';
 import { artifactProducer } from './producers/artifactProducer';
+import { filingsProducer } from './producers/filingsProducer';
+import { macroRegimeProducer } from './producers/macroRegimeProducer';
+import { narrativeProducer } from './producers/narrativeProducer';
 import type { Producer, ProducerContext, ProducerOutput } from './producers/types';
 import type { RelationsCluster, RelationsEdge, RelationsGraphSnapshot, RelationsNode } from './types';
 
 /** Structural producers first so derived edges attach to known nodes.
+ *  V3 Phase 2 producers (filings/macro-regime/narrative) run after structural
+ *  ones so their decorating edges land on instrument nodes that already exist.
  *  Artifact producer runs last so its `artifact-link` edges only attach
  *  to instrument nodes already emitted by upstream producers. */
 export const DEFAULT_PRODUCERS: Producer[] = [
@@ -26,6 +31,9 @@ export const DEFAULT_PRODUCERS: Producer[] = [
   correlationProducer,
   benchmarkProducer,
   volTransmissionProducer,
+  filingsProducer,
+  macroRegimeProducer,
+  narrativeProducer,
   artifactProducer,
 ];
 

@@ -1,24 +1,772 @@
-import React from 'react';
-import { LayoutDashboard } from 'lucide-react';
+import React, { useState, useMemo, useCallback } from 'react';
+import {
+  LineChart, Line, AreaChart, Area,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Legend,
+} from 'recharts';
+import {
+  Briefcase, Plus, ChevronDown, TrendingUp, TrendingDown, Minus,
+  Activity, BarChart3, ShieldAlert, PieChart, AlertCircle, X, Check,
+  Loader2, LayoutDashboard,
+} from 'lucide-react';
+import { usePortfolioWorkspace } from '../../hooks/usePortfolioWorkspace';
+import { usePortfolioPerformance } from '../../hooks/usePortfolioPerformance';
+import { DEFAULT_BENCHMARK_ID, BENCHMARK_REGISTRY } from '../../lib/portfolio/benchmarks';
+import type { Portfolio, Holding } from '../../lib/portfolio/schemas';
 
-export const PortfolioOverview: React.FC = () => (
-  <div style={{ padding: '2rem', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100%' }}>
-    <div style={{ textAlign: 'center', maxWidth: '28rem' }}>
-      <div style={{
-        width: '3rem', height: '3rem', borderRadius: '0.75rem',
-        background: 'color-mix(in srgb, var(--primary) 12%, transparent)',
-        border: '1px solid color-mix(in srgb, var(--primary) 25%, transparent)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        margin: '0 auto 1.25rem',
-      }}>
-        <LayoutDashboard size={20} style={{ color: 'var(--primary)' }} />
-      </div>
-      <p style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--foreground)', marginBottom: '0.5rem', letterSpacing: '-0.02em' }}>
-        Portfolio Overview
-      </p>
-      <p style={{ fontSize: '0.8125rem', color: 'var(--muted-foreground)', lineHeight: 1.6 }}>
-        Institutional command center — performance curves, benchmark comparison, rolling volatility, drawdown visualization, and allocation intelligence. Coming in Wave B.
-      </p>
+// ─── Shared helpers ────────────────────────────────────────────────────────
+
+function fmtPct(v: number, sign = true): string {
+  if (!isFinite(v)) return '—';
+  const s = (v * 100).toFixed(2);
+  return sign && v >= 0 ? `+${s}%` : `${s}%`;
+}
+function fmtDate(ts: number): string {
+  return new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+function fmtDateShort(ts: number): string {
+  return new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' });
+}
+
+const PALETTE = {
+  portfolio:  'var(--primary)',
+  benchmark:  'var(--chart-2)',
+  vol:        'var(--chart-4)',
+  drawdown:   'var(--destructive)',
+  grid:       'var(--border)',
+  text:       'var(--muted-foreground)',
+};
+
+// ─── Tooltip components ───────────────────────────────────────────────────────
+
+const PerfTooltip: React.FC<{ active?: boolean; payload?: any[]; label?: any; benchmarkId?: string }> = ({ active, payload, benchmarkId }) => {
+  if (!active || !payload?.length) return null;
+  const p = payload.find((x: any) => x.dataKey === 'portfolio');
+  const b = payload.find((x: any) => x.dataKey === 'benchmark');
+  return (
+    <div style={{ background: 'var(--popover)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px', fontSize: 11 }}>
+      {p && <p style={{ margin: 0, color: PALETTE.portfolio, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>Portfolio: {(p.value as number).toFixed(2)}</p>}
+      {b && <p style={{ margin: '3px 0 0', color: PALETTE.benchmark, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{benchmarkId}: {(b.value as number).toFixed(2)}</p>}
     </div>
+  );
+};
+
+const VolTooltip: React.FC<{ active?: boolean; payload?: any[] }> = ({ active, payload }) => {
+  if (!active || !payload?.length) return null;
+  const v = payload[0]?.value as number;
+  return (
+    <div style={{ background: 'var(--popover)', border: '1px solid var(--border)', borderRadius: 8, padding: '7px 11px', fontSize: 11 }}>
+      <p style={{ margin: 0, color: PALETTE.vol, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>Vol: {v.toFixed(1)}%</p>
+    </div>
+  );
+};
+
+const DdTooltip: React.FC<{ active?: boolean; payload?: any[] }> = ({ active, payload }) => {
+  if (!active || !payload?.length) return null;
+  const v = payload[0]?.value as number;
+  return (
+    <div style={{ background: 'var(--popover)', border: '1px solid var(--border)', borderRadius: 8, padding: '7px 11px', fontSize: 11 }}>
+      <p style={{ margin: 0, color: PALETTE.drawdown, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>Drawdown: {fmtPct(v)}</p>
+    </div>
+  );
+};
+
+// ─── Metric pill ──────────────────────────────────────────────────────────────
+
+const MetricPill: React.FC<{ label: string; value: string; color?: string; accent?: boolean }> = ({ label, value, color, accent }) => (
+  <div style={{
+    display: 'flex', flexDirection: 'column', gap: 2,
+    padding: '8px 12px',
+    background: accent ? 'color-mix(in srgb, var(--primary) 8%, transparent)' : 'var(--muted)',
+    border: `1px solid ${accent ? 'color-mix(in srgb, var(--primary) 20%, transparent)' : 'var(--border)'}`,
+    borderRadius: 8,
+    minWidth: 80,
+  }}>
+    <span style={{ fontSize: 9, fontWeight: 600, color: 'var(--muted-foreground)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>{label}</span>
+    <span style={{ fontSize: 13, fontWeight: 700, color: color ?? 'var(--foreground)', fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.02em' }}>{value}</span>
   </div>
 );
+
+// ─── Create Portfolio Modal ───────────────────────────────────────────────────
+
+const CreatePortfolioModal: React.FC<{ onClose: () => void; onCreate: (name: string, benchmarkId: string) => void }> = ({ onClose, onCreate }) => {
+  const [name, setName] = useState('');
+  const [bm, setBm] = useState(DEFAULT_BENCHMARK_ID);
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 200,
+      background: 'rgba(0,0,0,0.5)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }} onClick={onClose}>
+      <div
+        style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, padding: 24, width: 380, maxWidth: '90vw' }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+          <p style={{ margin: 0, fontSize: 14, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--foreground)' }}>New Portfolio</p>
+          <button onClick={onClose} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--muted-foreground)', display: 'flex' }}>
+            <X size={16} />
+          </button>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted-foreground)', display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              Portfolio Name
+            </label>
+            <input
+              autoFocus
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="e.g. Growth Leaders, AI Thematic..."
+              style={{
+                width: '100%', boxSizing: 'border-box',
+                padding: '8px 10px', borderRadius: 6, fontSize: 13,
+                border: '1px solid var(--border)', background: 'var(--background)',
+                color: 'var(--foreground)', outline: 'none',
+              }}
+            />
+          </div>
+
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted-foreground)', display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              Benchmark
+            </label>
+            <select
+              value={bm}
+              onChange={e => setBm(e.target.value)}
+              style={{
+                width: '100%', padding: '8px 10px', borderRadius: 6, fontSize: 12,
+                border: '1px solid var(--border)', background: 'var(--background)',
+                color: 'var(--foreground)', cursor: 'pointer',
+              }}
+            >
+              {BENCHMARK_REGISTRY.map(b => (
+                <option key={b.id} value={b.id}>{b.id} — {b.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <button
+            disabled={!name.trim()}
+            onClick={() => { if (name.trim()) onCreate(name.trim(), bm); }}
+            style={{
+              padding: '9px 16px', borderRadius: 6, fontSize: 13, fontWeight: 600,
+              background: name.trim() ? 'var(--primary)' : 'var(--muted)',
+              color: name.trim() ? 'var(--primary-foreground)' : 'var(--muted-foreground)',
+              border: 'none', cursor: name.trim() ? 'pointer' : 'not-allowed',
+              marginTop: 4,
+            }}
+          >
+            Create Portfolio
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── Portfolio Selector Bar ───────────────────────────────────────────────────
+
+const PortfolioSelectorBar: React.FC<{
+  portfolios: Portfolio[];
+  selected: Portfolio | null;
+  onSelect: (id: string) => void;
+  onCreateNew: () => void;
+}> = ({ portfolios, selected, onSelect, onCreateNew }) => {
+  const [open, setOpen] = useState(false);
+  const bm = BENCHMARK_REGISTRY.find(b => b.id === selected?.benchmarkId);
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+      {/* Portfolio selector */}
+      <div style={{ position: 'relative' }}>
+        <button
+          onClick={() => setOpen(!open)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            padding: '6px 12px', borderRadius: 7,
+            border: '1px solid var(--border)', background: 'var(--card)',
+            cursor: 'pointer', color: 'var(--foreground)',
+          }}
+        >
+          <Briefcase size={13} style={{ color: 'var(--primary)' }} />
+          <span style={{ fontSize: 13, fontWeight: 600 }}>{selected?.name ?? 'Select Portfolio'}</span>
+          <ChevronDown size={11} style={{ color: 'var(--muted-foreground)' }} />
+        </button>
+
+        {open && (
+          <div style={{
+            position: 'absolute', top: '100%', left: 0, marginTop: 4,
+            background: 'var(--popover)', border: '1px solid var(--border)',
+            borderRadius: 8, padding: 6, zIndex: 50,
+            minWidth: 200, boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+          }}>
+            <p style={{ fontSize: 9, fontWeight: 700, color: 'var(--muted-foreground)', padding: '4px 8px', textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>
+              Your Portfolios
+            </p>
+            {portfolios.map(p => (
+              <button
+                key={p.id}
+                onClick={() => { onSelect(p.id); setOpen(false); }}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  width: '100%', padding: '7px 8px', borderRadius: 5,
+                  background: p.id === selected?.id ? 'var(--accent)' : 'transparent',
+                  border: 'none', cursor: 'pointer', fontSize: 12,
+                  color: 'var(--foreground)', textAlign: 'left',
+                }}
+              >
+                <span style={{ fontWeight: p.id === selected?.id ? 600 : 400 }}>{p.name}</span>
+                {p.id === selected?.id && <Check size={11} style={{ color: 'var(--primary)' }} />}
+              </button>
+            ))}
+            <div style={{ height: 1, background: 'var(--border)', margin: '6px 0' }} />
+            <button
+              onClick={() => { onCreateNew(); setOpen(false); }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                width: '100%', padding: '7px 8px', borderRadius: 5,
+                background: 'transparent', border: 'none', cursor: 'pointer',
+                fontSize: 12, color: 'var(--muted-foreground)',
+              }}
+            >
+              <Plus size={11} /> New Portfolio
+            </button>
+          </div>
+        )}
+      </div>
+
+      {selected && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: 11, color: 'var(--muted-foreground)' }}>vs</span>
+          <div style={{
+            padding: '4px 10px', borderRadius: 5,
+            background: 'color-mix(in srgb, var(--chart-2) 10%, transparent)',
+            border: '1px solid color-mix(in srgb, var(--chart-2) 25%, transparent)',
+            fontSize: 11, fontWeight: 600, color: 'var(--chart-2)',
+          }}>
+            {selected.benchmarkId ?? DEFAULT_BENCHMARK_ID} — {bm?.name ?? 'Benchmark'}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── Allocation bar ───────────────────────────────────────────────────────────
+
+const ALLOC_COLORS = [
+  'var(--primary)', 'var(--chart-2)', 'var(--chart-3)',
+  'var(--chart-4)', 'var(--chart-5)', '#8884d8', '#82ca9d',
+];
+
+const AllocationBar: React.FC<{ holdings: Holding[]; weights: Record<string, number> }> = ({ holdings, weights }) => {
+  const sorted = [...holdings].sort((a, b) => (weights[b.symbol] ?? 0) - (weights[a.symbol] ?? 0));
+
+  return (
+    <div>
+      {/* Visual stacked bar */}
+      <div style={{ display: 'flex', height: 16, borderRadius: 8, overflow: 'hidden', marginBottom: 12, gap: 1 }}>
+        {sorted.map((h, i) => (
+          <div
+            key={h.symbol}
+            title={`${h.symbol}: ${((weights[h.symbol] ?? 0) * 100).toFixed(1)}%`}
+            style={{
+              flex: (weights[h.symbol] ?? 0),
+              background: ALLOC_COLORS[i % ALLOC_COLORS.length],
+              minWidth: 2,
+              transition: 'flex 300ms ease',
+            }}
+          />
+        ))}
+      </div>
+
+      {/* Legend */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 14px' }}>
+        {sorted.slice(0, 10).map((h, i) => (
+          <div key={h.symbol} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <div style={{ width: 8, height: 8, borderRadius: 2, background: ALLOC_COLORS[i % ALLOC_COLORS.length], flexShrink: 0 }} />
+            <span style={{ fontSize: 11, color: 'var(--foreground)', fontWeight: 600 }}>{h.symbol}</span>
+            <span style={{ fontSize: 10, color: 'var(--muted-foreground)', fontVariantNumeric: 'tabular-nums' }}>
+              {((weights[h.symbol] ?? 0) * 100).toFixed(1)}%
+            </span>
+          </div>
+        ))}
+        {sorted.length > 10 && (
+          <span style={{ fontSize: 10, color: 'var(--muted-foreground)' }}>+{sorted.length - 10} more</span>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ─── Holdings Snapshot ────────────────────────────────────────────────────────
+
+const HoldingsSnapshot: React.FC<{ holdings: Holding[]; weights: Record<string, number> }> = ({ holdings, weights }) => {
+  const sorted = [...holdings].sort((a, b) => (weights[b.symbol] ?? 0) - (weights[a.symbol] ?? 0));
+
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+        <thead>
+          <tr style={{ borderBottom: '1px solid var(--border)' }}>
+            {['Symbol', 'Name', 'Asset Class', 'Sector', 'Weight', 'Conviction'].map(h => (
+              <th key={h} style={{ padding: '6px 10px', textAlign: 'left', fontSize: 10, fontWeight: 700, color: 'var(--muted-foreground)', letterSpacing: '0.04em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((h, i) => {
+            const w = weights[h.symbol] ?? 0;
+            const conviction = h.conviction ?? 'medium';
+            const convictionColor = conviction === 'highest' ? 'var(--primary)' : conviction === 'high' ? 'var(--chart-2)' : conviction === 'medium' ? 'var(--foreground)' : 'var(--muted-foreground)';
+            return (
+              <tr
+                key={h.id}
+                style={{
+                  borderBottom: '1px solid var(--border)',
+                  background: i % 2 === 0 ? 'transparent' : 'color-mix(in srgb, var(--muted) 30%, transparent)',
+                }}
+              >
+                <td style={{ padding: '8px 10px', fontWeight: 700, color: 'var(--foreground)', fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em' }}>
+                  {h.symbol}
+                </td>
+                <td style={{ padding: '8px 10px', color: 'var(--foreground)', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {h.name}
+                </td>
+                <td style={{ padding: '8px 10px', color: 'var(--muted-foreground)' }}>
+                  <span style={{
+                    padding: '2px 6px', borderRadius: 4, fontSize: 10, fontWeight: 600,
+                    background: 'var(--muted)', border: '1px solid var(--border)',
+                  }}>
+                    {h.assetClass}
+                  </span>
+                </td>
+                <td style={{ padding: '8px 10px', color: 'var(--muted-foreground)', fontSize: 11 }}>
+                  {h.sector ?? '—'}
+                </td>
+                <td style={{ padding: '8px 10px', fontVariantNumeric: 'tabular-nums', fontWeight: 600, color: 'var(--foreground)' }}>
+                  {(w * 100).toFixed(1)}%
+                </td>
+                <td style={{ padding: '8px 10px' }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: convictionColor, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    {conviction}
+                  </span>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
+// ─── Intelligence Feed ────────────────────────────────────────────────────────
+
+const IntelligenceFeed: React.FC<{
+  observations: import('../../lib/portfolio/schemas').PortfolioIntelligenceObservation[];
+  portfolioName: string;
+}> = ({ observations, portfolioName }) => {
+  const SEVERITY_COLOR: Record<string, string> = {
+    high: 'var(--destructive)', medium: 'var(--chart-4)', low: 'var(--chart-2)', info: 'var(--muted-foreground)',
+  };
+
+  if (observations.length === 0) {
+    return (
+      <div style={{ padding: '20px 0', textAlign: 'center' }}>
+        <Activity size={20} style={{ color: 'var(--muted-foreground)', margin: '0 auto 8px', display: 'block', opacity: 0.4 }} />
+        <p style={{ margin: 0, fontSize: 12, color: 'var(--muted-foreground)' }}>
+          No active intelligence observations for {portfolioName}.
+        </p>
+        <p style={{ margin: '4px 0 0', fontSize: 11, color: 'var(--muted-foreground)', opacity: 0.7 }}>
+          Observations surface automatically as portfolio conditions evolve.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {observations.map(obs => (
+        <div
+          key={obs.id}
+          style={{
+            padding: '10px 14px',
+            background: 'var(--muted)',
+            border: `1px solid var(--border)`,
+            borderLeft: `3px solid ${SEVERITY_COLOR[obs.severity] ?? 'var(--border)'}`,
+            borderRadius: '0 8px 8px 0',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+            <AlertCircle size={12} style={{ color: SEVERITY_COLOR[obs.severity], flexShrink: 0, marginTop: 2 }} />
+            <div style={{ minWidth: 0 }}>
+              <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: 'var(--foreground)', lineHeight: 1.3 }}>{obs.title}</p>
+              <p style={{ margin: '4px 0 0', fontSize: 11, color: 'var(--muted-foreground)', lineHeight: 1.5 }}>{obs.narrative}</p>
+              {obs.symbols && obs.symbols.length > 0 && (
+                <div style={{ display: 'flex', gap: 4, marginTop: 6, flexWrap: 'wrap' }}>
+                  {obs.symbols.map(s => (
+                    <span key={s} style={{ padding: '1px 6px', borderRadius: 3, fontSize: 10, fontWeight: 600, background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--foreground)' }}>
+                      {s}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+// ─── Section Card ─────────────────────────────────────────────────────────────
+
+const SectionCard: React.FC<{
+  title: string;
+  subtitle?: string;
+  icon?: React.ReactNode;
+  actions?: React.ReactNode;
+  children: React.ReactNode;
+  style?: React.CSSProperties;
+}> = ({ title, subtitle, icon, actions, children, style }) => (
+  <div style={{
+    background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10,
+    overflow: 'hidden', ...style,
+  }}>
+    <div style={{
+      display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
+      padding: '12px 16px 10px', borderBottom: '1px solid var(--border)',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+        {icon && <div style={{ flexShrink: 0, color: 'var(--primary)' }}>{icon}</div>}
+        <div>
+          <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: 'var(--foreground)', letterSpacing: '-0.01em' }}>{title}</p>
+          {subtitle && <p style={{ margin: '2px 0 0', fontSize: 10, color: 'var(--muted-foreground)' }}>{subtitle}</p>}
+        </div>
+      </div>
+      {actions && <div style={{ flexShrink: 0 }}>{actions}</div>}
+    </div>
+    <div style={{ padding: '14px 16px' }}>{children}</div>
+  </div>
+);
+
+// ─── Empty portfolio state ────────────────────────────────────────────────────
+
+const EmptyPortfolioState: React.FC<{ portfolioName: string }> = ({ portfolioName }) => (
+  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px 24px', textAlign: 'center' }}>
+    <div style={{
+      width: 48, height: 48, borderRadius: 12,
+      background: 'color-mix(in srgb, var(--primary) 10%, transparent)',
+      border: '1px solid color-mix(in srgb, var(--primary) 20%, transparent)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16,
+    }}>
+      <Briefcase size={20} style={{ color: 'var(--primary)' }} />
+    </div>
+    <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: 'var(--foreground)', letterSpacing: '-0.02em' }}>
+      {portfolioName} is empty
+    </p>
+    <p style={{ margin: '8px 0 0', fontSize: 12, color: 'var(--muted-foreground)', maxWidth: 360, lineHeight: 1.6 }}>
+      Navigate to <strong>Holdings & Watchlist</strong> to add positions. Once holdings are added, performance curves, exposure analysis, and intelligence overlays will populate automatically.
+    </p>
+  </div>
+);
+
+// ─── No portfolio state ───────────────────────────────────────────────────────
+
+const NoPortfolioState: React.FC<{ onCreateNew: () => void }> = ({ onCreateNew }) => (
+  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '70vh', padding: 24, textAlign: 'center' }}>
+    <div style={{
+      width: 56, height: 56, borderRadius: 14,
+      background: 'color-mix(in srgb, var(--primary) 10%, transparent)',
+      border: '1px solid color-mix(in srgb, var(--primary) 20%, transparent)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20,
+    }}>
+      <LayoutDashboard size={24} style={{ color: 'var(--primary)' }} />
+    </div>
+    <p style={{ margin: 0, fontSize: 18, fontWeight: 700, color: 'var(--foreground)', letterSpacing: '-0.02em' }}>
+      Portfolio Intelligence Workspace
+    </p>
+    <p style={{ margin: '10px 0 0', fontSize: 13, color: 'var(--muted-foreground)', maxWidth: 440, lineHeight: 1.7 }}>
+      Build and monitor institutional portfolios with continuous intelligence overlays, benchmark comparison, exposure analysis, and risk surveillance. Create your first portfolio to begin.
+    </p>
+    <button
+      onClick={onCreateNew}
+      style={{
+        marginTop: 24, display: 'flex', alignItems: 'center', gap: 8,
+        padding: '10px 20px', borderRadius: 8,
+        background: 'var(--primary)', color: 'var(--primary-foreground)',
+        border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600,
+      }}
+    >
+      <Plus size={14} /> Create First Portfolio
+    </button>
+  </div>
+);
+
+// ─── Main page ────────────────────────────────────────────────────────────────
+
+export const PortfolioOverview: React.FC = () => {
+  const {
+    portfolios, selectedPortfolio, holdings, observations,
+    loading, holdingsLoading,
+    selectPortfolio, createNew,
+    effectiveWeights,
+  } = usePortfolioWorkspace();
+
+  const [showCreate, setShowCreate] = useState(false);
+
+  const symbols = useMemo(() => holdings.map(h => h.symbol), [holdings]);
+  const benchmarkId = selectedPortfolio?.benchmarkId ?? DEFAULT_BENCHMARK_ID;
+
+  const {
+    performanceSeries,
+    volSeries,
+    drawdownSeries,
+    maxDrawdown: mdd,
+    annReturn,
+    annVol,
+    totalReturn,
+    sharpe,
+    benchmarkTotalReturn,
+    loading: perfLoading,
+    error: perfError,
+  } = usePortfolioPerformance(symbols, effectiveWeights, benchmarkId);
+
+  const handleCreate = useCallback(async (name: string, bm: string) => {
+    setShowCreate(false);
+    await createNew({ name, benchmarkId: bm, type: 'long-only' });
+  }, [createNew]);
+
+  // Excess return
+  const excessReturn = totalReturn - benchmarkTotalReturn;
+
+  // Performance tick formatter
+  const xTickFmt = useCallback((ts: number) => fmtDate(ts), []);
+  const xTickFmtShort = useCallback((ts: number) => fmtDateShort(ts), []);
+
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
+        <Loader2 size={20} style={{ color: 'var(--primary)', animation: 'spin 1s linear infinite' }} />
+      </div>
+    );
+  }
+
+  if (portfolios.length === 0) {
+    return (
+      <>
+        <NoPortfolioState onCreateNew={() => setShowCreate(true)} />
+        {showCreate && (
+          <CreatePortfolioModal onClose={() => setShowCreate(false)} onCreate={handleCreate} />
+        )}
+      </>
+    );
+  }
+
+  const hasHoldings = holdings.length > 0;
+  const hasPerfData = performanceSeries.length > 20;
+
+  return (
+    <div style={{ padding: '0 0 32px' }}>
+      {/* Page header */}
+      <div style={{
+        padding: '16px 24px 14px',
+        borderBottom: '1px solid var(--border)',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10,
+      }}>
+        <div>
+          <p style={{ margin: 0, fontSize: 13, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--foreground)' }}>
+            Portfolio Overview
+          </p>
+          <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--muted-foreground)' }}>
+            Intelligence command center — performance, exposure & risk surveillance
+          </p>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <PortfolioSelectorBar
+            portfolios={portfolios}
+            selected={selectedPortfolio}
+            onSelect={selectPortfolio}
+            onCreateNew={() => setShowCreate(true)}
+          />
+          <button
+            onClick={() => setShowCreate(true)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 5,
+              padding: '6px 12px', borderRadius: 7,
+              background: 'var(--primary)', color: 'var(--primary-foreground)',
+              border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600,
+            }}
+          >
+            <Plus size={12} /> New
+          </button>
+        </div>
+      </div>
+
+      {!hasHoldings ? (
+        <EmptyPortfolioState portfolioName={selectedPortfolio?.name ?? 'Portfolio'} />
+      ) : (
+        <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+          {/* ── Metric strip ─────────────────────────────────────────────── */}
+          {hasPerfData && (
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <MetricPill label="Total Return" value={fmtPct(totalReturn)} color={totalReturn >= 0 ? 'var(--chart-2)' : 'var(--destructive)'} accent />
+              <MetricPill label="vs Benchmark" value={fmtPct(excessReturn)} color={excessReturn >= 0 ? 'var(--chart-2)' : 'var(--destructive)'} />
+              <MetricPill label="Ann. Return" value={fmtPct(annReturn)} color={annReturn >= 0 ? 'var(--chart-2)' : 'var(--destructive)'} />
+              <MetricPill label="Ann. Volatility" value={fmtPct(annVol, false)} color="var(--chart-4)" />
+              <MetricPill label="Sharpe Ratio" value={isFinite(sharpe) ? sharpe.toFixed(2) : '—'} color={sharpe >= 1 ? 'var(--chart-2)' : sharpe >= 0.5 ? 'var(--foreground)' : 'var(--destructive)'} />
+              <MetricPill label="Max Drawdown" value={fmtPct(mdd)} color="var(--destructive)" />
+              <MetricPill label="Holdings" value={String(holdings.length)} />
+            </div>
+          )}
+
+          {/* Loading/error states for performance */}
+          {(perfLoading || holdingsLoading) && !hasPerfData && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 16px', background: 'var(--muted)', borderRadius: 8, fontSize: 12, color: 'var(--muted-foreground)' }}>
+              <Loader2 size={13} style={{ animation: 'spin 1s linear infinite', color: 'var(--primary)' }} />
+              Computing portfolio performance from historical price data…
+            </div>
+          )}
+
+          {perfError && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 16px', background: 'color-mix(in srgb, var(--destructive) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--destructive) 25%, transparent)', borderRadius: 8, fontSize: 12, color: 'var(--destructive)' }}>
+              <AlertCircle size={13} /> {perfError}
+            </div>
+          )}
+
+          {/* ── Row 1: Performance + Allocation ──────────────────────────── */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 16 }}>
+
+            {/* Performance curve */}
+            <SectionCard
+              title="Portfolio vs Benchmark"
+              subtitle={`${selectedPortfolio?.name} · ${benchmarkId} · Rebased to 100`}
+              icon={<TrendingUp size={13} />}
+            >
+              {hasPerfData ? (
+                <ResponsiveContainer width="100%" height={200}>
+                  <LineChart data={performanceSeries} margin={{ top: 4, right: 8, bottom: 0, left: -16 }}>
+                    <CartesianGrid strokeDasharray="2 4" stroke={PALETTE.grid} strokeOpacity={0.5} vertical={false} />
+                    <XAxis dataKey="ts" tickFormatter={xTickFmt} tick={{ fontSize: 10, fill: PALETTE.text }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+                    <YAxis tick={{ fontSize: 10, fill: PALETTE.text }} tickLine={false} axisLine={false} tickFormatter={v => v.toFixed(0)} />
+                    <Tooltip content={<PerfTooltip benchmarkId={benchmarkId} />} />
+                    <Line type="monotone" dataKey="portfolio" stroke={PALETTE.portfolio} strokeWidth={2} dot={false} activeDot={{ r: 3 }} name="Portfolio" />
+                    <Line type="monotone" dataKey="benchmark" stroke={PALETTE.benchmark} strokeWidth={1.5} dot={false} strokeDasharray="4 3" activeDot={{ r: 3 }} name={benchmarkId} />
+                    <Legend
+                      wrapperStyle={{ fontSize: 10, paddingTop: 8 }}
+                      formatter={(value) => value === 'portfolio' ? selectedPortfolio?.name : benchmarkId}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <p style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>Loading performance data…</p>
+                </div>
+              )}
+            </SectionCard>
+
+            {/* Allocation */}
+            <SectionCard
+              title="Allocation"
+              subtitle={`${holdings.length} holdings · ${selectedPortfolio?.isWatchlist ? 'Equal weight' : 'By weight'}`}
+              icon={<PieChart size={13} />}
+            >
+              <AllocationBar holdings={holdings} weights={effectiveWeights} />
+            </SectionCard>
+          </div>
+
+          {/* ── Row 2: Rolling Volatility + Drawdown ─────────────────────── */}
+          {hasPerfData && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+
+              {/* Rolling Volatility */}
+              <SectionCard
+                title="Rolling Volatility"
+                subtitle="21-day window · Annualised %"
+                icon={<Activity size={13} />}
+              >
+                <ResponsiveContainer width="100%" height={150}>
+                  <AreaChart data={volSeries} margin={{ top: 4, right: 8, bottom: 0, left: -16 }}>
+                    <defs>
+                      <linearGradient id="volGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="var(--chart-4)" stopOpacity={0.3} />
+                        <stop offset="100%" stopColor="var(--chart-4)" stopOpacity={0.02} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="2 4" stroke={PALETTE.grid} strokeOpacity={0.5} vertical={false} />
+                    <XAxis dataKey="ts" tickFormatter={xTickFmt} tick={{ fontSize: 10, fill: PALETTE.text }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+                    <YAxis tick={{ fontSize: 10, fill: PALETTE.text }} tickLine={false} axisLine={false} tickFormatter={v => `${v.toFixed(0)}%`} />
+                    <Tooltip content={<VolTooltip />} />
+                    <Area type="monotone" dataKey="vol" stroke={PALETTE.vol} strokeWidth={1.5} fill="url(#volGrad)" dot={false} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </SectionCard>
+
+              {/* Drawdown */}
+              <SectionCard
+                title="Drawdown"
+                subtitle={`Maximum: ${fmtPct(mdd)} · From recent peak`}
+                icon={<ShieldAlert size={13} />}
+              >
+                <ResponsiveContainer width="100%" height={150}>
+                  <AreaChart data={drawdownSeries} margin={{ top: 4, right: 8, bottom: 0, left: -16 }}>
+                    <defs>
+                      <linearGradient id="ddGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="var(--destructive)" stopOpacity={0.02} />
+                        <stop offset="100%" stopColor="var(--destructive)" stopOpacity={0.3} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="2 4" stroke={PALETTE.grid} strokeOpacity={0.5} vertical={false} />
+                    <XAxis dataKey="ts" tickFormatter={xTickFmt} tick={{ fontSize: 10, fill: PALETTE.text }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+                    <YAxis tick={{ fontSize: 10, fill: PALETTE.text }} tickLine={false} axisLine={false} tickFormatter={v => `${(v * 100).toFixed(0)}%`} />
+                    <Tooltip content={<DdTooltip />} />
+                    <ReferenceLine y={0} stroke={PALETTE.grid} strokeDasharray="2 2" />
+                    <Area type="monotone" dataKey="drawdown" stroke={PALETTE.drawdown} strokeWidth={1.5} fill="url(#ddGrad)" dot={false} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </SectionCard>
+            </div>
+          )}
+
+          {/* ── Row 3: Holdings Snapshot + Intelligence Feed ──────────────── */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 16 }}>
+
+            {/* Holdings snapshot */}
+            <SectionCard
+              title="Holdings Snapshot"
+              subtitle={`${holdings.length} position${holdings.length !== 1 ? 's' : ''} · Sorted by weight`}
+              icon={<BarChart3 size={13} />}
+            >
+              <HoldingsSnapshot holdings={holdings} weights={effectiveWeights} />
+            </SectionCard>
+
+            {/* Intelligence feed */}
+            <SectionCard
+              title="Intelligence Feed"
+              subtitle="Active observations · Auto-generated"
+              icon={<AlertCircle size={13} />}
+            >
+              <IntelligenceFeed
+                observations={observations}
+                portfolioName={selectedPortfolio?.name ?? 'Portfolio'}
+              />
+            </SectionCard>
+          </div>
+
+        </div>
+      )}
+
+      {/* Create modal */}
+      {showCreate && (
+        <CreatePortfolioModal onClose={() => setShowCreate(false)} onCreate={handleCreate} />
+      )}
+    </div>
+  );
+};

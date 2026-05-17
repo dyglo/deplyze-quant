@@ -62,7 +62,7 @@ export const TimelineTab: React.FC<{ symbol: string }> = ({ symbol }) => {
   const artifacts = useArtifacts(currentWorkspace?.id ?? null, currentProject?.id ?? null);
   const briefings = useBriefings(currentWorkspace?.id ?? null, currentProject?.id ?? null);
   const [filter, setFilter] = useState<Filter>('all');
-  const [symbolOnly, setSymbolOnly] = useState(true);
+  const [symbolOnly, setSymbolOnly] = useState(false);
 
   const rows = useMemo<TimelineRow[]>(() => {
     const out: TimelineRow[] = [];
@@ -212,13 +212,29 @@ export const TimelineTab: React.FC<{ symbol: string }> = ({ symbol }) => {
 
 function classifyArtifact(a: IntelligenceArtifact): Filter {
   const tags = (a.tags ?? []).map((t) => t.toLowerCase());
-  if (tags.includes('historical-analog') || tags.includes('analog')) return 'historical_analog';
-  if (tags.includes('statistical-extreme')) return 'statistical_extreme';
-  if (tags.includes('reversion-momentum') || tags.includes('reversion')) return 'reversion';
-  if (tags.includes('scenario')) return 'scenario';
-  if (tags.includes('benchmark')) return 'benchmark';
-  if (a.category === 'correlation' || tags.includes('correlation')) return 'correlation';
-  if (a.category === 'regime' || tags.includes('regime')) return 'regime';
+  const type = (a.artifactType ?? '').toLowerCase();
+  const cat  = (a.category   ?? '').toLowerCase();
+
+  // ── Tag-based (highest specificity) ──────────────────────────────────────
+  if (tags.some((t) => t === 'historical-analog' || t === 'analog' || t === 'historical_analog')) return 'historical_analog';
+  if (tags.some((t) => t === 'statistical-extreme' || t === 'extreme' || t === 'statistical_extreme')) return 'statistical_extreme';
+  if (tags.some((t) => t === 'reversion-momentum' || t === 'reversion' || t === 'momentum')) return 'reversion';
+  if (tags.some((t) => t === 'scenario')) return 'scenario';
+  if (tags.some((t) => t === 'benchmark')) return 'benchmark';
+  if (tags.some((t) => t === 'correlation' || t === 'correlation_breakdown')) return 'correlation';
+  if (tags.some((t) => t === 'regime' || t === 'regime_transition')) return 'regime';
+
+  // ── artifactType-based ────────────────────────────────────────────────────
+  if (type === 'correlation_breakdown') return 'correlation';
+  if (type === 'volatility_anomaly')    return 'statistical_extreme';
+  if (type === 'macro_shift')           return 'regime';
+
+  // ── category-based (broadest fallback before 'all') ───────────────────────
+  if (cat === 'regime' || cat === 'macro')      return 'regime';
+  if (cat === 'correlation')                    return 'correlation';
+  if (cat === 'volatility' || cat === 'anomaly') return 'statistical_extreme';
+  if (cat === 'opportunity' || cat === 'risk')  return 'reversion';
+
   return 'all';
 }
 

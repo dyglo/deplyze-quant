@@ -154,19 +154,32 @@ router.get('/ohlcv/:symbol', async (req, res, next) => {
       const pastDate = new Date(Date.now() - outputsize * 1.5 * 86400_000).toISOString().slice(0, 10);
       const tdInterval = interval as Parameters<typeof td.getTimeSeries>[1];
 
+      // Minimum bar threshold: regime classification needs ≥280 bars. Any provider
+      // that returns fewer than this for a large request is considered a sparse failure
+      // and the next provider in the chain is tried.
+      const SPARSE_MIN = outputsize >= 500 ? 280 : 0;
+
       // For daily bars: try EODHD first (adjusted close), fall back to Twelve Data, then FMP.
       // For intraday: Twelve Data is the only provider with minute/hour data in this tier.
       const { result } = await withFallback(ohlcvChain<OHLCVBar[]>({
         eodhd: isDaily ? async () => {
           const rawBars = await eodhd.getHistoricalBars(symbol, { from: pastDate, to: today });
           if (!rawBars.length) throw new Error('EODHD: empty response');
-          return rawBars.slice(-outputsize).map((b) => ({
+          const bars = rawBars.slice(-outputsize).map((b) => ({
             ts: Date.parse(b.date),
             open: b.open, high: b.high, low: b.low,
             close: b.adjusted_close ?? b.close, volume: b.volume,
           }));
+          if (bars.length < SPARSE_MIN) throw new Error(`EODHD: sparse result (${bars.length}/${outputsize} bars)`);
+          return bars;
         } : undefined,
-        twelve_data: async () => td.getTimeSeries(td.normalizeTdSymbol(symbol), tdInterval, outputsize),
+        twelve_data: async () => {
+          const bars = await td.getTimeSeries(td.normalizeTdSymbol(symbol), tdInterval, outputsize);
+          // Twelve Data free plan caps daily bars — reject sparse results so FMP can serve
+          // the full history needed by regime/scenario analysis (≥280 bars).
+          if (bars.length < SPARSE_MIN) throw new Error(`Twelve Data: sparse result (${bars.length}/${outputsize} bars)`);
+          return bars;
+        },
         fmp: isDaily ? async () => {
           const rawBars = await fmp.getHistoricalPrice(symbol, pastDate, today, outputsize);
           if (!rawBars.length) throw new Error('FMP: empty response');

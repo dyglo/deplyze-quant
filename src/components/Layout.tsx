@@ -19,6 +19,7 @@ import {
   Sparkles,
   ChevronLeft,
   ChevronDown,
+  ChevronRight,
   Check,
   Plus,
   Settings2,
@@ -29,6 +30,10 @@ import {
   MoreVertical,
   Edit2,
   Trash2,
+  Globe,
+  Map,
+  Flame,
+  ArrowLeftRight,
 } from 'lucide-react';
 import { useAuth } from './AuthProvider';
 import { useWorkspace } from './WorkspaceContext';
@@ -73,6 +78,15 @@ const bottomItems = [
   { id: 'settings',   label: 'Settings & Account', icon: Settings,        path: '/settings' },
 ];
 
+const MARKET_DASHBOARD_ITEMS = [
+  { id: 'world-equity',  label: 'World Equity Intelligence',  icon: Globe,          path: '/market/world-equity' },
+  { id: 'us-sectors',    label: 'US Sector Intelligence',     icon: BarChart3,      path: '/market/us-sectors' },
+  { id: 'global-yields', label: 'Global Yields',              icon: TrendingUp,     path: '/market/global-yields' },
+  { id: 'countries',     label: 'Countries & Regional',       icon: Map,            path: '/market/countries' },
+  { id: 'commodities',   label: 'Commodities Intelligence',   icon: Flame,          path: '/market/commodities' },
+  { id: 'fx-liquidity',  label: 'FX & Liquidity',             icon: ArrowLeftRight, path: '/market/fx-liquidity' },
+];
+
 /* ─── Inner nav content extracted so it can call useSidebar ────── */
 const SidebarInner: React.FC<{ signOut: () => void; user: any; profile: any }> = ({ signOut, user, profile }) => {
   const { state } = useSidebar();
@@ -96,6 +110,28 @@ const SidebarInner: React.FC<{ signOut: () => void; user: any; profile: any }> =
   const [showCreateProj, setShowCreateProj] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+
+  const isMarketRoute = location.pathname.startsWith('/market/');
+  const [mdOpen, setMdOpen] = useState(() => {
+    const stored = localStorage.getItem('market-dashboards-expanded');
+    // Auto-expand if currently on a market route (first load)
+    return stored === null ? false : stored === 'true';
+  });
+
+  // Auto-expand the group when navigating to a market route
+  useEffect(() => {
+    if (isMarketRoute && !mdOpen) {
+      setMdOpen(true);
+      localStorage.setItem('market-dashboards-expanded', 'true');
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMarketRoute]);
+
+  const toggleMd = () => {
+    const next = !mdOpen;
+    setMdOpen(next);
+    localStorage.setItem('market-dashboards-expanded', String(next));
+  };
 
   const currentTab = menuItems.find(item =>
     item.path === '/' ? location.pathname === '/' : location.pathname.startsWith(item.path)
@@ -381,7 +417,157 @@ const SidebarInner: React.FC<{ signOut: () => void; user: any; profile: any }> =
           })}
         </SidebarMenu>
 
-        {/* Divider */}
+        {/* ── Market Dashboards expandable group ────────────── */}
+        <div style={{ marginTop: 4 }}>
+          {/* Divider */}
+          <div style={{ height: 1, background: 'var(--sidebar-border)', margin: '4px 4px 6px' }} />
+
+          {collapsed ? (
+            /* Icon-only mode: show group icon with tooltip */
+            <div
+              title="Market Dashboards"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '0.4375rem',
+                borderRadius: '0.375rem',
+                cursor: 'pointer',
+                background: isMarketRoute ? 'var(--sidebar-accent)' : 'transparent',
+                border: isMarketRoute ? '1px solid var(--sidebar-border)' : '1px solid transparent',
+              }}
+              onClick={toggleMd}
+            >
+              <LayoutDashboard
+                size={15}
+                style={{
+                  color: isMarketRoute ? 'var(--sidebar-primary)' : 'var(--sidebar-foreground)',
+                  opacity: isMarketRoute ? 1 : 0.6,
+                }}
+              />
+            </div>
+          ) : (
+            <>
+              {/* Group header button */}
+              <button
+                onClick={toggleMd}
+                aria-expanded={mdOpen}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  width: '100%',
+                  padding: '0.4rem 0.625rem',
+                  borderRadius: '0.375rem',
+                  border: 'none',
+                  background: isMarketRoute ? 'var(--sidebar-accent)' : 'transparent',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                }}
+                onMouseEnter={(e) => {
+                  if (!isMarketRoute) (e.currentTarget as HTMLElement).style.background = 'var(--sidebar-accent)';
+                }}
+                onMouseLeave={(e) => {
+                  if (!isMarketRoute) (e.currentTarget as HTMLElement).style.background = 'transparent';
+                }}
+              >
+                <LayoutDashboard
+                  size={15}
+                  style={{
+                    color: isMarketRoute ? 'var(--sidebar-primary)' : 'var(--sidebar-foreground)',
+                    opacity: isMarketRoute ? 1 : 0.6,
+                    flexShrink: 0,
+                  }}
+                />
+                <span style={{
+                  flex: 1,
+                  fontSize: '0.8125rem',
+                  fontWeight: isMarketRoute ? 500 : 400,
+                  color: isMarketRoute ? 'var(--sidebar-accent-foreground)' : 'var(--sidebar-foreground)',
+                  opacity: isMarketRoute ? 1 : 0.8,
+                  letterSpacing: '-0.01em',
+                }}>
+                  Market Dashboards
+                </span>
+                {/* Active child indicator dot */}
+                {isMarketRoute && !mdOpen && (
+                  <span style={{
+                    width: 5, height: 5, borderRadius: '50%',
+                    background: 'var(--sidebar-primary)',
+                    flexShrink: 0,
+                  }} />
+                )}
+                <span style={{
+                  display: 'flex',
+                  transition: 'transform 200ms ease',
+                  transform: mdOpen ? 'rotate(90deg)' : 'rotate(0deg)',
+                  color: 'var(--muted-foreground)',
+                  flexShrink: 0,
+                }}>
+                  <ChevronRight size={13} />
+                </span>
+              </button>
+
+              {/* Group children */}
+              {mdOpen && (
+                <div style={{ marginTop: 2, paddingLeft: 8 }}>
+                  {MARKET_DASHBOARD_ITEMS.map((item) => {
+                    const active = location.pathname === item.path || location.pathname.startsWith(item.path + '/');
+                    return (
+                      <SidebarMenuItem key={item.id}>
+                        <SidebarMenuButton
+                          render={(props) => <Link {...props} to={item.path} />}
+                          isActive={active}
+                          tooltip={undefined}
+                          className="ds-transition-fast"
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                            padding: '0.375rem 0.5rem',
+                            borderRadius: '0.375rem',
+                            fontSize: '0.75rem',
+                            fontWeight: active ? 500 : 400,
+                            color: active ? 'var(--sidebar-accent-foreground)' : 'var(--sidebar-foreground)',
+                            opacity: active ? 1 : 0.75,
+                            background: active ? 'var(--sidebar-accent)' : 'transparent',
+                            border: active ? '1px solid var(--sidebar-border)' : '1px solid transparent',
+                            width: '100%',
+                            textDecoration: 'none',
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!active) {
+                              (e.currentTarget as HTMLElement).style.background = 'var(--sidebar-accent)';
+                              (e.currentTarget as HTMLElement).style.color = 'var(--sidebar-accent-foreground)';
+                              (e.currentTarget as HTMLElement).style.opacity = '1';
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!active) {
+                              (e.currentTarget as HTMLElement).style.background = 'transparent';
+                              (e.currentTarget as HTMLElement).style.color = 'var(--sidebar-foreground)';
+                              (e.currentTarget as HTMLElement).style.opacity = '0.75';
+                            }
+                          }}
+                        >
+                          <item.icon
+                            size={13}
+                            style={{
+                              color: active ? 'var(--sidebar-primary)' : 'var(--sidebar-foreground)',
+                              opacity: active ? 1 : 0.5,
+                              flexShrink: 0,
+                            }}
+                          />
+                          <span style={{ lineHeight: 1.2 }}>{item.label}</span>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </SidebarContent>
 
       {/* Footer: User Profile & Settings Navigation */}
@@ -527,7 +713,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
     localStorage.setItem('theme', theme);
   }, [theme]);
 
-  const currentPage = [...menuItems, ...bottomItems].find(item =>
+  const currentPage = [...menuItems, ...bottomItems, ...MARKET_DASHBOARD_ITEMS].find(item =>
     item.path === '/' ? location.pathname === '/' : location.pathname.startsWith(item.path)
   );
 

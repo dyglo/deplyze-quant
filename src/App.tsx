@@ -24,6 +24,12 @@ import { Briefings } from './pages/Briefings';
 import { BriefingDetail } from './pages/BriefingDetail';
 import { ResearchLibrary } from './pages/ResearchLibrary';
 import { ArtifactPage } from './pages/ArtifactPage';
+import { WorldEquityIntelligence } from './pages/market/WorldEquityIntelligence';
+import { UsSectorIntelligence } from './pages/market/UsSectorIntelligence';
+import { GlobalYields } from './pages/market/GlobalYields';
+import { CountriesRegionalMarkets } from './pages/market/CountriesRegionalMarkets';
+import { CommoditiesIntelligence } from './pages/market/CommoditiesIntelligence';
+import { FxLiquidityIntelligence } from './pages/market/FxLiquidityIntelligence';
 
 const LoadingScreen: React.FC = () => (
   <div className="ds-loading-screen" style={{
@@ -81,6 +87,13 @@ export default function App() {
             <Route path="/library"              element={<ProtectedRoute><ResearchLibrary /></ProtectedRoute>} />
             <Route path="/artifacts/:id"        element={<ProtectedRoute><ArtifactPage /></ProtectedRoute>} />
             <Route path="/settings"             element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+            {/* Market Dashboards — Phase 1 + 2 */}
+            <Route path="/market/world-equity"  element={<ProtectedRoute><WorldEquityIntelligence /></ProtectedRoute>} />
+            <Route path="/market/us-sectors"    element={<ProtectedRoute><UsSectorIntelligence /></ProtectedRoute>} />
+            <Route path="/market/global-yields" element={<ProtectedRoute><GlobalYields /></ProtectedRoute>} />
+            <Route path="/market/countries"     element={<ProtectedRoute><CountriesRegionalMarkets /></ProtectedRoute>} />
+            <Route path="/market/commodities"   element={<ProtectedRoute><CommoditiesIntelligence /></ProtectedRoute>} />
+            <Route path="/market/fx-liquidity"  element={<ProtectedRoute><FxLiquidityIntelligence /></ProtectedRoute>} />
             <Route path="*"                     element={<Navigate to="/" replace />} />
           </Routes>
           <Toaster />

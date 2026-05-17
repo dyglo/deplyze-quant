@@ -1,9 +1,15 @@
 /**
- * InstrumentDetailDrawer — bridges DashboardQuote into the existing
- * IntelligenceSidePanel. Call useInstrumentDrawer() from any dashboard page,
- * then pass openDrawer to table rows and heatmap cells.
+ * InstrumentDetailDrawer — thin adapter on `IntelligenceDrawer` for dashboards
+ * that already speak `DashboardQuote` and want a screener-style detail panel.
+ *
+ * The drawer chrome (slide-over, backdrop, ESC, focus) is supplied by
+ * `IntelligenceDrawer`. The content is the existing `IntelligenceSidePanel`,
+ * which keeps its own price/header/news rendering. Section scaffolds
+ * (Summary / Historical / Narrative / Macro / Linked) plug in here from
+ * later waves via the `sections` prop on `IntelligenceDrawer`.
  */
 import React, { useCallback } from 'react';
+import { IntelligenceDrawer } from '../intelligence-drawer';
 import { IntelligenceSidePanel } from '../quant/IntelligenceSidePanel';
 import {
   computeVolatilityState,
@@ -65,6 +71,8 @@ export function useInstrumentDrawer(): UseInstrumentDrawerReturn {
 
   const closeDrawer = useCallback(() => {
     setDrawerState((s) => ({ ...s, open: false }));
+    // Match the drawer's exit transition so children stay mounted long enough
+    // for the animation to play out.
     setTimeout(() => setDrawerState({ row: null, open: false }), 250);
   }, []);
 
@@ -81,43 +89,8 @@ export const InstrumentDetailDrawer: React.FC<InstrumentDetailDrawerProps> = ({ 
   if (!open && !row) return null;
 
   return (
-    <>
-      {/* Backdrop */}
-      <div
-        onClick={onClose}
-        style={{
-          position: 'fixed', inset: 0,
-          background: 'rgba(0,0,0,0.28)',
-          backdropFilter: 'blur(2px)',
-          zIndex: 60,
-          opacity: open ? 1 : 0,
-          transition: 'opacity 200ms ease',
-          pointerEvents: open ? 'auto' : 'none',
-        }}
-      />
-      {/* Panel */}
-      <aside
-        style={{
-          position: 'fixed',
-          top: 0, right: 0, bottom: 0,
-          width: 'min(480px, 96vw)',
-          background: 'var(--background)',
-          borderLeft: '1px solid var(--border)',
-          boxShadow: '-20px 0 48px rgba(0,0,0,0.18)',
-          zIndex: 61,
-          display: 'flex', flexDirection: 'column',
-          transform: open ? 'translateX(0)' : 'translateX(100%)',
-          transition: 'transform 220ms cubic-bezier(0.16,1,0.3,1)',
-          overflow: 'hidden',
-        }}
-      >
-        {row && (
-          <IntelligenceSidePanel
-            row={row}
-            onClose={onClose}
-          />
-        )}
-      </aside>
-    </>
+    <IntelligenceDrawer open={open} onClose={onClose} drawerId="instrument-detail-drawer">
+      {row && <IntelligenceSidePanel row={row} onClose={onClose} />}
+    </IntelligenceDrawer>
   );
 };

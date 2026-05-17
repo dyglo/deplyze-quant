@@ -85,6 +85,11 @@ class DocumentParseRequest(BaseModel):
     user_agent: Optional[str] = None
 
 
+class EntityFeatureRequest(BaseModel):
+    limit: int = 200
+    top_n_per_doc: int = 50
+
+
 def _new_run(pipeline_name: str) -> dict:
     run_id = str(uuid.uuid4())
     run = {
@@ -260,6 +265,21 @@ async def parse_documents(req: DocumentParseRequest, background_tasks: Backgroun
     from app.refinery.document_parser import parse_unprocessed_documents
     run = _new_run("document_parse")
     background_tasks.add_task(parse_unprocessed_documents, run["run_id"], limit=req.limit, user_agent=req.user_agent)
+    return {"run_id": run["run_id"], "status": "queued", "limit": req.limit}
+
+
+@router.post("/refine/entities")
+async def refine_entities(req: EntityFeatureRequest, background_tasks: BackgroundTasks):
+    """
+    V3 Phase 2 · Wave F — extract ontology features from parsed documents.
+
+    Reads `parsed_documents_raw` rows with extraction_quality >= 0.3, runs
+    deterministic rule-based entity extraction (companies/ETFs/macro/themes/...),
+    writes per-(entity, document) rows into `features.ontology_features`.
+    """
+    from app.refinery.entity_features import extract_entity_features
+    run = _new_run("entity_features")
+    background_tasks.add_task(extract_entity_features, run["run_id"], limit=req.limit, top_n_per_doc=req.top_n_per_doc)
     return {"run_id": run["run_id"], "status": "queued", "limit": req.limit}
 
 

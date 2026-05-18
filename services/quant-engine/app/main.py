@@ -30,6 +30,7 @@ from typing import AsyncIterator
 
 import structlog
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -107,6 +108,15 @@ app.include_router(warehouse_router, prefix="/warehouse", tags=["Warehouse"])
 
 
 # ─── Global error handler ────────────────────────────────────────────────────
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request, exc: RequestValidationError) -> JSONResponse:
+    body = await request.body()
+    log.error("validation_error", path=str(request.url), errors=exc.errors(), body=body.decode(errors="ignore"))
+    return JSONResponse(
+        status_code=422,
+        content={"detail": exc.errors(), "body_received": body.decode(errors="ignore")},
+    )
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc: Exception) -> JSONResponse:

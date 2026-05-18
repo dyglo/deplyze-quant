@@ -127,29 +127,28 @@ export function subscribeToPortfolios(
   workspaceId: string,
   cb: (portfolios: Portfolio[]) => void
 ): Unsubscribe {
+  // Single-field where only — no composite index required.
+  // workspaceId filter and sort applied client-side.
   const q = query(
     collection(db, 'portfolios'),
     where('uid', '==', uid),
-    where('workspaceId', '==', workspaceId),
-    where('status', '==', 'active'),
-    orderBy('createdAt', 'desc')
   );
   return onSnapshot(
     q,
     (snap) => {
-      const portfolios: Portfolio[] = snap.docs.map((d) => {
-        const data = d.data();
-        const convert = (v: unknown): unknown => {
-          if (v instanceof Timestamp) return v.toMillis();
-          return v;
-        };
-        return {
-          id: d.id,
-          ...data,
-          createdAt: convert(data.createdAt) as number,
-          updatedAt: convert(data.updatedAt) as number,
-        } as Portfolio;
-      });
+      const portfolios: Portfolio[] = snap.docs
+        .map((d) => {
+          const data = d.data();
+          const convert = (v: unknown): unknown => (v instanceof Timestamp ? v.toMillis() : v);
+          return {
+            id: d.id,
+            ...data,
+            createdAt: convert(data.createdAt) as number,
+            updatedAt: convert(data.updatedAt) as number,
+          } as Portfolio;
+        })
+        .filter(p => p.workspaceId === workspaceId && (p as any).status !== 'archived')
+        .sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
       cb(portfolios);
     },
     (err) => {
@@ -285,24 +284,28 @@ export function subscribeToPortfolioObservations(
   cb: (observations: PortfolioIntelligenceObservation[]) => void,
   limit = 20
 ): Unsubscribe {
+  // Single-field where only — no composite index required.
+  // acknowledged filter and sort applied client-side.
   const q = query(
     collection(db, 'portfolioIntelligence'),
     where('portfolioId', '==', portfolioId),
-    where('acknowledged', '==', false),
-    orderBy('createdAt', 'desc')
   );
   return onSnapshot(
     q,
     (snap) => {
-    const observations: PortfolioIntelligenceObservation[] = snap.docs.slice(0, limit).map((d) => {
-      const data = d.data();
-      return {
-        id: d.id,
-        ...data,
-        createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toMillis() : (data.createdAt ?? tsNow()),
-      } as PortfolioIntelligenceObservation;
-    });
-    cb(observations);
+      const observations: PortfolioIntelligenceObservation[] = snap.docs
+        .map((d) => {
+          const data = d.data();
+          return {
+            id: d.id,
+            ...data,
+            createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toMillis() : (data.createdAt ?? tsNow()),
+          } as PortfolioIntelligenceObservation;
+        })
+        .filter(o => !o.acknowledged)
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .slice(0, limit);
+      cb(observations);
     },
     (err) => {
       console.error('[portfolioService] subscribeToPortfolioObservations error:', err.message);

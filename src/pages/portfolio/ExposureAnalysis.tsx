@@ -5,11 +5,13 @@ import {
 } from 'recharts';
 import { PieChart as PieChartIcon, Loader2, TrendingUp, Activity, AlertCircle } from 'lucide-react';
 import { usePortfolioWorkspace } from '../../hooks/usePortfolioWorkspace';
+import { usePortfolioIntelligence } from '../../hooks/usePortfolioIntelligence';
 import { fetchOHLCV } from '../../services/marketService';
 import { logReturns } from '../../lib/quant/returns';
 import { correlationMatrix } from '../../lib/quant/correlation';
 import { rollingAnnualisedVol } from '../../lib/quant/volatility';
 import type { OHLCVBar, AssetClass } from '../../types';
+import { PortfolioIntelligencePanel } from '../../components/portfolio/PortfolioIntelligencePanel';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -241,6 +243,25 @@ export const ExposureAnalysis: React.FC = () => {
     ];
   }, [holdings, volData, hhiValue, top5Weight]);
 
+  const avgCorrelation = useMemo(() => {
+    if (corrMatrix.length < 2) return undefined;
+    let sum = 0, count = 0;
+    for (let i = 0; i < corrMatrix.length; i++) {
+      for (let j = i + 1; j < corrMatrix.length; j++) {
+        sum += corrMatrix[i]?.[j] ?? 0;
+        count++;
+      }
+    }
+    return count > 0 ? sum / count : undefined;
+  }, [corrMatrix]);
+
+  const { observations, acknowledge } = usePortfolioIntelligence(
+    selectedPortfolio?.id,
+    holdings.length > 0
+      ? { holdings, effectiveWeights, hhi: hhiValue, top3Weight: top5Weight, avgCorrelation }
+      : null,
+  );
+
   if (loading || holdingsLoading) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '50vh' }}>
@@ -270,6 +291,8 @@ export const ExposureAnalysis: React.FC = () => {
           {selectedPortfolio?.name} · {holdings.length} holdings · Sector, factor, geographic & correlation analysis
         </p>
       </div>
+
+      <PortfolioIntelligencePanel observations={observations} onAcknowledge={acknowledge} />
 
       <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
 

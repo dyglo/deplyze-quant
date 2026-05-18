@@ -5,10 +5,12 @@ import {
 } from 'recharts';
 import { Zap, Loader2, AlertCircle, TrendingDown, TrendingUp, Activity } from 'lucide-react';
 import { usePortfolioWorkspace } from '../../hooks/usePortfolioWorkspace';
+import { usePortfolioIntelligence } from '../../hooks/usePortfolioIntelligence';
 import { fetchOHLCV } from '../../services/marketService';
 import { logReturns, cumulativeLogReturns, rebase100 } from '../../lib/quant/returns';
 import { STRESS_PRESETS, fmtShock, type StressScenario } from '../../lib/stressScenarios';
 import type { OHLCVBar } from '../../types';
+import { PortfolioIntelligencePanel } from '../../components/portfolio/PortfolioIntelligencePanel';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -201,6 +203,15 @@ export const ScenarioStress: React.FC = () => {
     }).sort((a, b) => a.impact - b.impact);
   }, [holdings, effectiveWeights]);
 
+  const worstScenarioImpact = allScenarioImpacts.length > 0
+    ? Math.min(...allScenarioImpacts.map(s => s.impact))
+    : undefined;
+
+  const { observations, acknowledge } = usePortfolioIntelligence(
+    selectedPortfolio?.id,
+    holdings.length > 0 ? { holdings, effectiveWeights, worstScenarioImpact } : null,
+  );
+
   if (loading || holdingsLoading) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '50vh' }}>
@@ -228,6 +239,8 @@ export const ScenarioStress: React.FC = () => {
           {selectedPortfolio?.name} · Contextual scenario intelligence · Historical shock proxies
         </p>
       </div>
+
+      <PortfolioIntelligencePanel observations={observations} onAcknowledge={acknowledge} />
 
       <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
 

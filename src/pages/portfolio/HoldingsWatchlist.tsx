@@ -494,6 +494,16 @@ export const HoldingsWatchlist: React.FC = () => {
   const [showCreate, setShowCreate] = useState(false);
   const [drawerHolding, setDrawerHolding] = useState<Holding | null>(null);
   const [filter, setFilter] = useState('');
+  const [sortCol, setSortCol] = useState<'weight' | 'symbol' | 'return' | 'conviction'>('weight');
+  const [sortDir, setSortDir] = useState<1 | -1>(-1);
+
+  const handleSort = useCallback((col: typeof sortCol) => {
+    setSortCol(prev => {
+      if (prev === col) { setSortDir(d => (d === 1 ? -1 : 1)); return col; }
+      setSortDir(-1);
+      return col;
+    });
+  }, []);
 
   const filtered = useMemo(() =>
     holdings.filter(h =>
@@ -607,14 +617,49 @@ export const HoldingsWatchlist: React.FC = () => {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--muted)' }}>
-                    {['Symbol', 'Name', 'Class', 'Sector', 'Weight', '30D Return', 'Trend', 'Conviction', ''].map(h => (
-                      <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontSize: 10, fontWeight: 700, color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>{h}</th>
+                    {([
+                      { key: 'symbol', label: 'Symbol' },
+                      { key: null, label: 'Name' },
+                      { key: null, label: 'Class' },
+                      { key: null, label: 'Sector' },
+                      { key: 'weight', label: 'Weight' },
+                      { key: 'return', label: '30D Return' },
+                      { key: null, label: 'Trend' },
+                      { key: 'conviction', label: 'Conviction' },
+                      { key: null, label: '' },
+                    ] as { key: typeof sortCol | null; label: string }[]).map(({ key, label }) => (
+                      <th
+                        key={label || '_action'}
+                        onClick={() => key && handleSort(key)}
+                        style={{
+                          padding: '8px 12px', textAlign: 'left', fontSize: 10, fontWeight: 700,
+                          color: key && sortCol === key ? 'var(--foreground)' : 'var(--muted-foreground)',
+                          textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap',
+                          cursor: key ? 'pointer' : 'default',
+                          userSelect: 'none',
+                        }}
+                      >
+                        {label}
+                        {key && sortCol === key && (
+                          <span style={{ marginLeft: 3, fontSize: 9 }}>{sortDir === -1 ? '↓' : '↑'}</span>
+                        )}
+                      </th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {filtered
-                    .sort((a, b) => (effectiveWeights[b.symbol] ?? 0) - (effectiveWeights[a.symbol] ?? 0))
+                    .slice()
+                    .sort((a, b) => {
+                      let v = 0;
+                      if (sortCol === 'weight') v = (effectiveWeights[a.symbol] ?? 0) - (effectiveWeights[b.symbol] ?? 0);
+                      else if (sortCol === 'symbol') v = a.symbol.localeCompare(b.symbol);
+                      else if (sortCol === 'conviction') {
+                        const order = { highest: 4, high: 3, medium: 2, low: 1 };
+                        v = (order[a.conviction ?? 'medium'] ?? 2) - (order[b.conviction ?? 'medium'] ?? 2);
+                      }
+                      return v * sortDir;
+                    })
                     .map((h, i) => (
                       <HoldingRow
                         key={h.id}

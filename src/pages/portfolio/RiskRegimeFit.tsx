@@ -5,6 +5,7 @@ import {
 } from 'recharts';
 import { ShieldAlert, Loader2, Activity, TrendingUp, AlertCircle } from 'lucide-react';
 import { usePortfolioWorkspace } from '../../hooks/usePortfolioWorkspace';
+import { usePortfolioIntelligence } from '../../hooks/usePortfolioIntelligence';
 import { fetchOHLCV } from '../../services/marketService';
 import { logReturns, cumulativeLogReturns, rebase100 } from '../../lib/quant/returns';
 import { rollingAnnualisedVol, volatilityRegime } from '../../lib/quant/volatility';
@@ -12,6 +13,7 @@ import { rollingBeta } from '../../lib/quant/risk';
 import { correlationMatrix } from '../../lib/quant/correlation';
 import { portfolioReturnSeries } from '../../lib/quant/portfolio';
 import type { OHLCVBar } from '../../types';
+import { PortfolioIntelligencePanel } from '../../components/portfolio/PortfolioIntelligencePanel';
 
 // ─── Helpers ─────────────────────��───────────────────────────────────────────
 
@@ -257,6 +259,46 @@ export const RiskRegimeFit: React.FC = () => {
       vol: vols.reduce((a, b) => a + b, 0) / vols.length,
     }));
   }, [volSeries]);
+
+  // ── Correlation instability as numeric values for intelligence engine ────────
+  const { recentCorrAvg, priorCorrAvg } = useMemo(() => {
+    const validSymbols = symbols.filter(s => barsMap[s] && barsMap[s].length >= 90);
+    if (validSymbols.length < 2) return { recentCorrAvg: undefined, priorCorrAvg: undefined };
+    const recentLR = validSymbols.map(s => logReturns(barsMap[s].slice(-30).map(b => b.close)));
+    const olderLR  = validSymbols.map(s => logReturns(barsMap[s].slice(-90, -30).map(b => b.close)));
+    if (olderLR[0].length < 5) return { recentCorrAvg: undefined, priorCorrAvg: undefined };
+    const recentMat = correlationMatrix(recentLR);
+    const olderMat  = correlationMatrix(olderLR);
+    const avg = (mat: number[][]): number => {
+      let sum = 0, count = 0;
+      for (let i = 0; i < mat.length; i++)
+        for (let j = i + 1; j < mat.length; j++) { sum += mat[i]?.[j] ?? 0; count++; }
+      return count > 0 ? sum / count : 0;
+    };
+    return { recentCorrAvg: avg(recentMat), priorCorrAvg: avg(olderMat) };
+  }, [symbols, barsMap]);
+
+  const shortVol = volSeries.length > 0 ? (volSeries[volSeries.length - 1]?.vol ?? 0) / 100 : undefined;
+  const longVol  = volSeries.length > 20
+    ? volSeries.slice(-90).reduce((s, v) => s + v.vol, 0) / Math.min(90, volSeries.length) / 100
+    : undefined;
+
+  const { observations, acknowledge } = usePortfolioIntelligence(
+    selectedPortfolio?.id,
+    holdings.length > 0
+      ? {
+          holdings,
+          effectiveWeights,
+          annVol: currentVol / 100,
+          shortVol,
+          longVol,
+          rollingBeta: currentBeta,
+          maxDrawdownPct: mdd,
+          recentCorr: recentCorrAvg,
+          priorCorr: priorCorrAvg,
+        }
+      : null,
+  );
 
   if (loading || holdingsLoading) {
     return (

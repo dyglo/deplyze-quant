@@ -33,10 +33,17 @@ export interface DrawdownSeries {
   benchmarkDrawdown?: number;
 }
 
+export interface HoldingCurve {
+  symbol: string;
+  data: Array<{ ts: number; value: number }>;
+  totalReturn: number;   // fraction — for sorting/coloring
+}
+
 export interface PortfolioPerformanceResult {
   performanceSeries: PortfolioPerformanceSeries[];
   volSeries: PortfolioVolSeries[];
   drawdownSeries: DrawdownSeries[];
+  holdingCurves: HoldingCurve[];   // per-holding rebased equity curves
   maxDrawdown: number;
   annReturn: number;        // fraction
   annVol: number;           // fraction
@@ -51,6 +58,7 @@ const EMPTY: PortfolioPerformanceResult = {
   performanceSeries: [],
   volSeries: [],
   drawdownSeries: [],
+  holdingCurves: [],
   maxDrawdown: 0,
   annReturn: 0,
   annVol: 0,
@@ -202,12 +210,26 @@ export function usePortfolioPerformance(
         const sharpe = annVol > 0 ? annReturn / annVol : 0;
         const bmTotalReturn = bmLogReturns.length > 0 ? Math.exp(bmLogReturns.reduce((a, b) => a + b, 0)) - 1 : 0;
 
+        // Per-holding rebased curves (aligned to same length as portfolio)
+        const holdingCurves: HoldingCurve[] = validSymbols.map((sym, idx) => {
+          const lr = logReturnSeries[idx];
+          const curve = rebase100(cumulativeLogReturns(lr));
+          const offset = curve.length - len;
+          const totalRet = Math.exp(lr.reduce((a, b) => a + b, 0)) - 1;
+          return {
+            symbol: sym,
+            totalReturn: totalRet,
+            data: tSlice.map((ts, i) => ({ ts, value: curve[i + offset] ?? 100 })),
+          };
+        });
+
         if (abortRef.current) return;
 
         setResult({
           performanceSeries,
           volSeries,
           drawdownSeries: ddSeries,
+          holdingCurves,
           maxDrawdown: mdd ?? 0,
           annReturn,
           annVol,

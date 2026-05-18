@@ -2,6 +2,7 @@ import React, { useState, useMemo, useCallback } from 'react';
 import {
   LineChart, Line, AreaChart, Area,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Legend,
+  ComposedChart,
 } from 'recharts';
 import {
   Briefcase, Plus, ChevronDown, TrendingUp, TrendingDown, Minus,
@@ -14,6 +15,37 @@ import { usePortfolioIntelligence } from '../../hooks/usePortfolioIntelligence';
 import { DEFAULT_BENCHMARK_ID, BENCHMARK_REGISTRY } from '../../lib/portfolio/benchmarks';
 import type { Portfolio, Holding } from '../../lib/portfolio/schemas';
 import { PortfolioIntelligencePanel } from '../../components/portfolio/PortfolioIntelligencePanel';
+
+// ─── Period options ────────────────────────────────────────────────────────
+
+const PERIODS = [
+  { label: '1M', days: 30 },
+  { label: '3M', days: 90 },
+  { label: '6M', days: 180 },
+  { label: '1Y', days: 252 },
+] as const;
+
+type PeriodLabel = typeof PERIODS[number]['label'];
+
+const PeriodSelector: React.FC<{ active: PeriodLabel; onChange: (p: PeriodLabel) => void }> = ({ active, onChange }) => (
+  <div style={{ display: 'flex', gap: 3 }}>
+    {PERIODS.map(p => (
+      <button
+        key={p.label}
+        onClick={() => onChange(p.label)}
+        style={{
+          padding: '3px 10px', borderRadius: 5, fontSize: 10, fontWeight: 700,
+          border: `1px solid ${active === p.label ? 'var(--primary)' : 'var(--border)'}`,
+          background: active === p.label ? 'var(--primary)' : 'transparent',
+          color: active === p.label ? 'var(--primary-foreground)' : 'var(--muted-foreground)',
+          cursor: 'pointer', letterSpacing: '0.03em',
+        }}
+      >
+        {p.label}
+      </button>
+    ))}
+  </div>
+);
 
 // ─── Shared helpers ────────────────────────────────────────────────────────
 
@@ -302,9 +334,140 @@ const PortfolioSelectorBar: React.FC<{
 // ─── Allocation bar ───────────────────────────────────────────────────────────
 
 const ALLOC_COLORS = [
-  'var(--primary)', 'var(--chart-2)', 'var(--chart-3)',
-  'var(--chart-4)', 'var(--chart-5)', '#8884d8', '#82ca9d',
+  'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)', 'var(--chart-5)',
+  '#8884d8', '#82ca9d', '#ffc658', '#ff8042', '#a4de6c', '#d0ed57',
 ];
+
+// ─── Holdings multi-line chart ──────────────────────────────────────────────
+
+type MultiPoint = Record<string, number> & { ts: number };
+
+const HoldingsLineChart: React.FC<{
+  performanceSeries: Array<{ ts: number; portfolio: number; benchmark: number }>;
+  holdingCurves: Array<{ symbol: string; data: Array<{ ts: number; value: number }>; totalReturn: number }>;
+  benchmarkId: string;
+  portfolioName: string;
+}> = ({ performanceSeries, holdingCurves, benchmarkId, portfolioName }) => {
+  const [hidden, setHidden] = useState<Set<string>>(new Set());
+  const [hovered, setHovered] = useState<string | null>(null);
+
+  const merged = useMemo<MultiPoint[]>(() => {
+    const map = new Map<number, MultiPoint>();
+    for (const p of performanceSeries) {
+      map.set(p.ts, { ts: p.ts, __portfolio: p.portfolio, __benchmark: p.benchmark });
+    }
+    for (const hc of holdingCurves) {
+      for (const d of hc.data) {
+        const row = map.get(d.ts);
+        if (row) row[hc.symbol] = d.value;
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => a.ts - b.ts);
+  }, [performanceSeries, holdingCurves]);
+
+  const toggle = (sym: string) => {
+    setHidden(prev => {
+      const next = new Set(prev);
+      next.has(sym) ? next.delete(sym) : next.add(sym);
+      return next;
+    });
+  };
+
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload?.length) return null;
+    const sorted = [...payload].sort((a, b) => (b.value ?? 0) - (a.value ?? 0));
+    return (
+      <div style={{ background: 'var(--popover)', border: '1px solid var(--border)', borderRadius: 7, padding: '8px 12px', fontSize: 11, minWidth: 160 }}>
+        <p style={{ margin: '0 0 6px', fontSize: 10, color: 'var(--muted-foreground)' }}>
+          {new Date(label).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}
+        </p>
+        {sorted.map((entry: any) => (
+          <div key={entry.dataKey} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 2 }}>
+            <span style={{ color: entry.color, fontWeight: 600 }}>{entry.name}</span>
+            <span style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--foreground)' }}>{Number(entry.value).toFixed(1)}</span>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  if (merged.length === 0) return null;
+
+  return (
+    <div>
+      <ResponsiveContainer width="100%" height={220}>
+        <ComposedChart data={merged} margin={{ top: 4, right: 8, bottom: 0, left: -16 }}>
+          <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" strokeOpacity={0.5} vertical={false} />
+          <XAxis dataKey="ts" tickFormatter={(ts) => fmtDate(ts)} tick={{ fontSize: 9, fill: 'var(--muted-foreground)' }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+          <YAxis tick={{ fontSize: 9, fill: 'var(--muted-foreground)' }} tickLine={false} axisLine={false} tickFormatter={v => v.toFixed(0)} domain={['auto', 'auto']} />
+          <ReferenceLine y={100} stroke="var(--border)" strokeDasharray="3 3" />
+          <Tooltip content={<CustomTooltip />} />
+          {/* Individual holdings */}
+          {holdingCurves.map((hc, i) => (
+            hidden.has(hc.symbol) ? null : (
+              <Line
+                key={hc.symbol}
+                type="monotone"
+                dataKey={hc.symbol}
+                name={hc.symbol}
+                stroke={ALLOC_COLORS[i % ALLOC_COLORS.length]}
+                strokeWidth={hovered === hc.symbol ? 2.5 : hovered ? 0.5 : 1.5}
+                dot={false}
+                activeDot={{ r: 3 }}
+                strokeOpacity={hovered && hovered !== hc.symbol ? 0.25 : 1}
+              />
+            )
+          ))}
+          {/* Portfolio aggregate */}
+          <Line type="monotone" dataKey="__portfolio" name={portfolioName} stroke="var(--primary)" strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
+          {/* Benchmark */}
+          <Line type="monotone" dataKey="__benchmark" name={benchmarkId} stroke="var(--muted-foreground)" strokeWidth={1.5} strokeDasharray="5 3" dot={false} />
+        </ComposedChart>
+      </ResponsiveContainer>
+
+      {/* Interactive legend */}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
+        {/* Portfolio chip */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 8px', borderRadius: 5, background: 'color-mix(in srgb, var(--primary) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--primary) 25%, transparent)' }}>
+          <div style={{ width: 10, height: 2, background: 'var(--primary)', borderRadius: 1 }} />
+          <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--primary)' }}>{portfolioName}</span>
+        </div>
+        {/* Benchmark chip */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 8px', borderRadius: 5, background: 'var(--muted)', border: '1px solid var(--border)' }}>
+          <div style={{ width: 10, height: 1, background: 'var(--muted-foreground)', borderRadius: 1, borderTop: '1px dashed var(--muted-foreground)' }} />
+          <span style={{ fontSize: 10, color: 'var(--muted-foreground)' }}>{benchmarkId}</span>
+        </div>
+        {/* Holding chips */}
+        {holdingCurves.map((hc, i) => {
+          const color = ALLOC_COLORS[i % ALLOC_COLORS.length];
+          const isHidden = hidden.has(hc.symbol);
+          const ret = hc.totalReturn;
+          return (
+            <button
+              key={hc.symbol}
+              onClick={() => toggle(hc.symbol)}
+              onMouseEnter={() => setHovered(hc.symbol)}
+              onMouseLeave={() => setHovered(null)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 5, padding: '3px 8px',
+                borderRadius: 5, cursor: 'pointer',
+                background: isHidden ? 'transparent' : `color-mix(in srgb, ${color} 10%, transparent)`,
+                border: `1px solid ${isHidden ? 'var(--border)' : `color-mix(in srgb, ${color} 30%, transparent)`}`,
+                opacity: isHidden ? 0.4 : 1,
+              }}
+            >
+              <div style={{ width: 8, height: 8, borderRadius: 2, background: color, flexShrink: 0 }} />
+              <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--foreground)' }}>{hc.symbol}</span>
+              <span style={{ fontSize: 10, color: ret >= 0 ? 'var(--chart-2)' : 'var(--destructive)', fontVariantNumeric: 'tabular-nums' }}>
+                {ret >= 0 ? '+' : ''}{(ret * 100).toFixed(1)}%
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
 
 const AllocationBar: React.FC<{ holdings: Holding[]; weights: Record<string, number> }> = ({ holdings, weights }) => {
   const sorted = [...holdings].sort((a, b) => (weights[b.symbol] ?? 0) - (weights[a.symbol] ?? 0));
@@ -564,14 +727,17 @@ export const PortfolioOverview: React.FC = () => {
   } = usePortfolioWorkspace();
 
   const [showCreate, setShowCreate] = useState(false);
+  const [period, setPeriod] = useState<PeriodLabel>('1Y');
 
   const symbols = useMemo(() => holdings.map(h => h.symbol), [holdings]);
   const benchmarkId = selectedPortfolio?.benchmarkId ?? DEFAULT_BENCHMARK_ID;
+  const periodDays = PERIODS.find(p => p.label === period)?.days ?? 252;
 
   const {
     performanceSeries,
     volSeries,
     drawdownSeries,
+    holdingCurves,
     maxDrawdown: mdd,
     annReturn,
     annVol,
@@ -580,7 +746,7 @@ export const PortfolioOverview: React.FC = () => {
     benchmarkTotalReturn,
     loading: perfLoading,
     error: perfError,
-  } = usePortfolioPerformance(symbols, effectiveWeights, benchmarkId);
+  } = usePortfolioPerformance(symbols, effectiveWeights, benchmarkId, periodDays);
 
   const handleCreate = useCallback(async (name: string, bm: string) => {
     setShowCreate(false);
@@ -705,8 +871,13 @@ export const PortfolioOverview: React.FC = () => {
             </div>
           )}
 
+          {/* ── Period selector ───────────────────────────────────────────── */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <PeriodSelector active={period} onChange={setPeriod} />
+          </div>
+
           {/* ── Row 1: Performance + Allocation ──────────────────────────── */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 16 }}>
 
             {/* Performance curve */}
             <SectionCard
@@ -739,12 +910,28 @@ export const PortfolioOverview: React.FC = () => {
             {/* Allocation */}
             <SectionCard
               title="Allocation"
-              subtitle={`${holdings.length} holdings · ${selectedPortfolio?.isWatchlist ? 'Equal weight' : 'By weight'}`}
+              subtitle={`${holdings.length} holdings · By weight`}
               icon={<PieChart size={13} />}
             >
               <AllocationBar holdings={holdings} weights={effectiveWeights} />
             </SectionCard>
           </div>
+
+          {/* ── Holdings equity curves (multi-line interactive) ───────────── */}
+          {hasPerfData && holdingCurves.length > 0 && (
+            <SectionCard
+              title="Holdings Performance Breakdown"
+              subtitle={`Individual equity curves · Click legend to toggle · ${period} window · Rebased to 100`}
+              icon={<LayoutDashboard size={13} />}
+            >
+              <HoldingsLineChart
+                performanceSeries={performanceSeries}
+                holdingCurves={holdingCurves}
+                benchmarkId={benchmarkId}
+                portfolioName={selectedPortfolio?.name ?? 'Portfolio'}
+              />
+            </SectionCard>
+          )}
 
           {/* ── Row 2: Rolling Volatility + Drawdown ─────────────────────── */}
           {hasPerfData && (

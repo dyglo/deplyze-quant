@@ -5,10 +5,12 @@ import {
 } from 'recharts';
 import { TrendingUp, TrendingDown, Loader2, Activity } from 'lucide-react';
 import { usePortfolioWorkspace } from '../../hooks/usePortfolioWorkspace';
+import { usePortfolioIntelligence } from '../../hooks/usePortfolioIntelligence';
 import { fetchOHLCV } from '../../services/marketService';
 import { logReturns, cumulativeLogReturns, rebase100 } from '../../lib/quant/returns';
 import { portfolioReturnSeries } from '../../lib/quant/portfolio';
 import type { OHLCVBar } from '../../types';
+import { PortfolioIntelligencePanel } from '../../components/portfolio/PortfolioIntelligencePanel';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -206,6 +208,14 @@ export const PerformanceAttribution: React.FC = () => {
     return points;
   }, [symbols, barsMap, effectiveWeights]);
 
+  // Hooks must all be called before any early returns
+  const { observations, acknowledge } = usePortfolioIntelligence(
+    selectedPortfolio?.id,
+    holdings.length > 0
+      ? { holdings, effectiveWeights, portfolioReturn30D: portfolioTotalReturn, benchmarkReturn30D: bmReturn }
+      : null,
+  );
+
   if (loading || holdingsLoading) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '50vh' }}>
@@ -235,6 +245,8 @@ export const PerformanceAttribution: React.FC = () => {
           {selectedPortfolio?.name} · 120D contribution analysis · vs {benchmarkId}
         </p>
       </div>
+
+      <PortfolioIntelligencePanel observations={observations} onAcknowledge={acknowledge} />
 
       <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
 

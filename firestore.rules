@@ -83,6 +83,30 @@ service cloud.firestore {
       allow read, write: if isSignedIn();
     }
 
+    // ─── Portfolio Intelligence ───────────────────────────────────────────
+    // Top-level collections scoped by uid + workspaceId on each document.
+    // Clients own their own portfolio documents; no cross-user access.
+    match /portfolios/{portfolioId} {
+      allow read, write: if isSignedIn() && request.auth.uid == resource.data.uid;
+      allow create:      if isSignedIn() && request.auth.uid == request.resource.data.uid;
+
+      match /holdings/{holdingId} {
+        allow read, write: if isSignedIn();
+      }
+    }
+
+    match /portfolioIntelligence/{observationId} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /intelligenceWatchlists/{watchlistId} {
+      allow read, write: if isSignedIn() && (
+        resource.data.uid == request.auth.uid
+        || request.resource.data.uid == request.auth.uid
+      );
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+    }
+
     // ─── Server-only collections ──────────────────────────────────────────
     match /providerCache/{key}  { allow read, write: if false; }
     match /auditLogs/{logId}    { allow read, write: if false; }

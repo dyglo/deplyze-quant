@@ -134,22 +134,29 @@ export function subscribeToPortfolios(
     where('status', '==', 'active'),
     orderBy('createdAt', 'desc')
   );
-  return onSnapshot(q, (snap) => {
-    const portfolios: Portfolio[] = snap.docs.map((d) => {
-      const data = d.data();
-      const convert = (v: unknown): unknown => {
-        if (v instanceof Timestamp) return v.toMillis();
-        return v;
-      };
-      return {
-        id: d.id,
-        ...data,
-        createdAt: convert(data.createdAt) as number,
-        updatedAt: convert(data.updatedAt) as number,
-      } as Portfolio;
-    });
-    cb(portfolios);
-  });
+  return onSnapshot(
+    q,
+    (snap) => {
+      const portfolios: Portfolio[] = snap.docs.map((d) => {
+        const data = d.data();
+        const convert = (v: unknown): unknown => {
+          if (v instanceof Timestamp) return v.toMillis();
+          return v;
+        };
+        return {
+          id: d.id,
+          ...data,
+          createdAt: convert(data.createdAt) as number,
+          updatedAt: convert(data.updatedAt) as number,
+        } as Portfolio;
+      });
+      cb(portfolios);
+    },
+    (err) => {
+      console.error('[portfolioService] subscribeToPortfolios error:', err.message);
+      cb([]);
+    },
+  );
 }
 
 // ─── Holdings ─────────────────────────────────────────────────────────────────
@@ -234,19 +241,26 @@ export function subscribeToHoldings(
     collection(db, 'portfolios', portfolioId, 'holdings'),
     orderBy('addedAt', 'asc')
   );
-  return onSnapshot(q, (snap) => {
-    const holdings: Holding[] = snap.docs.map((d) => {
-      const data = d.data();
-      const toMs = (v: unknown) => (v instanceof Timestamp ? v.toMillis() : (v as number) ?? tsNow());
-      return {
-        id: d.id,
-        ...data,
-        addedAt: toMs(data.addedAt),
-        updatedAt: toMs(data.updatedAt),
-      } as Holding;
-    });
-    cb(holdings);
-  });
+  return onSnapshot(
+    q,
+    (snap) => {
+      const holdings: Holding[] = snap.docs.map((d) => {
+        const data = d.data();
+        const toMs = (v: unknown) => (v instanceof Timestamp ? v.toMillis() : (v as number) ?? tsNow());
+        return {
+          id: d.id,
+          ...data,
+          addedAt: toMs(data.addedAt),
+          updatedAt: toMs(data.updatedAt),
+        } as Holding;
+      });
+      cb(holdings);
+    },
+    (err) => {
+      console.error('[portfolioService] subscribeToHoldings error:', err.message);
+      cb([]);
+    },
+  );
 }
 
 // ─── Portfolio Intelligence Observations ──────────────────────────────────────
@@ -277,7 +291,9 @@ export function subscribeToPortfolioObservations(
     where('acknowledged', '==', false),
     orderBy('createdAt', 'desc')
   );
-  return onSnapshot(q, (snap) => {
+  return onSnapshot(
+    q,
+    (snap) => {
     const observations: PortfolioIntelligenceObservation[] = snap.docs.slice(0, limit).map((d) => {
       const data = d.data();
       return {
@@ -287,7 +303,12 @@ export function subscribeToPortfolioObservations(
       } as PortfolioIntelligenceObservation;
     });
     cb(observations);
-  });
+    },
+    (err) => {
+      console.error('[portfolioService] subscribeToPortfolioObservations error:', err.message);
+      cb([]);
+    },
+  );
 }
 
 // ─── Intelligence Watchlists ──────────────────────────────────────────────────

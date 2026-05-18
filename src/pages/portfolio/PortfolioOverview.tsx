@@ -10,8 +10,10 @@ import {
 } from 'lucide-react';
 import { usePortfolioWorkspace } from '../../hooks/usePortfolioWorkspace';
 import { usePortfolioPerformance } from '../../hooks/usePortfolioPerformance';
+import { usePortfolioIntelligence } from '../../hooks/usePortfolioIntelligence';
 import { DEFAULT_BENCHMARK_ID, BENCHMARK_REGISTRY } from '../../lib/portfolio/benchmarks';
 import type { Portfolio, Holding } from '../../lib/portfolio/schemas';
+import { PortfolioIntelligencePanel } from '../../components/portfolio/PortfolioIntelligencePanel';
 
 // ─── Shared helpers ────────────────────────────────────────────────────────
 
@@ -91,6 +93,11 @@ const MetricPill: React.FC<{ label: string; value: string; color?: string; accen
 const CreatePortfolioModal: React.FC<{ onClose: () => void; onCreate: (name: string, benchmarkId: string) => void }> = ({ onClose, onCreate }) => {
   const [name, setName] = useState('');
   const [bm, setBm] = useState(DEFAULT_BENCHMARK_ID);
+  const [customMode, setCustomMode] = useState(false);
+  const [customBm, setCustomBm] = useState('');
+
+  const effectiveBm = customMode ? customBm.trim().toUpperCase() : bm;
+  const canCreate = name.trim() && effectiveBm.length > 0;
 
   return (
     <div style={{
@@ -99,7 +106,7 @@ const CreatePortfolioModal: React.FC<{ onClose: () => void; onCreate: (name: str
       display: 'flex', alignItems: 'center', justifyContent: 'center',
     }} onClick={onClose}>
       <div
-        style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, padding: 24, width: 380, maxWidth: '90vw' }}
+        style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, padding: 24, width: 400, maxWidth: '90vw' }}
         onClick={e => e.stopPropagation()}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
@@ -110,6 +117,7 @@ const CreatePortfolioModal: React.FC<{ onClose: () => void; onCreate: (name: str
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {/* Name */}
           <div>
             <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted-foreground)', display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
               Portfolio Name
@@ -128,33 +136,70 @@ const CreatePortfolioModal: React.FC<{ onClose: () => void; onCreate: (name: str
             />
           </div>
 
+          {/* Benchmark */}
           <div>
-            <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted-foreground)', display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-              Benchmark
-            </label>
-            <select
-              value={bm}
-              onChange={e => setBm(e.target.value)}
-              style={{
-                width: '100%', padding: '8px 10px', borderRadius: 6, fontSize: 12,
-                border: '1px solid var(--border)', background: 'var(--background)',
-                color: 'var(--foreground)', cursor: 'pointer',
-              }}
-            >
-              {BENCHMARK_REGISTRY.map(b => (
-                <option key={b.id} value={b.id}>{b.id} — {b.name}</option>
-              ))}
-            </select>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Benchmark
+              </label>
+              <button
+                onClick={() => { setCustomMode(m => !m); setCustomBm(''); }}
+                style={{
+                  fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 4,
+                  border: '1px solid var(--border)',
+                  background: customMode ? 'var(--primary)' : 'transparent',
+                  color: customMode ? 'var(--primary-foreground)' : 'var(--muted-foreground)',
+                  cursor: 'pointer',
+                }}
+              >
+                {customMode ? 'Use registry' : 'Custom symbol'}
+              </button>
+            </div>
+
+            {customMode ? (
+              <div>
+                <input
+                  autoFocus
+                  value={customBm}
+                  onChange={e => setCustomBm(e.target.value)}
+                  placeholder="Enter any ticker, e.g. MSFT, ^GSPC, BTC-USD…"
+                  style={{
+                    width: '100%', boxSizing: 'border-box',
+                    padding: '8px 10px', borderRadius: 6, fontSize: 13,
+                    border: '1px solid var(--border)', background: 'var(--background)',
+                    color: 'var(--foreground)', outline: 'none',
+                    textTransform: 'uppercase',
+                  }}
+                />
+                <p style={{ margin: '4px 0 0', fontSize: 10, color: 'var(--muted-foreground)' }}>
+                  Any symbol fetchable from your data provider (ETF, index, stock, crypto).
+                </p>
+              </div>
+            ) : (
+              <select
+                value={bm}
+                onChange={e => setBm(e.target.value)}
+                style={{
+                  width: '100%', padding: '8px 10px', borderRadius: 6, fontSize: 12,
+                  border: '1px solid var(--border)', background: 'var(--background)',
+                  color: 'var(--foreground)', cursor: 'pointer',
+                }}
+              >
+                {BENCHMARK_REGISTRY.map(b => (
+                  <option key={b.id} value={b.id}>{b.id} — {b.name}</option>
+                ))}
+              </select>
+            )}
           </div>
 
           <button
-            disabled={!name.trim()}
-            onClick={() => { if (name.trim()) onCreate(name.trim(), bm); }}
+            disabled={!canCreate}
+            onClick={() => { if (canCreate) onCreate(name.trim(), effectiveBm); }}
             style={{
               padding: '9px 16px', borderRadius: 6, fontSize: 13, fontWeight: 600,
-              background: name.trim() ? 'var(--primary)' : 'var(--muted)',
-              color: name.trim() ? 'var(--primary-foreground)' : 'var(--muted-foreground)',
-              border: 'none', cursor: name.trim() ? 'pointer' : 'not-allowed',
+              background: canCreate ? 'var(--primary)' : 'var(--muted)',
+              color: canCreate ? 'var(--primary-foreground)' : 'var(--muted-foreground)',
+              border: 'none', cursor: canCreate ? 'pointer' : 'not-allowed',
               marginTop: 4,
             }}
           >
@@ -512,7 +557,7 @@ const NoPortfolioState: React.FC<{ onCreateNew: () => void }> = ({ onCreateNew }
 
 export const PortfolioOverview: React.FC = () => {
   const {
-    portfolios, selectedPortfolio, holdings, observations,
+    portfolios, selectedPortfolio, holdings,
     loading, holdingsLoading,
     selectPortfolio, createNew,
     effectiveWeights,
@@ -544,6 +589,23 @@ export const PortfolioOverview: React.FC = () => {
 
   // Excess return
   const excessReturn = totalReturn - benchmarkTotalReturn;
+
+  // Intelligence overlay
+  const hhi = useMemo(
+    () => Object.values(effectiveWeights).reduce((s, w) => s + w * w, 0),
+    [effectiveWeights],
+  );
+  const top3Weight = useMemo(() => {
+    const sorted = Object.values(effectiveWeights).sort((a, b) => b - a);
+    return sorted.slice(0, 3).reduce((s, w) => s + w, 0);
+  }, [effectiveWeights]);
+
+  const { observations, acknowledge } = usePortfolioIntelligence(
+    selectedPortfolio?.id,
+    holdings.length > 0
+      ? { holdings, effectiveWeights, annVol, maxDrawdownPct: mdd, hhi, top3Weight }
+      : null,
+  );
 
   // Performance tick formatter
   const xTickFmt = useCallback((ts: number) => fmtDate(ts), []);
@@ -608,6 +670,8 @@ export const PortfolioOverview: React.FC = () => {
           </button>
         </div>
       </div>
+
+      <PortfolioIntelligencePanel observations={observations} onAcknowledge={acknowledge} />
 
       {!hasHoldings ? (
         <EmptyPortfolioState portfolioName={selectedPortfolio?.name ?? 'Portfolio'} />
@@ -735,30 +799,14 @@ export const PortfolioOverview: React.FC = () => {
             </div>
           )}
 
-          {/* ── Row 3: Holdings Snapshot + Intelligence Feed ──────────────── */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 16 }}>
-
-            {/* Holdings snapshot */}
-            <SectionCard
-              title="Holdings Snapshot"
-              subtitle={`${holdings.length} position${holdings.length !== 1 ? 's' : ''} · Sorted by weight`}
-              icon={<BarChart3 size={13} />}
-            >
-              <HoldingsSnapshot holdings={holdings} weights={effectiveWeights} />
-            </SectionCard>
-
-            {/* Intelligence feed */}
-            <SectionCard
-              title="Intelligence Feed"
-              subtitle="Active observations · Auto-generated"
-              icon={<AlertCircle size={13} />}
-            >
-              <IntelligenceFeed
-                observations={observations}
-                portfolioName={selectedPortfolio?.name ?? 'Portfolio'}
-              />
-            </SectionCard>
-          </div>
+          {/* ── Row 3: Holdings Snapshot ──────────────────────────────────── */}
+          <SectionCard
+            title="Holdings Snapshot"
+            subtitle={`${holdings.length} position${holdings.length !== 1 ? 's' : ''} · Sorted by weight`}
+            icon={<BarChart3 size={13} />}
+          >
+            <HoldingsSnapshot holdings={holdings} weights={effectiveWeights} />
+          </SectionCard>
 
         </div>
       )}

@@ -416,11 +416,22 @@ export interface CustomScenario {
   period: string;
   description: string;
   shocks: {
-    equity: number;
-    bonds: number;
-    gold: number;
-    oil: number;
-    crypto: number;
+    equity:     number;
+    bonds:      number;
+    gold:       number;
+    oil:        number;
+    crypto:     number;
+    realestate: number;
+    highyield:  number;
+    financials: number;
+    vix:        number;
+  };
+  regime: {
+    correlationStress:  number;
+    liquidityStress:    number;
+    volMultiplier:      number;
+    recoveryDays:       number;
+    forcedDeleveraging: boolean;
   };
   createdAt: number;
 }

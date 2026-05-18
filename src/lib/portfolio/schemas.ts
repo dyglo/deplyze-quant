@@ -42,6 +42,13 @@ export interface Portfolio {
   /** True = watchlist mode (weights & quantities not required) */
   isWatchlist: boolean;
 
+  /**
+   * Total capital allocated to this portfolio in USD.
+   * Optional — when set, enables dollar P&L estimates across all views.
+   * Not a broker value; used only for intelligence estimates.
+   */
+  totalValue?: number;
+
   tags?: string[];
   notes?: string;
 

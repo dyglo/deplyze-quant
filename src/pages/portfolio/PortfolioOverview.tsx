@@ -60,6 +60,18 @@ function fmtDate(ts: number): string {
 function fmtDateShort(ts: number): string {
   return new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' });
 }
+function fmtUSD(v: number): string {
+  const abs = Math.abs(v);
+  const sign = v < 0 ? '−' : '+';
+  if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(2)}M`;
+  if (abs >= 1_000) return `${sign}$${(abs / 1_000).toFixed(1)}K`;
+  return `${sign}$${abs.toFixed(2)}`;
+}
+function fmtValue(v: number): string {
+  if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(2)}M`;
+  if (v >= 1_000) return `$${(v / 1_000).toFixed(1)}K`;
+  return `$${v.toFixed(2)}`;
+}
 
 const PALETTE = {
   portfolio:  'var(--primary)',
@@ -119,6 +131,68 @@ const MetricPill: React.FC<{ label: string; value: string; color?: string; accen
     <span style={{ fontSize: 13, fontWeight: 700, color: color ?? 'var(--foreground)', fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.02em' }}>{value}</span>
   </div>
 );
+
+// ─── Portfolio Value Input ────────────────────────────────────────────────────
+
+const PortfolioValueInput: React.FC<{
+  currentValue?: number;
+  onSave: (v: number | undefined) => void;
+}> = ({ currentValue, onSave }) => {
+  const [editing, setEditing] = useState(false);
+  const [raw, setRaw] = useState('');
+
+  const start = () => {
+    setRaw(currentValue != null ? String(currentValue) : '');
+    setEditing(true);
+  };
+
+  const commit = () => {
+    const parsed = parseFloat(raw.replace(/[^0-9.]/g, ''));
+    onSave(isNaN(parsed) || parsed <= 0 ? undefined : parsed);
+    setEditing(false);
+  };
+
+  if (editing) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        <span style={{ fontSize: 10, color: 'var(--muted-foreground)' }}>$</span>
+        <input
+          autoFocus
+          value={raw}
+          onChange={e => setRaw(e.target.value)}
+          onBlur={commit}
+          onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setEditing(false); }}
+          placeholder="e.g. 100000"
+          style={{
+            width: 110, padding: '4px 8px', borderRadius: 5, fontSize: 11,
+            border: '1px solid var(--primary)', background: 'var(--background)',
+            color: 'var(--foreground)', outline: 'none', fontVariantNumeric: 'tabular-nums',
+          }}
+        />
+        <button onClick={commit} style={{ padding: '4px 8px', borderRadius: 5, fontSize: 10, fontWeight: 700, background: 'var(--primary)', color: 'var(--primary-foreground)', border: 'none', cursor: 'pointer' }}>
+          Set
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      onClick={start}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px',
+        borderRadius: 6, fontSize: 11, fontWeight: 600,
+        background: currentValue != null ? 'color-mix(in srgb, var(--chart-2) 10%, transparent)' : 'var(--muted)',
+        border: `1px solid ${currentValue != null ? 'color-mix(in srgb, var(--chart-2) 25%, transparent)' : 'var(--border)'}`,
+        color: currentValue != null ? 'var(--chart-2)' : 'var(--muted-foreground)',
+        cursor: 'pointer',
+      }}
+      title="Set total portfolio value to enable dollar P&L estimates"
+    >
+      {currentValue != null ? `${fmtValue(currentValue)} total` : '+ Set portfolio value'}
+    </button>
+  );
+};
 
 // ─── Create Portfolio Modal ───────────────────────────────────────────────────
 
@@ -511,15 +585,28 @@ const AllocationBar: React.FC<{ holdings: Holding[]; weights: Record<string, num
 
 // ─── Holdings Snapshot ────────────────────────────────────────────────────────
 
-const HoldingsSnapshot: React.FC<{ holdings: Holding[]; weights: Record<string, number> }> = ({ holdings, weights }) => {
+const HoldingsSnapshot: React.FC<{
+  holdings: Holding[];
+  weights: Record<string, number>;
+  totalValue?: number;
+  holdingCurves?: Array<{ symbol: string; totalReturn: number }>;
+}> = ({ holdings, weights, totalValue, holdingCurves }) => {
   const sorted = [...holdings].sort((a, b) => (weights[b.symbol] ?? 0) - (weights[a.symbol] ?? 0));
+  const returnMap = Object.fromEntries((holdingCurves ?? []).map(h => [h.symbol, h.totalReturn]));
+  const hasValue = totalValue != null;
+  const hasCurves = (holdingCurves?.length ?? 0) > 0;
 
   return (
     <div style={{ overflowX: 'auto' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
         <thead>
           <tr style={{ borderBottom: '1px solid var(--border)' }}>
-            {['Symbol', 'Name', 'Asset Class', 'Sector', 'Weight', 'Conviction'].map(h => (
+            {['Symbol', 'Name', 'Asset Class', 'Sector', 'Weight',
+              ...(hasValue ? ['Exposure'] : []),
+              ...(hasCurves ? ['Period Return'] : []),
+              ...(hasValue && hasCurves ? ['Est. P&L'] : []),
+              'Conviction',
+            ].map(h => (
               <th key={h} style={{ padding: '6px 10px', textAlign: 'left', fontSize: 10, fontWeight: 700, color: 'var(--muted-foreground)', letterSpacing: '0.04em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
                 {h}
               </th>
@@ -529,6 +616,9 @@ const HoldingsSnapshot: React.FC<{ holdings: Holding[]; weights: Record<string, 
         <tbody>
           {sorted.map((h, i) => {
             const w = weights[h.symbol] ?? 0;
+            const ret = returnMap[h.symbol];
+            const exposure = hasValue ? (totalValue! * w) : null;
+            const pnl = exposure != null && ret != null ? exposure * ret : null;
             const conviction = h.conviction ?? 'medium';
             const convictionColor = conviction === 'highest' ? 'var(--primary)' : conviction === 'high' ? 'var(--chart-2)' : conviction === 'medium' ? 'var(--foreground)' : 'var(--muted-foreground)';
             return (
@@ -546,10 +636,7 @@ const HoldingsSnapshot: React.FC<{ holdings: Holding[]; weights: Record<string, 
                   {h.name}
                 </td>
                 <td style={{ padding: '8px 10px', color: 'var(--muted-foreground)' }}>
-                  <span style={{
-                    padding: '2px 6px', borderRadius: 4, fontSize: 10, fontWeight: 600,
-                    background: 'var(--muted)', border: '1px solid var(--border)',
-                  }}>
+                  <span style={{ padding: '2px 6px', borderRadius: 4, fontSize: 10, fontWeight: 600, background: 'var(--muted)', border: '1px solid var(--border)' }}>
                     {h.assetClass}
                   </span>
                 </td>
@@ -559,6 +646,21 @@ const HoldingsSnapshot: React.FC<{ holdings: Holding[]; weights: Record<string, 
                 <td style={{ padding: '8px 10px', fontVariantNumeric: 'tabular-nums', fontWeight: 600, color: 'var(--foreground)' }}>
                   {(w * 100).toFixed(1)}%
                 </td>
+                {hasValue && (
+                  <td style={{ padding: '8px 10px', fontVariantNumeric: 'tabular-nums', color: 'var(--foreground)', fontWeight: 600 }}>
+                    {exposure != null ? fmtValue(exposure) : '—'}
+                  </td>
+                )}
+                {hasCurves && (
+                  <td style={{ padding: '8px 10px', fontVariantNumeric: 'tabular-nums', fontWeight: 700, color: ret == null ? 'var(--muted-foreground)' : ret >= 0 ? 'var(--chart-2)' : 'var(--destructive)' }}>
+                    {ret != null ? fmtPct(ret) : '—'}
+                  </td>
+                )}
+                {hasValue && hasCurves && (
+                  <td style={{ padding: '8px 10px', fontVariantNumeric: 'tabular-nums', fontWeight: 700, color: pnl == null ? 'var(--muted-foreground)' : pnl >= 0 ? 'var(--chart-2)' : 'var(--destructive)' }}>
+                    {pnl != null ? fmtUSD(pnl) : '—'}
+                  </td>
+                )}
                 <td style={{ padding: '8px 10px' }}>
                   <span style={{ fontSize: 10, fontWeight: 700, color: convictionColor, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                     {conviction}
@@ -722,7 +824,7 @@ export const PortfolioOverview: React.FC = () => {
   const {
     portfolios, selectedPortfolio, holdings,
     loading, holdingsLoading,
-    selectPortfolio, createNew,
+    selectPortfolio, createNew, updateSelected,
     effectiveWeights,
   } = usePortfolioWorkspace();
 
@@ -753,8 +855,17 @@ export const PortfolioOverview: React.FC = () => {
     await createNew({ name, benchmarkId: bm, type: 'long-only' });
   }, [createNew]);
 
+  const handleSetValue = useCallback((v: number | undefined) => {
+    updateSelected({ totalValue: v });
+  }, [updateSelected]);
+
   // Excess return
   const excessReturn = totalReturn - benchmarkTotalReturn;
+
+  // Dollar P&L — only available when totalValue is set
+  const portfolioTotalValue = selectedPortfolio?.totalValue;
+  const dollarPnL = portfolioTotalValue != null ? portfolioTotalValue * totalReturn : null;
+  const dollarExcess = portfolioTotalValue != null ? portfolioTotalValue * excessReturn : null;
 
   // Intelligence overlay
   const hhi = useMemo(
@@ -816,7 +927,11 @@ export const PortfolioOverview: React.FC = () => {
           </p>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <PortfolioValueInput
+            currentValue={selectedPortfolio?.totalValue}
+            onSave={handleSetValue}
+          />
           <PortfolioSelectorBar
             portfolios={portfolios}
             selected={selectedPortfolio}
@@ -848,7 +963,22 @@ export const PortfolioOverview: React.FC = () => {
           {hasPerfData && (
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <MetricPill label="Total Return" value={fmtPct(totalReturn)} color={totalReturn >= 0 ? 'var(--chart-2)' : 'var(--destructive)'} accent />
+              {dollarPnL != null && (
+                <MetricPill
+                  label="Est. P&L"
+                  value={fmtUSD(dollarPnL)}
+                  color={dollarPnL >= 0 ? 'var(--chart-2)' : 'var(--destructive)'}
+                  accent
+                />
+              )}
               <MetricPill label="vs Benchmark" value={fmtPct(excessReturn)} color={excessReturn >= 0 ? 'var(--chart-2)' : 'var(--destructive)'} />
+              {dollarExcess != null && (
+                <MetricPill
+                  label="vs Bmk ($)"
+                  value={fmtUSD(dollarExcess)}
+                  color={dollarExcess >= 0 ? 'var(--chart-2)' : 'var(--destructive)'}
+                />
+              )}
               <MetricPill label="Ann. Return" value={fmtPct(annReturn)} color={annReturn >= 0 ? 'var(--chart-2)' : 'var(--destructive)'} />
               <MetricPill label="Ann. Volatility" value={fmtPct(annVol, false)} color="var(--chart-4)" />
               <MetricPill label="Sharpe Ratio" value={isFinite(sharpe) ? sharpe.toFixed(2) : '—'} color={sharpe >= 1 ? 'var(--chart-2)' : sharpe >= 0.5 ? 'var(--foreground)' : 'var(--destructive)'} />
@@ -992,7 +1122,12 @@ export const PortfolioOverview: React.FC = () => {
             subtitle={`${holdings.length} position${holdings.length !== 1 ? 's' : ''} · Sorted by weight`}
             icon={<BarChart3 size={13} />}
           >
-            <HoldingsSnapshot holdings={holdings} weights={effectiveWeights} />
+            <HoldingsSnapshot
+              holdings={holdings}
+              weights={effectiveWeights}
+              totalValue={portfolioTotalValue}
+              holdingCurves={holdingCurves}
+            />
           </SectionCard>
 
         </div>

@@ -1,6 +1,7 @@
 rules_version = '2';
 
 // ─── Deplyze Quant — Firestore security rules ────────────────────────────────
+// Forced redeploy: 2026-05-18T12:28:00
 //
 // Tenancy model:
 //   workspaces/{wid}                                 — research desk

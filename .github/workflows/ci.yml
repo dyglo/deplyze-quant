@@ -25,6 +25,10 @@ on:
 # ─── Concurrency ───────────────────────────────────────────────────────────
 # Normalise to branch name so push and PR events for the same branch share
 # a group and stale runs are cancelled on new commits.
+permissions:
+  contents: read
+  pull-requests: read
+
 concurrency:
   group: ci-${{ github.event.pull_request.head.ref || github.ref_name }}
   cancel-in-progress: true

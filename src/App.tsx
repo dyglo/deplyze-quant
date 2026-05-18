@@ -30,6 +30,12 @@ import { GlobalYields } from './pages/market/GlobalYields';
 import { CountriesRegionalMarkets } from './pages/market/CountriesRegionalMarkets';
 import { CommoditiesIntelligence } from './pages/market/CommoditiesIntelligence';
 import { FxLiquidityIntelligence } from './pages/market/FxLiquidityIntelligence';
+import { PortfolioOverview } from './pages/portfolio/PortfolioOverview';
+import { HoldingsWatchlist } from './pages/portfolio/HoldingsWatchlist';
+import { ExposureAnalysis } from './pages/portfolio/ExposureAnalysis';
+import { PerformanceAttribution } from './pages/portfolio/PerformanceAttribution';
+import { RiskRegimeFit } from './pages/portfolio/RiskRegimeFit';
+import { ScenarioStress } from './pages/portfolio/ScenarioStress';
 
 const LoadingScreen: React.FC = () => (
   <div className="ds-loading-screen" style={{
@@ -94,7 +100,15 @@ export default function App() {
             <Route path="/market/countries"     element={<ProtectedRoute><CountriesRegionalMarkets /></ProtectedRoute>} />
             <Route path="/market/commodities"   element={<ProtectedRoute><CommoditiesIntelligence /></ProtectedRoute>} />
             <Route path="/market/fx-liquidity"  element={<ProtectedRoute><FxLiquidityIntelligence /></ProtectedRoute>} />
-            <Route path="*"                     element={<Navigate to="/" replace />} />
+            {/* Portfolio Intelligence Workspace */}
+            <Route path="/portfolio/overview"     element={<ProtectedRoute><PortfolioOverview /></ProtectedRoute>} />
+            <Route path="/portfolio/holdings"     element={<ProtectedRoute><HoldingsWatchlist /></ProtectedRoute>} />
+            <Route path="/portfolio/exposure"     element={<ProtectedRoute><ExposureAnalysis /></ProtectedRoute>} />
+            <Route path="/portfolio/attribution"  element={<ProtectedRoute><PerformanceAttribution /></ProtectedRoute>} />
+            <Route path="/portfolio/risk"         element={<ProtectedRoute><RiskRegimeFit /></ProtectedRoute>} />
+            <Route path="/portfolio/scenario"     element={<ProtectedRoute><ScenarioStress /></ProtectedRoute>} />
+            <Route path="/portfolio"              element={<Navigate to="/portfolio/overview" replace />} />
+            <Route path="*"                       element={<Navigate to="/" replace />} />
           </Routes>
           <Toaster />
           </DrawerProvider>

@@ -10,20 +10,22 @@ import { IntelligenceMetricCard } from '../../components/market-dashboards/Intel
 import { DashboardPageTabs } from '../../components/market-dashboards/DashboardPageTabs';
 import { DashboardLoadingState, DashboardErrorState, SourceFreshnessBadge } from '../../components/market-dashboards/DashboardStates';
 import { MiniTrendChart } from '../../components/market-dashboards/MiniTrendChart';
-import { SummaryStrip, ArtifactStrip } from '../../components/intelligence-drawer';
+import { SummaryStrip, ArtifactStrip, NarrativeOverlay } from '../../components/intelligence-drawer';
 import { yieldsSummary } from '../../lib/intelligence/summaries';
 import { useDashboardArtifacts } from '../../hooks/useDashboardArtifacts';
+import { useDashboardNarratives } from '../../hooks/useDashboardNarratives';
 import { useYieldCurve } from '../../hooks/useDashboard';
 import {
   classifyYieldCurve, YIELD_SERIES, type YieldCurveData, type YieldPoint,
 } from '../../services/dashboardService';
 
+// Wave H — dropped the standalone Intelligence tab; the persistent SummaryStrip
+// + IntelligenceView already surfaces curve regime context across all tabs.
 const TABS = [
-  { id: 'curve',        label: 'Yield Curve' },
-  { id: 'table',        label: 'Sovereign Yields' },
-  { id: 'spread',       label: 'Spread History' },
-  { id: 'history',      label: 'Series Charts' },
-  { id: 'intelligence', label: 'Intelligence' },
+  { id: 'curve',   label: 'Yield Curve' },
+  { id: 'table',   label: 'Sovereign Yields' },
+  { id: 'spread',  label: 'Spread History' },
+  { id: 'history', label: 'Series Charts' },
 ];
 
 const CURVE_TERMS = ['3M', '2Y', '5Y', '10Y', '30Y'];
@@ -245,6 +247,8 @@ export const GlobalYields: React.FC = () => {
   const summary = useMemo(() => data ? yieldsSummary(data) : null, [data]);
   const yieldSymbols = useMemo(() => YIELD_SERIES.map((y) => y.id), []);
   const { artifacts, loading: artifactsLoading } = useDashboardArtifacts(yieldSymbols);
+  // Yields narratives often relate to broader macro symbols, not the FRED IDs.
+  const { narratives, loading: narrativesLoading } = useDashboardNarratives(['SPY', 'TLT', 'IEF', 'UUP', 'GLD', ...yieldSymbols]);
 
   return (
     <DashboardShell
@@ -254,6 +258,7 @@ export const GlobalYields: React.FC = () => {
     >
       <SummaryStrip payload={summary} />
       <ArtifactStrip artifacts={artifacts} loading={artifactsLoading} />
+      <NarrativeOverlay narratives={narratives} loading={narrativesLoading} />
       {/* KPI Strip */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 10, marginBottom: 16 }}>
         {key10y && <IntelligenceMetricCard label="US 10Y Treasury" value={key10y.value !== null ? `${key10y.value.toFixed(3)}%` : 'N/A'} status={status} fetchedAt={fetchedAt} hint="Click table for history" onClick={() => handlePointClick(key10y)} />}
@@ -334,11 +339,6 @@ export const GlobalYields: React.FC = () => {
         </div>
       )}
 
-      {data && activeTab === 'intelligence' && (
-        <DashboardSectionCard title="Macro Intelligence Panel" subtitle="Yield curve regime and liquidity assessment">
-          <IntelligenceView data={data} />
-        </DashboardSectionCard>
-      )}
     </DashboardShell>
   );
 };

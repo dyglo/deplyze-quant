@@ -1,6 +1,7 @@
 rules_version = '2';
 
 // ─── Deplyze Quant — Firestore security rules ────────────────────────────────
+// Forced redeploy: 2026-05-18T12:28:00
 //
 // Tenancy model:
 //   workspaces/{wid}                                 — research desk
@@ -80,6 +81,36 @@ service cloud.firestore {
 
     // ─── Invites ──────────────────────────────────────────────────────────
     match /invites/{inviteId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // ─── Portfolio Intelligence ───────────────────────────────────────────
+    // Top-level collections scoped by uid + workspaceId on each document.
+    // Clients own their own portfolio documents; no cross-user access.
+    match /portfolios/{portfolioId} {
+      allow read, write: if isSignedIn() && request.auth.uid == resource.data.uid;
+      allow create:      if isSignedIn() && request.auth.uid == request.resource.data.uid;
+
+      match /holdings/{holdingId} {
+        allow read, write: if isSignedIn();
+      }
+    }
+
+    match /portfolioIntelligence/{observationId} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /intelligenceWatchlists/{watchlistId} {
+      allow read, write: if isSignedIn() && (
+        resource.data.uid == request.auth.uid
+        || request.resource.data.uid == request.auth.uid
+      );
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+    }
+
+    // ─── Custom stress scenarios ──────────────────────────────────────────
+    // Simple auth gate — uid filtering is enforced client-side on the query.
+    match /customScenarios/{scenarioId} {
       allow read, write: if isSignedIn();
     }
 

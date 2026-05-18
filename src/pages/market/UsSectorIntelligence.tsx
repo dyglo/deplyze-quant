@@ -12,19 +12,22 @@ import { DashboardPageTabs } from '../../components/market-dashboards/DashboardP
 import { DashboardFilterBar } from '../../components/market-dashboards/DashboardFilterBar';
 import { InstrumentDetailDrawer, useInstrumentDrawer } from '../../components/market-dashboards/InstrumentDetailDrawer';
 import { DashboardLoadingState, DashboardErrorState, SourceFreshnessBadge } from '../../components/market-dashboards/DashboardStates';
-import { SummaryStrip, ArtifactStrip } from '../../components/intelligence-drawer';
+import { SummaryStrip, ArtifactStrip, NarrativeOverlay } from '../../components/intelligence-drawer';
 import { sectorSummary } from '../../lib/intelligence/summaries';
 import { useDashboardArtifacts } from '../../hooks/useDashboardArtifacts';
+import { useDashboardNarratives } from '../../hooks/useDashboardNarratives';
 import { useSectorDashboard } from '../../hooks/useDashboard';
 import { SECTOR_ETF_SYMBOLS, classifySectors, type DashboardQuote } from '../../services/dashboardService';
 import type { PerformanceRow } from '../../components/market-dashboards/CompactPerformanceTable';
 
+// Wave H — dropped the Relative-Strength and Intelligence tabs. The bar chart
+// already lives in Overview alongside the rotation summary, and the persistent
+// SummaryStrip + ArtifactStrip + NarrativeOverlay supersede the Intelligence
+// tab that previously duplicated the rotation banner.
 const TABS = [
-  { id: 'overview',         label: 'Overview' },
-  { id: 'performance',      label: 'Performance' },
-  { id: 'relative-strength',label: 'Relative Strength' },
-  { id: 'heatmap',          label: 'Heatmap' },
-  { id: 'intelligence',     label: 'Intelligence' },
+  { id: 'overview',    label: 'Overview' },
+  { id: 'performance', label: 'Performance' },
+  { id: 'heatmap',     label: 'Heatmap' },
 ];
 
 const CATEGORY_OPTIONS = [
@@ -207,6 +210,7 @@ export const UsSectorIntelligence: React.FC = () => {
   const summary = useMemo(() => quotes ? sectorSummary(quotes) : null, [quotes]);
   const sectorSymbols = useMemo(() => SECTOR_ETF_SYMBOLS.map((s) => s.symbol).concat('SPY'), []);
   const { artifacts, loading: artifactsLoading } = useDashboardArtifacts(sectorSymbols);
+  const { narratives, loading: narrativesLoading } = useDashboardNarratives(sectorSymbols);
 
   return (
     <>
@@ -217,6 +221,7 @@ export const UsSectorIntelligence: React.FC = () => {
       >
         <SummaryStrip payload={summary} />
         <ArtifactStrip artifacts={artifacts} loading={artifactsLoading} />
+        <NarrativeOverlay narratives={narratives} loading={narrativesLoading} />
         {/* KPI Strip */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 10, marginBottom: 16 }}>
           {spy && (
@@ -253,21 +258,9 @@ export const UsSectorIntelligence: React.FC = () => {
           </DashboardSectionCard>
         )}
 
-        {quotes && activeTab === 'relative-strength' && (
-          <DashboardSectionCard title="Relative Strength vs SPY" subtitle="Click any bar to open sector detail" onRefresh={refresh}>
-            <RelativeStrengthChart quotes={quotes} onBarClick={handleBarClick} />
-          </DashboardSectionCard>
-        )}
-
         {quotes && activeTab === 'heatmap' && (
           <DashboardSectionCard title="Sector Heatmap" subtitle="Grouped by offense/defense/cyclical — click to open detail" onRefresh={refresh}>
             <HeatmapGrid groups={heatmapGroups} onSelectCell={handleCellClick} selectedCell={selectedCell} />
-          </DashboardSectionCard>
-        )}
-
-        {quotes && activeTab === 'intelligence' && (
-          <DashboardSectionCard title="Intelligence Summary">
-            <IntelligenceSummaryView quotes={quotes} />
           </DashboardSectionCard>
         )}
       </DashboardShell>

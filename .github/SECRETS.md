@@ -75,6 +75,10 @@ The workflow runs `gcloud artifacts repositories create` idempotently before eve
 
 | Workflow | Trigger | What it does |
 |----------|---------|-------------|
-| `ci.yml` | Every push + PRs → `main` | TypeScript checks + Vite build + Docker build validation |
-| `deploy.yml` | Push to `main` | Gateway (Cloud Run) → Firestore rules → Firebase Hosting |
-| `deploy.yml` | `workflow_dispatch` | Manual deploy with `skip_gateway` / `skip_hosting` toggle flags |
+| `ci.yml` | PR → `main` | Full CI: type-check, Vite build, Docker validation (path-filtered) |
+| `ci.yml` | Push to `main` | Lightweight post-merge check: type-check + Vite build only (no Docker) |
+| `deploy.yml` | Push to `main` | Deploy only changed services: gateway / Firestore / hosting / quant engine |
+| `deploy.yml` | `workflow_dispatch` | Manual full deploy with `skip_gateway` / `skip_hosting` / `skip_firestore` / `skip_quant_engine` flags |
+
+> Feature branch pushes (without an open PR) do not trigger CI — the PR event covers them.
+> See [CICD.md](CICD.md) for the full architecture, rollback procedure, and cost practices.

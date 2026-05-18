@@ -1,21 +1,71 @@
 name: CI
 
+# ─── Trigger strategy ──────────────────────────────────────────────────────
+# Run full CI only on pull_request targeting main.
+# Run a lightweight post-merge check on push to main (no Docker — already
+# validated by the PR that created the merge).
+# Feature branch pushes deliberately receive NO trigger here: the PR event
+# covers them without duplication.
 on:
-  push:
-    branches: ['**']
   pull_request:
     branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.github/SECRETS.md'
+      - '.github/CICD.md'
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.github/SECRETS.md'
+      - '.github/CICD.md'
+
+# ─── Concurrency ───────────────────────────────────────────────────────────
+# Normalise to branch name so push and PR events for the same branch share
+# a group and stale runs are cancelled on new commits.
+permissions:
+  contents: read
+  pull-requests: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event.pull_request.head.ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
-  # ─── Frontend ──────────────────────────────────────────────────────────────
+  # ─── 0. Path detection ─────────────────────────────────────────────────
+  detect-changes:
+    name: Detect changed paths
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
+      gateway:  ${{ steps.filter.outputs.gateway }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            frontend:
+              - 'src/**'
+              - 'index.html'
+              - 'vite.config.*'
+              - 'tsconfig*.json'
+              - 'package*.json'
+              - 'components.json'
+            gateway:
+              - 'cloud-run/gateway/**'
+
+  # ─── Frontend ──────────────────────────────────────────────────────────
   type-check-frontend:
     name: Type-check · Frontend
     runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.frontend == 'true'
     steps:
       - uses: actions/checkout@v4
 
@@ -33,10 +83,9 @@ jobs:
   build-frontend:
     name: Build · Frontend (Vite)
     runs-on: ubuntu-latest
-    needs: type-check-frontend
+    needs: [detect-changes, type-check-frontend]
+    if: needs.detect-changes.outputs.frontend == 'true'
     env:
-      # Set these in GitHub → Settings → Secrets and variables → Actions.
-      # CI falls back to placeholders so forks still validate the bundle output.
       VITE_FIREBASE_API_KEY:             ${{ secrets.VITE_FIREBASE_API_KEY || 'ci-placeholder' }}
       VITE_FIREBASE_AUTH_DOMAIN:         ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN || 'ci.firebaseapp.com' }}
       VITE_FIREBASE_PROJECT_ID:          ${{ secrets.VITE_FIREBASE_PROJECT_ID || 'ci-project' }}
@@ -67,11 +116,12 @@ jobs:
           path: dist/
           retention-days: 1
 
-  # ─── Gateway ───────────────────────────────────────────────────────────────
-
+  # ─── Gateway ───────────────────────────────────────────────────────────
   type-check-gateway:
     name: Type-check · Gateway
     runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.gateway == 'true'
     defaults:
       run:
         working-directory: cloud-run/gateway
@@ -90,17 +140,21 @@ jobs:
       - name: TypeScript check
         run: npm run lint
 
-  build-gateway:
-    name: Build · Gateway (Docker)
+  build-gateway-docker:
+    name: Build · Gateway Docker (validation)
     runs-on: ubuntu-latest
-    needs: type-check-gateway
+    needs: [detect-changes, type-check-gateway]
+    # Docker build validation only on PRs.
+    # Post-merge main push skips this — the image was already validated by the
+    # PR that created the merge commit; deploy.yml builds the real image.
+    if: needs.detect-changes.outputs.gateway == 'true' && github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build Docker image (validation — no push)
+      - name: Build image (validation — no push)
         uses: docker/build-push-action@v5
         with:
           context: cloud-run/gateway
@@ -109,11 +163,33 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # ─── Gate ──────────────────────────────────────────────────────────────────
-
+  # ─── Gate ──────────────────────────────────────────────────────────────
   ci-passed:
     name: CI passed
     runs-on: ubuntu-latest
-    needs: [type-check-frontend, build-frontend, type-check-gateway, build-gateway]
+    needs:
+      - type-check-frontend
+      - build-frontend
+      - type-check-gateway
+      - build-gateway-docker
+    if: always()
     steps:
-      - run: echo "All CI checks passed ✓"
+      - name: Evaluate required job results
+        run: |
+          declare -A results=(
+            [type-check-frontend]="${{ needs.type-check-frontend.result }}"
+            [build-frontend]="${{ needs.build-frontend.result }}"
+            [type-check-gateway]="${{ needs.type-check-gateway.result }}"
+            [build-gateway-docker]="${{ needs.build-gateway-docker.result }}"
+          )
+          failed=0
+          for job in "${!results[@]}"; do
+            r="${results[$job]}"
+            if [[ "$r" == "success" || "$r" == "skipped" ]]; then
+              echo "✓ $job: $r"
+            else
+              echo "✗ $job: $r"
+              failed=1
+            fi
+          done
+          [ $failed -eq 0 ] && echo "" && echo "All CI checks passed ✓" || exit 1

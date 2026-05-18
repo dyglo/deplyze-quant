@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import {
   AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
@@ -64,7 +64,7 @@ interface AddHoldingModalProps {
 }
 
 const AddHoldingModal: React.FC<AddHoldingModalProps> = ({ onClose, onAdd }) => {
-  const [query, setQuery] = useState('');
+  const [inputValue, setInputValue] = useState('');
   const [results, setResults] = useState<Array<{ symbol: string; name: string; type: string }>>([]);
   const [searching, setSearching] = useState(false);
   const [selected, setSelected] = useState<{ symbol: string; name: string } | null>(null);
@@ -72,24 +72,52 @@ const AddHoldingModal: React.FC<AddHoldingModalProps> = ({ onClose, onAdd }) => 
   const [assetClass, setAssetClass] = useState<Holding['assetClass']>('equity');
   const [notes, setNotes] = useState('');
   const [adding, setAdding] = useState(false);
+  const reqId = useRef(0);
 
   useEffect(() => {
-    if (!query.trim() || query.length < 2) { setResults([]); return; }
+    const raw = inputValue.trim();
+    if (!raw || raw.length < 2 || selected) {
+      setResults([]);
+      setSearching(false);
+      return;
+    }
+
+    setSearching(true);
+    const current = ++reqId.current;
+
     const tid = setTimeout(async () => {
-      setSearching(true);
       try {
-        const hits = await symbolSearch(query);
+        const hits = await symbolSearch(raw);
+        // Discard if a newer request has started
+        if (reqId.current !== current) return;
         const seen = new Set<string>();
         const deduped = hits
           .filter(h => { if (seen.has(h.symbol)) return false; seen.add(h.symbol); return true; })
           .slice(0, 8)
           .map(h => ({ symbol: h.symbol, name: h.name ?? h.symbol, type: h.type ?? 'equity' }));
         setResults(deduped);
-      } catch { setResults([]); }
-      setSearching(false);
-    }, 350);
+      } catch {
+        if (reqId.current === current) setResults([]);
+      } finally {
+        if (reqId.current === current) setSearching(false);
+      }
+    }, 300);
+
     return () => clearTimeout(tid);
-  }, [query]);
+  }, [inputValue, selected]);
+
+  const handleSelect = (r: { symbol: string; name: string }) => {
+    setSelected(r);
+    setInputValue(`${r.symbol} — ${r.name}`);
+    setResults([]);
+    setSearching(false);
+  };
+
+  const handleInputChange = (val: string) => {
+    setInputValue(val);
+    setSelected(null);
+    if (!val.trim()) setResults([]);
+  };
 
   const handleAdd = async () => {
     if (!selected) return;
@@ -115,8 +143,8 @@ const AddHoldingModal: React.FC<AddHoldingModalProps> = ({ onClose, onAdd }) => 
             <Search size={12} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted-foreground)' }} />
             <input
               autoFocus
-              value={query}
-              onChange={e => { setQuery(e.target.value); setSelected(null); }}
+              value={inputValue}
+              onChange={e => handleInputChange(e.target.value)}
               placeholder="Search AAPL, MSFT, BTC..."
               style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px 8px 30px', borderRadius: 6, fontSize: 13, border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--foreground)', outline: 'none' }}
             />
@@ -128,7 +156,7 @@ const AddHoldingModal: React.FC<AddHoldingModalProps> = ({ onClose, onAdd }) => 
               {results.map(r => (
                 <button
                   key={r.symbol}
-                  onClick={() => { setSelected({ symbol: r.symbol, name: r.name }); setQuery(`${r.symbol} — ${r.name}`); setResults([]); }}
+                  onClick={() => handleSelect(r)}
                   style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '8px 12px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 12, color: 'var(--foreground)', textAlign: 'left' }}
                   onMouseEnter={e => (e.currentTarget.style.background = 'var(--accent)')}
                   onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}

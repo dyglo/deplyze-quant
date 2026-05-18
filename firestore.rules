@@ -108,6 +108,13 @@ service cloud.firestore {
       allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
     }
 
+    // ─── Custom stress scenarios ──────────────────────────────────────────
+    match /customScenarios/{scenarioId} {
+      allow read:   if isSignedIn() && resource.data.uid == request.auth.uid;
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if isSignedIn() && resource.data.uid == request.auth.uid;
+    }
+
     // ─── Server-only collections ──────────────────────────────────────────
     match /providerCache/{key}  { allow read, write: if false; }
     match /auditLogs/{logId}    { allow read, write: if false; }

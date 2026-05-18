@@ -405,3 +405,79 @@ export async function promoteWatchlistToPortfolio(
 
   return portfolioId;
 }
+
+// ─── Custom Stress Scenarios ──────────────────────────────────────────────────
+
+export interface CustomScenario {
+  id: string;
+  uid: string;
+  workspaceId: string;
+  label: string;
+  period: string;
+  description: string;
+  shocks: {
+    equity: number;
+    bonds: number;
+    gold: number;
+    oil: number;
+    crypto: number;
+  };
+  createdAt: number;
+}
+
+export async function saveCustomScenario(
+  uid: string,
+  workspaceId: string,
+  params: Omit<CustomScenario, 'id' | 'uid' | 'workspaceId' | 'createdAt'>
+): Promise<string> {
+  const ref = await addDoc(collection(db, 'customScenarios'), {
+    uid,
+    workspaceId,
+    ...params,
+    createdAt: serverTimestamp(),
+  });
+  return ref.id;
+}
+
+export async function updateCustomScenario(
+  id: string,
+  params: Omit<CustomScenario, 'id' | 'uid' | 'workspaceId' | 'createdAt'>
+): Promise<void> {
+  await updateDoc(doc(db, 'customScenarios', id), { ...params });
+}
+
+export async function deleteCustomScenario(id: string): Promise<void> {
+  await deleteDoc(doc(db, 'customScenarios', id));
+}
+
+export function subscribeToCustomScenarios(
+  uid: string,
+  workspaceId: string,
+  cb: (scenarios: CustomScenario[]) => void
+): Unsubscribe {
+  const q = query(
+    collection(db, 'customScenarios'),
+    where('uid', '==', uid),
+  );
+  return onSnapshot(
+    q,
+    (snap) => {
+      const scenarios: CustomScenario[] = snap.docs
+        .map((d) => {
+          const data = d.data();
+          return {
+            id: d.id,
+            ...data,
+            createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toMillis() : (data.createdAt ?? Date.now()),
+          } as CustomScenario;
+        })
+        .filter(s => s.workspaceId === workspaceId)
+        .sort((a, b) => b.createdAt - a.createdAt);
+      cb(scenarios);
+    },
+    (err) => {
+      console.error('[portfolioService] subscribeToCustomScenarios error:', err.message);
+      cb([]);
+    },
+  );
+}

@@ -12,13 +12,10 @@ import { portfolioReturnSeries } from '../../lib/quant/portfolio';
 import type { OHLCVBar } from '../../types';
 import { PortfolioIntelligencePanel } from '../../components/portfolio/PortfolioIntelligencePanel';
 
+import { fmtPct, fmtBoth, fmtUSD } from '../../lib/portfolio/fmt';
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function fmtPct(v: number, sign = true): string {
-  if (!isFinite(v)) return '—';
-  const s = (v * 100).toFixed(2);
-  return sign && v >= 0 ? `+${s}%` : `${s}%`;
-}
 function fmtDate(ts: number): string {
   return new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
@@ -116,6 +113,7 @@ const RollingContribChart: React.FC<{ data: Array<{ ts: number; [k: string]: num
 
 export const PerformanceAttribution: React.FC = () => {
   const { selectedPortfolio, holdings, loading, holdingsLoading, effectiveWeights } = usePortfolioWorkspace();
+  const totalValue = selectedPortfolio?.totalValue;
   const benchmarkId = selectedPortfolio?.benchmarkId ?? 'SPY';
 
   const [barsMap, setBarsMap] = useState<Record<string, OHLCVBar[]>>({});
@@ -253,9 +251,9 @@ export const PerformanceAttribution: React.FC = () => {
         {/* ── Summary strip ────────────────────────────────────────────────── */}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {[
-            { label: 'Portfolio Return', value: fmtPct(portfolioTotalReturn), color: portfolioTotalReturn >= 0 ? GREEN : RED },
+            { label: 'Portfolio Return', value: fmtBoth(portfolioTotalReturn, totalValue), color: portfolioTotalReturn >= 0 ? GREEN : RED },
             { label: `${benchmarkId} Return`, value: fmtPct(bmReturn), color: bmReturn >= 0 ? GREEN : RED },
-            { label: 'Excess Return (α)', value: fmtPct(excessReturn), color: excessReturn >= 0 ? GREEN : RED },
+            { label: 'Excess Return (α)', value: fmtBoth(excessReturn, totalValue), color: excessReturn >= 0 ? GREEN : RED },
             { label: 'Top Contributor', value: winners[0]?.symbol ?? '—', color: 'var(--foreground)' },
             { label: 'Top Detractor', value: laggards[0]?.symbol ?? '—', color: RED },
           ].map(m => (
@@ -390,12 +388,19 @@ export const PerformanceAttribution: React.FC = () => {
                   {attributionData.map((d, i) => {
                     const avgContrib = portfolioTotalReturn / attributionData.length;
                     const vsAvg = d.contribution - avgContrib;
+                    const holdingExposure = totalValue != null ? totalValue * d.weight : null;
+                    const dollarReturn = holdingExposure != null ? holdingExposure * d.totalReturn : null;
                     return (
                       <tr key={d.symbol} style={{ borderBottom: '1px solid var(--border)', background: i % 2 === 0 ? 'transparent' : 'color-mix(in srgb, var(--muted) 25%, transparent)' }}>
                         <td style={{ padding: '8px 10px', fontWeight: 700, color: 'var(--foreground)', fontVariantNumeric: 'tabular-nums' }}>{d.symbol}</td>
                         <td style={{ padding: '8px 10px', fontVariantNumeric: 'tabular-nums', color: 'var(--muted-foreground)' }}>{(d.weight * 100).toFixed(1)}%</td>
-                        <td style={{ padding: '8px 10px', fontWeight: 600, color: d.totalReturn >= 0 ? GREEN : RED, fontVariantNumeric: 'tabular-nums' }}>{fmtPct(d.totalReturn)}</td>
-                        <td style={{ padding: '8px 10px', fontWeight: 600, color: d.contribution >= 0 ? GREEN : RED, fontVariantNumeric: 'tabular-nums' }}>{fmtPct(d.contribution)}</td>
+                        <td style={{ padding: '8px 10px', fontWeight: 600, color: d.totalReturn >= 0 ? GREEN : RED, fontVariantNumeric: 'tabular-nums' }}>
+                          {fmtPct(d.totalReturn)}
+                          {dollarReturn != null && <span style={{ marginLeft: 5, fontSize: 10, opacity: 0.8 }}>{fmtUSD(dollarReturn)}</span>}
+                        </td>
+                        <td style={{ padding: '8px 10px', fontWeight: 600, color: d.contribution >= 0 ? GREEN : RED, fontVariantNumeric: 'tabular-nums' }}>
+                          {fmtBoth(d.contribution, totalValue)}
+                        </td>
                         <td style={{ padding: '8px 10px', fontWeight: 600, color: vsAvg >= 0 ? GREEN : RED, fontVariantNumeric: 'tabular-nums' }}>{fmtPct(vsAvg)}</td>
                       </tr>
                     );
@@ -404,8 +409,12 @@ export const PerformanceAttribution: React.FC = () => {
                   <tr style={{ borderTop: '2px solid var(--border)', background: 'var(--muted)' }}>
                     <td style={{ padding: '8px 10px', fontWeight: 800, color: 'var(--foreground)' }}>TOTAL</td>
                     <td style={{ padding: '8px 10px', color: 'var(--muted-foreground)' }}>100%</td>
-                    <td colSpan={2} style={{ padding: '8px 10px', fontWeight: 800, color: portfolioTotalReturn >= 0 ? GREEN : RED, fontVariantNumeric: 'tabular-nums' }}>{fmtPct(portfolioTotalReturn)}</td>
-                    <td style={{ padding: '8px 10px', fontWeight: 700, color: excessReturn >= 0 ? GREEN : RED, fontVariantNumeric: 'tabular-nums' }}>{fmtPct(excessReturn)} vs {benchmarkId}</td>
+                    <td colSpan={2} style={{ padding: '8px 10px', fontWeight: 800, color: portfolioTotalReturn >= 0 ? GREEN : RED, fontVariantNumeric: 'tabular-nums' }}>
+                      {fmtBoth(portfolioTotalReturn, totalValue)}
+                    </td>
+                    <td style={{ padding: '8px 10px', fontWeight: 700, color: excessReturn >= 0 ? GREEN : RED, fontVariantNumeric: 'tabular-nums' }}>
+                      {fmtBoth(excessReturn, totalValue)} vs {benchmarkId}
+                    </td>
                   </tr>
                 </tbody>
               </table>

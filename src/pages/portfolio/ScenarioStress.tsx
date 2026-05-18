@@ -14,11 +14,8 @@ import { PortfolioIntelligencePanel } from '../../components/portfolio/Portfolio
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function fmtPct(v: number, sign = true): string {
-  if (!isFinite(v)) return '—';
-  const s = (v * 100).toFixed(2);
-  return sign && v >= 0 ? `+${s}%` : `${s}%`;
-}
+import { fmtPct, fmtUSD, fmtBoth } from '../../lib/portfolio/fmt';
+
 function fmtDate(ts: number): string {
   return new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
@@ -110,6 +107,7 @@ const ScenarioSummaryCard: React.FC<{ scenario: StressScenario }> = ({ scenario 
 
 export const ScenarioStress: React.FC = () => {
   const { selectedPortfolio, holdings, loading, holdingsLoading, effectiveWeights } = usePortfolioWorkspace();
+  const totalValue = selectedPortfolio?.totalValue;
   const [selectedScenario, setSelectedScenario] = useState(STRESS_PRESETS[0].id);
   const [barsMap, setBarsMap] = useState<Record<string, OHLCVBar[]>>({});
   const [fetching, setFetching] = useState(false);
@@ -264,6 +262,11 @@ export const ScenarioStress: React.FC = () => {
             <p style={{ margin: '4px 0 0', fontSize: 22, fontWeight: 800, color: portfolioImpact < 0 ? 'var(--destructive)' : 'var(--chart-2)', letterSpacing: '-0.03em', fontVariantNumeric: 'tabular-nums' }}>
               {fmtPct(portfolioImpact)}
             </p>
+            {totalValue != null && (
+              <p style={{ margin: '2px 0 0', fontSize: 14, fontWeight: 700, color: portfolioImpact < 0 ? 'var(--destructive)' : 'var(--chart-2)', fontVariantNumeric: 'tabular-nums' }}>
+                {fmtUSD(portfolioImpact * totalValue)}
+              </p>
+            )}
             <p style={{ margin: '2px 0 0', fontSize: 10, color: 'var(--muted-foreground)' }}>
               Weighted-average shock proxy across {holdings.length} holdings
             </p>
@@ -274,7 +277,7 @@ export const ScenarioStress: React.FC = () => {
               {holdingImpacts[0]?.symbol ?? '—'}
             </p>
             <p style={{ margin: '2px 0 0', fontSize: 10, color: 'var(--muted-foreground)' }}>
-              {holdingImpacts[0] ? fmtPct(holdingImpacts[0].portContrib) + ' portfolio contribution' : ''}
+              {holdingImpacts[0] ? fmtBoth(holdingImpacts[0].portContrib, totalValue) + ' contribution' : ''}
             </p>
           </div>
         </div>
@@ -377,30 +380,47 @@ export const ScenarioStress: React.FC = () => {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                    {['Symbol', 'Asset Class', 'Weight', 'Asset Shock', 'Portfolio Contribution'].map(h => (
+                    {['Symbol', 'Asset Class', 'Weight', ...(totalValue ? ['Exposure'] : []), 'Asset Shock', 'Portfolio Contribution', ...(totalValue ? ['Est. Impact ($)'] : [])].map(h => (
                       <th key={h} style={{ padding: '6px 10px', textAlign: 'left', fontSize: 10, fontWeight: 700, color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {holdingImpacts.map((h, i) => (
+                  {holdingImpacts.map((h, i) => {
+                    const exposure = totalValue != null ? totalValue * h.weight : null;
+                    const impactDollar = exposure != null ? exposure * h.shockFraction : null;
+                    return (
                     <tr key={h.symbol} style={{ borderBottom: '1px solid var(--border)', background: i % 2 === 0 ? 'transparent' : 'color-mix(in srgb, var(--muted) 25%, transparent)' }}>
                       <td style={{ padding: '8px 10px', fontWeight: 700, color: 'var(--foreground)' }}>{h.symbol}</td>
                       <td style={{ padding: '8px 10px', color: 'var(--muted-foreground)' }}>
                         <span style={{ padding: '1px 6px', borderRadius: 3, fontSize: 10, background: 'var(--muted)', border: '1px solid var(--border)' }}>{h.assetClass}</span>
                       </td>
                       <td style={{ padding: '8px 10px', fontVariantNumeric: 'tabular-nums', color: 'var(--muted-foreground)' }}>{(h.weight * 100).toFixed(1)}%</td>
+                      {totalValue != null && (
+                        <td style={{ padding: '8px 10px', fontVariantNumeric: 'tabular-nums', color: 'var(--foreground)', fontWeight: 600 }}>
+                          ${exposure != null ? (exposure >= 1000 ? `${(exposure/1000).toFixed(1)}K` : exposure.toFixed(0)) : '—'}
+                        </td>
+                      )}
                       <td style={{ padding: '8px 10px', fontWeight: 700, color: h.shockFraction < 0 ? 'var(--destructive)' : 'var(--chart-2)', fontVariantNumeric: 'tabular-nums' }}>
                         {fmtShock(h.shockFraction)}
                       </td>
                       <td style={{ padding: '8px 10px', fontWeight: 700, color: h.portContrib < 0 ? 'var(--destructive)' : 'var(--chart-2)', fontVariantNumeric: 'tabular-nums' }}>
                         {fmtPct(h.portContrib)}
                       </td>
+                      {totalValue != null && (
+                        <td style={{ padding: '8px 10px', fontWeight: 700, color: (impactDollar ?? 0) < 0 ? 'var(--destructive)' : 'var(--chart-2)', fontVariantNumeric: 'tabular-nums' }}>
+                          {impactDollar != null ? fmtUSD(impactDollar) : '—'}
+                        </td>
+                      )}
                     </tr>
-                  ))}
+                    );
+                  })}
                   <tr style={{ borderTop: '2px solid var(--border)', background: 'var(--muted)' }}>
-                    <td colSpan={4} style={{ padding: '8px 10px', fontWeight: 800, color: 'var(--foreground)' }}>TOTAL PORTFOLIO IMPACT</td>
+                    <td colSpan={totalValue ? 5 : 4} style={{ padding: '8px 10px', fontWeight: 800, color: 'var(--foreground)' }}>TOTAL PORTFOLIO IMPACT</td>
                     <td style={{ padding: '8px 10px', fontWeight: 800, color: portfolioImpact < 0 ? 'var(--destructive)' : 'var(--chart-2)', fontVariantNumeric: 'tabular-nums' }}>{fmtPct(portfolioImpact)}</td>
+                    {totalValue != null && (
+                      <td style={{ padding: '8px 10px', fontWeight: 800, color: portfolioImpact < 0 ? 'var(--destructive)' : 'var(--chart-2)', fontVariantNumeric: 'tabular-nums' }}>{fmtUSD(portfolioImpact * totalValue)}</td>
+                    )}
                   </tr>
                 </tbody>
               </table>

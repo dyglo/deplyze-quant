@@ -14,16 +14,12 @@ import { correlationMatrix } from '../../lib/quant/correlation';
 import { portfolioReturnSeries } from '../../lib/quant/portfolio';
 import type { OHLCVBar } from '../../types';
 import { PortfolioIntelligencePanel } from '../../components/portfolio/PortfolioIntelligencePanel';
+import { fmtPct, fmtBoth } from '../../lib/portfolio/fmt';
 
-// ─── Helpers ─────────────────────��───────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function fmtDate(ts: number): string {
   return new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
-function fmtPct(v: number, sign = true): string {
-  if (!isFinite(v)) return '—';
-  const s = (v * 100).toFixed(2);
-  return sign && v >= 0 ? `+${s}%` : `${s}%`;
 }
 
 // ─── Section Card ────────────────────────���─────────────────────────��──────────
@@ -51,7 +47,8 @@ const RegimePanel: React.FC<{
   currentBeta: number;
   mdd: number;
   corrInstability: string;
-}> = ({ volRegime, currentVol, currentBeta, mdd, corrInstability }) => {
+  totalValue?: number;
+}> = ({ volRegime, currentVol, currentBeta, mdd, corrInstability, totalValue }) => {
   const observations: Array<{ text: string; severity: 'info' | 'medium' | 'high' }> = [];
 
   if (volRegime === 'expansion' || volRegime === 'high') {
@@ -69,7 +66,8 @@ const RegimePanel: React.FC<{
   }
 
   if (mdd < -0.20) {
-    observations.push({ text: `Maximum drawdown of ${fmtPct(mdd)} exceeds −20%. Historical stress events with similar drawdown profiles have often preceded extended risk-off periods.`, severity: 'high' });
+    const ddDollar = totalValue != null ? ` (${fmtBoth(mdd, totalValue)})` : ` (${fmtPct(mdd)})`;
+    observations.push({ text: `Maximum drawdown${ddDollar} exceeds −20%. Historical stress events with similar drawdown profiles have often preceded extended risk-off periods.`, severity: 'high' });
   }
 
   if (corrInstability === 'elevated') {
@@ -134,6 +132,7 @@ const RiskRegimeHeatmap: React.FC<{ monthlyVol: Array<{ label: string; vol: numb
 export const RiskRegimeFit: React.FC = () => {
   const { selectedPortfolio, holdings, loading, holdingsLoading, effectiveWeights } = usePortfolioWorkspace();
   const benchmarkId = selectedPortfolio?.benchmarkId ?? 'SPY';
+  const totalValue = selectedPortfolio?.totalValue;
 
   const [barsMap, setBarsMap] = useState<Record<string, OHLCVBar[]>>({});
   const [fetching, setFetching] = useState(false);
@@ -438,6 +437,7 @@ export const RiskRegimeFit: React.FC = () => {
               currentBeta={currentBeta}
               mdd={mdd}
               corrInstability={corrInstability}
+              totalValue={totalValue}
             />
           </SectionCard>
         )}

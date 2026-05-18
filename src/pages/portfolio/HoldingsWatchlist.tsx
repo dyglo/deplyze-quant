@@ -8,8 +8,10 @@ import {
   BarChart2, Globe, Zap, Star,
 } from 'lucide-react';
 import { usePortfolioWorkspace } from '../../hooks/usePortfolioWorkspace';
+import { usePortfolioIntelligence } from '../../hooks/usePortfolioIntelligence';
 import { DEFAULT_BENCHMARK_ID, BENCHMARK_REGISTRY } from '../../lib/portfolio/benchmarks';
 import type { Holding } from '../../lib/portfolio/schemas';
+import { PortfolioIntelligencePanel } from '../../components/portfolio/PortfolioIntelligencePanel';
 import { fetchOHLCV, symbolSearch } from '../../services/marketService';
 import type { OHLCVBar } from '../../types';
 import {
@@ -77,7 +79,12 @@ const AddHoldingModal: React.FC<AddHoldingModalProps> = ({ onClose, onAdd }) => 
       setSearching(true);
       try {
         const hits = await symbolSearch(query);
-        setResults(hits.slice(0, 8).map(h => ({ symbol: h.symbol, name: h.name ?? h.symbol, type: h.type ?? 'equity' })));
+        const seen = new Set<string>();
+        const deduped = hits
+          .filter(h => { if (seen.has(h.symbol)) return false; seen.add(h.symbol); return true; })
+          .slice(0, 8)
+          .map(h => ({ symbol: h.symbol, name: h.name ?? h.symbol, type: h.type ?? 'equity' }));
+        setResults(deduped);
       } catch { setResults([]); }
       setSearching(false);
     }, 350);
@@ -467,6 +474,20 @@ export const HoldingsWatchlist: React.FC = () => {
 
   const benchmarkId = selectedPortfolio?.benchmarkId ?? DEFAULT_BENCHMARK_ID;
 
+  const hhi = useMemo(
+    () => Object.values(effectiveWeights).reduce((s, w) => s + w * w, 0),
+    [effectiveWeights],
+  );
+  const top3Weight = useMemo(() => {
+    const sorted = Object.values(effectiveWeights).sort((a, b) => b - a);
+    return sorted.slice(0, 3).reduce((s, w) => s + w, 0);
+  }, [effectiveWeights]);
+
+  const { observations, acknowledge } = usePortfolioIntelligence(
+    selectedPortfolio?.id,
+    holdings.length > 0 ? { holdings, effectiveWeights, hhi, top3Weight } : null,
+  );
+
   const handleRemove = useCallback(async (holding: Holding) => {
     setDrawerHolding(null);
     await removeExistingHolding(holding.id);
@@ -536,6 +557,8 @@ export const HoldingsWatchlist: React.FC = () => {
       </div>
 
       {/* Holdings table */}
+      <PortfolioIntelligencePanel observations={observations} onAcknowledge={acknowledge} />
+
       <div style={{ padding: '16px 24px' }}>
         {holdingsLoading ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 16, color: 'var(--muted-foreground)', fontSize: 12 }}>

@@ -52,6 +52,7 @@ gcloud run deploy "$SERVICE_NAME" \
   --cpu 1 \
   --min-instances 0 \
   --max-instances 3 \
+  --no-cpu-throttling \
   --timeout 300 \
   --service-account "quant-engine@${PROJECT_ID}.iam.gserviceaccount.com" \
   --set-env-vars "\

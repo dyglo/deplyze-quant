@@ -28,6 +28,45 @@ export async function getQuote(symbol: string): Promise<FinnhubQuote> {
   return getJson<FinnhubQuote>('finnhub', url);
 }
 
+// ─── FX / Crypto quote helpers ──────────────────────────────────────────────
+
+// Maps our internal XX/YY format to Finnhub's OANDA format for FX pairs.
+const FX_TO_OANDA: Record<string, string> = {
+  'EUR/USD': 'OANDA:EUR_USD', 'GBP/USD': 'OANDA:GBP_USD',
+  'USD/JPY': 'OANDA:USD_JPY', 'AUD/USD': 'OANDA:AUD_USD',
+  'USD/CAD': 'OANDA:USD_CAD', 'USD/CHF': 'OANDA:USD_CHF',
+  'NZD/USD': 'OANDA:NZD_USD', 'EUR/GBP': 'OANDA:EUR_GBP',
+  'EUR/JPY': 'OANDA:EUR_JPY', 'GBP/JPY': 'OANDA:GBP_JPY',
+  'XAU/USD': 'OANDA:XAU_USD', 'XAG/USD': 'OANDA:XAG_USD',
+};
+
+// Maps our internal XX/YY crypto format to Binance quote symbols on Finnhub.
+const CRYPTO_TO_BINANCE: Record<string, string> = {
+  'BTC/USD': 'BINANCE:BTCUSDT', 'ETH/USD': 'BINANCE:ETHUSDT',
+  'SOL/USD': 'BINANCE:SOLUSDT', 'BNB/USD': 'BINANCE:BNBUSDT',
+  'XRP/USD': 'BINANCE:XRPUSDT', 'ADA/USD': 'BINANCE:ADAUSDT',
+  'DOGE/USD': 'BINANCE:DOGEUSDT', 'AVAX/USD': 'BINANCE:AVAXUSDT',
+  'MATIC/USD': 'BINANCE:MATICUSDT',
+};
+
+/**
+ * Returns a Finnhub-compatible symbol for FX or crypto pairs, or null if
+ * the pair is not supported (e.g. commodities like WTI/USD).
+ */
+export function toFinnhubCrossAssetSymbol(symbol: string): string | null {
+  return FX_TO_OANDA[symbol] ?? CRYPTO_TO_BINANCE[symbol] ?? null;
+}
+
+export async function getCrossAssetQuote(symbol: string): Promise<FinnhubQuote> {
+  const fhSym = toFinnhubCrossAssetSymbol(symbol);
+  if (!fhSym) throw new Error(`Finnhub: no mapping for cross-asset symbol ${symbol}`);
+  const url = `${BASE}/quote?symbol=${encodeURIComponent(fhSym)}&token=${key()}`;
+  const q = await getJson<FinnhubQuote>('finnhub', url);
+  // Finnhub returns all-zeros for invalid symbols — treat as no data
+  if (q.c === 0 && q.pc === 0) throw new Error(`Finnhub: no data for ${fhSym}`);
+  return q;
+}
+
 export interface FinnhubNewsItem {
   id: number;
   headline: string;

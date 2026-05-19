@@ -702,7 +702,7 @@ export const HoldingsWatchlist: React.FC = () => {
 
       {/* ── V4: Regime Vulnerability + Per-holding Agent Observations ───────── */}
       <div style={{ padding: '0 24px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <PortfolioVulnerabilityPanel result={vulnerability.data} loading={vulnerability.loading} />
+        <PortfolioVulnerabilityPanel result={vulnerability.data} loading={vulnerability.loading} holdingsCount={holdings.length} />
         {holdingOutputs.length > 0 && (
           <div>
             <h4 style={{ margin: '0 0 10px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--muted-foreground)' }}>

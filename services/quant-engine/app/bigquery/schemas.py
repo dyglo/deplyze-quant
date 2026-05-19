@@ -632,3 +632,27 @@ MODEL_RUNS = [
     S("metadata", "JSON", "NULLABLE"),
     S("created_at", "TIMESTAMP", "REQUIRED"),
 ]
+
+# ─── V4 — Agentic Intelligence Layer ─────────────────────────────────────────
+
+AGENT_OUTPUTS = [
+    S("artifact_id", "STRING", "REQUIRED"),
+    S("agent_id", "STRING", "REQUIRED"),
+    S("domain", "STRING", "REQUIRED"),
+    S("artifact_type", "STRING", "REQUIRED"),
+    S("title", "STRING", "NULLABLE"),
+    S("summary", "STRING", "NULLABLE"),
+    S("body", "STRING", "NULLABLE"),
+    S("confidence", "FLOAT64", "NULLABLE"),
+    S("severity", "STRING", "NULLABLE"),
+    S("symbols", "STRING", "REPEATED"),
+    S("portfolio_id", "STRING", "NULLABLE"),
+    S("evidence", "JSON", "NULLABLE"),
+    S("source_tables", "STRING", "REPEATED"),
+    S("generated_at", "TIMESTAMP", "NULLABLE"),
+    S("observation_date", "DATE", "NULLABLE"),
+    S("recommended_placements", "STRING", "REPEATED"),
+    S("tags", "STRING", "REPEATED"),
+    S("lineage_id", "STRING", "NULLABLE"),
+    S("is_test", "BOOL", "NULLABLE"),
+]

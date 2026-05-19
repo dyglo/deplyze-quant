@@ -40,6 +40,7 @@ from app.bigquery.client import get_bigquery_client
 from app.api.health import router as health_router
 from app.api.pipelines import router as pipelines_router
 from app.api.warehouse import router as warehouse_router
+from app.api.agents import router as agents_router
 
 # ─── Logging ────────────────────────────────────────────────────────────────
 
@@ -85,7 +86,7 @@ app = FastAPI(
         "Autonomous quantitative intelligence infrastructure. "
         "Ingests, refines, features-engineers, and publishes financial data to BigQuery."
     ),
-    version="3.0.0",
+    version="4.0.0",
     docs_url="/docs" if settings.QUANT_ENGINE_ENV != "production" else None,
     redoc_url="/redoc" if settings.QUANT_ENGINE_ENV != "production" else None,
     lifespan=lifespan,
@@ -105,6 +106,7 @@ app.add_middleware(
 app.include_router(health_router, tags=["Health"])
 app.include_router(pipelines_router, prefix="/pipelines", tags=["Pipelines"])
 app.include_router(warehouse_router, prefix="/warehouse", tags=["Warehouse"])
+app.include_router(agents_router, prefix="/agents", tags=["Agents"])
 
 
 # ─── Global error handler ────────────────────────────────────────────────────

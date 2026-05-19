@@ -15,6 +15,7 @@ import { usePortfolioIntelligence } from '../../hooks/usePortfolioIntelligence';
 import { DEFAULT_BENCHMARK_ID, BENCHMARK_REGISTRY } from '../../lib/portfolio/benchmarks';
 import type { Portfolio, Holding } from '../../lib/portfolio/schemas';
 import { PortfolioIntelligencePanel } from '../../components/portfolio/PortfolioIntelligencePanel';
+import { AgentPortfolioInsights } from '../../components/portfolio/AgentPortfolioInsights';
 
 // ─── Period options ────────────────────────────────────────────────────────
 
@@ -953,6 +954,7 @@ export const PortfolioOverview: React.FC = () => {
       </div>
 
       <PortfolioIntelligencePanel observations={observations} onAcknowledge={acknowledge} />
+      <AgentPortfolioInsights portfolioId={selectedPortfolio?.id} />
 
       {!hasHoldings ? (
         <EmptyPortfolioState portfolioName={selectedPortfolio?.name ?? 'Portfolio'} />

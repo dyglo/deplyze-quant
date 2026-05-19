@@ -11,6 +11,9 @@ import { useInsights } from '../hooks/useInsights';
 import { useResearchContext } from '../hooks/useResearchContext';
 import { useQuantCopilotContext } from '../hooks/useQuantCopilotContext';
 import { useWorkspace } from '../components/WorkspaceContext';
+import { useAgentOutputs, useCompositeRegime, useRiskEnvironment } from '../hooks/useAgentIntelligence';
+import { extractRegimeLabel, extractRiskLevel } from '../services/agentService';
+import { RegimeStatusChip, RiskLevelChip } from '../components/quant/SystemAnalyzingState';
 import { useAuth } from '../components/AuthProvider';
 import { PageHeader } from '../components/quant/PageHeader';
 import { Disclaimer } from '../components/quant/Disclaimer';
@@ -52,6 +55,13 @@ export const ResearchCopilot: React.FC = () => {
 
   const ctx = useResearchContext(activeSymbol);
   const quantContext = useQuantCopilotContext(activeSymbol);
+
+  // V4: Background agent intelligence context
+  const agentOutputs = useAgentOutputs({ placement: 'ResearchCopilot', limit: 12 });
+  const { data: regimeOutput } = useCompositeRegime();
+  const { data: riskOutput } = useRiskEnvironment();
+  const regimeLabel = extractRegimeLabel(regimeOutput);
+  const riskLevel = extractRiskLevel(riskOutput);
 
   const buildSnapshot = useCallback(() => {
     const lines: string[] = [
@@ -104,9 +114,24 @@ export const ResearchCopilot: React.FC = () => {
       lines.push('');
       lines.push(quantContext.snapshot);
     }
+    // V4: inject background agent intelligence
+    if (regimeLabel) {
+      lines.push('');
+      lines.push(`Composite market regime (Deplyze background intelligence): ${regimeLabel} (confidence: ${regimeOutput?.confidence != null ? Math.round((regimeOutput.confidence) * 100) + '%' : 'n/a'})`);
+    }
+    if (riskLevel) {
+      lines.push(`Risk environment assessment: ${riskLevel} (severity: ${riskOutput?.severity ?? 'n/a'})`);
+    }
+    const topAgentOutputs = agentOutputs.data.slice(0, 6);
+    if (topAgentOutputs.length) {
+      lines.push('Background intelligence observations (from autonomous agents):');
+      for (const o of topAgentOutputs) {
+        lines.push(`  - [${o.domain.toUpperCase()}/${o.severity?.toUpperCase() ?? 'INFO'}] ${o.title}: ${o.summary ?? ''}`);
+      }
+    }
     lines.push('Use this snapshot as grounding evidence. Cite values explicitly. Probabilistic language only.');
     return lines.join('\n');
-  }, [location.pathname, pulse.data, fedFunds.data, dgs10.data, cpi.data, artifacts.items, briefings.items, ctx.pinnedArtifacts, quantContext.snapshot]);
+  }, [location.pathname, pulse.data, fedFunds.data, dgs10.data, cpi.data, artifacts.items, briefings.items, ctx.pinnedArtifacts, quantContext.snapshot, regimeLabel, riskLevel, agentOutputs.data, regimeOutput, riskOutput]);
 
   const contextResolver = useCallback(() => ({
     context: {
@@ -180,6 +205,15 @@ export const ResearchCopilot: React.FC = () => {
           <FreshnessBadge status={pulse.status} fetchedAt={pulse.fetchedAt} compact />
         }
       />
+
+      {/* Live intelligence status strip */}
+      {(regimeLabel || riskLevel) && (
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
+          <span style={{ fontSize: 9, color: 'var(--muted-foreground)', fontWeight: 600, textTransform: 'uppercase' }}>Intelligence:</span>
+          <RegimeStatusChip regime={regimeLabel} confidence={regimeOutput?.confidence ?? null} />
+          <RiskLevelChip riskLevel={riskLevel} severity={riskOutput?.severity} />
+        </div>
+      )}
 
       {/* Context strip */}
       <section style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>

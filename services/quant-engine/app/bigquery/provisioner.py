@@ -82,6 +82,8 @@ TABLE_REGISTRY = [
     (settings.BQ_DATASET_MODEL_OUTPUTS, "model_validation_metrics", S.MODEL_VALIDATION_METRICS, "observation_time", None),
     (settings.BQ_DATASET_MODEL_OUTPUTS, "benchmark_comparisons", S.BENCHMARK_COMPARISONS, "observation_time", None),
     (settings.BQ_DATASET_MODEL_OUTPUTS, "model_runs", S.MODEL_RUNS, "started_at", None),
+    # V4 — Agentic Intelligence Layer
+    (settings.BQ_DATASET_ARTIFACTS, "agent_outputs", S.AGENT_OUTPUTS, "observation_date", ["agent_id", "domain"]),
 ]
 
 

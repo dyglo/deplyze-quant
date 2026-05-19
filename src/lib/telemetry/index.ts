@@ -160,8 +160,24 @@ export function logOpen(opts: {
   });
 }
 
+// Value-action event types — must stay aligned with the server-side
+// authoritative list (gateway/lib/personalization.ts::ALWAYS_VALUE and
+// quant-engine sessionizer.VALUE_EVENT_TYPES). The client only emits the
+// type; the server decides which count toward retention metrics.
+export type ValueActionType = Extract<
+  EventType,
+  | 'expand'
+  | 'save'
+  | 'export'
+  | 'scenario_run'
+  | 'copilot_followup'
+  | 'investigation_create'
+  | 'investigation_update'
+  | 'investigation_pin'
+>;
+
 export function logValueAction(
-  type: Extract<EventType, 'expand' | 'save' | 'export' | 'scenario_run' | 'copilot_followup'>,
+  type: ValueActionType,
   opts: {
     category: EventCategory;
     placement?: string;

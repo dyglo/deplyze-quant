@@ -5,11 +5,12 @@ Creates tables if they don't exist. Never overwrites existing tables.
 
 import structlog
 from google.cloud import bigquery
-from google.api_core.exceptions import Conflict
+from google.api_core.exceptions import Conflict, NotFound
 
 from app.core.config import settings
 from app.bigquery.client import get_bigquery_client
 from app.bigquery import schemas as S
+from app.bigquery import v5_schemas as V5
 
 log = structlog.get_logger("quant_engine.bigquery.provisioner")
 
@@ -86,6 +87,46 @@ TABLE_REGISTRY = [
     (settings.BQ_DATASET_ARTIFACTS, "agent_outputs", S.AGENT_OUTPUTS, "observation_date", ["agent_id", "domain"]),
 ]
 
+# V5 — Personalized Institutional Intelligence Infrastructure.
+# Resolved at module load time against `settings` so deployments can override
+# dataset names via env vars without touching schema code.
+for _dataset_attr, _table, _schema, _part, _cluster in V5.V5_PERSONALIZATION_TABLES:
+    TABLE_REGISTRY.append(
+        (getattr(settings, _dataset_attr), _table, _schema, _part, _cluster)
+    )
+
+# Datasets that V5 introduces. The provisioner ensures these exist before
+# attempting to create tables in them.
+V5_NEW_DATASET_NAMES = [getattr(settings, attr) for attr in V5.V5_NEW_DATASETS]
+
+
+def _ensure_dataset(client: bigquery.Client, dataset_id: str) -> dict:
+    """
+    Idempotently ensure a dataset exists in the configured project/location.
+    Created lazily so V5 datasets (raw_app, ops) come online without manual
+    pre-provisioning. Existing V3/V4 datasets are simply confirmed present.
+    """
+    fq_dataset = f"{settings.GCP_PROJECT_ID}.{dataset_id}"
+    try:
+        client.get_dataset(fq_dataset)
+        log.debug("dataset.already_exists", dataset=fq_dataset)
+        return {"dataset": fq_dataset, "status": "exists"}
+    except NotFound:
+        pass
+    except Exception as e:
+        log.error("dataset.get_failed", dataset=fq_dataset, error=str(e))
+        return {"dataset": fq_dataset, "status": "error", "error": str(e)}
+
+    dataset = bigquery.Dataset(fq_dataset)
+    dataset.location = settings.BIGQUERY_LOCATION
+    try:
+        client.create_dataset(dataset, exists_ok=True)
+        log.info("dataset.created", dataset=fq_dataset, location=settings.BIGQUERY_LOCATION)
+        return {"dataset": fq_dataset, "status": "created"}
+    except Exception as e:
+        log.error("dataset.create_failed", dataset=fq_dataset, error=str(e))
+        return {"dataset": fq_dataset, "status": "error", "error": str(e)}
+
 
 def _create_table(
     client: bigquery.Client,
@@ -127,7 +168,26 @@ def provision_all_tables() -> dict:
     Returns summary of created / existing / errored tables.
     """
     client = get_bigquery_client()
-    results = {"created": [], "exists": [], "errors": []}
+    results = {
+        "created": [],
+        "exists": [],
+        "errors": [],
+        "datasets_created": [],
+        "datasets_exists": [],
+    }
+
+    # Ensure V5 datasets exist before any table create attempts. V3/V4
+    # datasets are assumed pre-provisioned by infra; calling _ensure_dataset
+    # on them is harmless and gives us a uniform code path if we later choose
+    # to rely on it for everything.
+    for dataset_id in V5_NEW_DATASET_NAMES:
+        r = _ensure_dataset(client, dataset_id)
+        if r["status"] == "created":
+            results["datasets_created"].append(r["dataset"])
+        elif r["status"] == "exists":
+            results["datasets_exists"].append(r["dataset"])
+        else:
+            results["errors"].append(r)
 
     for dataset_id, table_id, schema, partition_field, cluster_fields in TABLE_REGISTRY:
         r = _create_table(client, dataset_id, table_id, schema, partition_field, cluster_fields)
@@ -142,6 +202,8 @@ def provision_all_tables() -> dict:
         "provisioner.complete",
         created=len(results["created"]),
         already_existed=len(results["exists"]),
+        datasets_created=len(results["datasets_created"]),
+        datasets_existed=len(results["datasets_exists"]),
         errors=len(results["errors"]),
     )
     return results

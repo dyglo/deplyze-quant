@@ -25,6 +25,13 @@ async def provision():
     }
 
 
+@router.post("/init")
+async def init():
+    """V4 Handoff Alias: Idempotently initialize the warehouse and provision all tables including agent_outputs."""
+    return await provision()
+
+
+
 @router.get("/tables")
 async def list_tables():
     """List all registered tables and their existence status."""

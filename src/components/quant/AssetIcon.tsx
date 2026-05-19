@@ -48,13 +48,14 @@ function hashColor(seed: string): string {
 
 function logoUrlFor(symbol: string, cls: AssetClass): string | null {
   const s = symbol.toUpperCase().replace(/\s+/g, '');
+  // Never call image CDNs for FX/commodity pairs that contain '/' — those
+  // aren't valid stock tickers and will always 404.
+  if (s.includes('/')) return null;
   if (cls === 'equity') {
-    // financialmodelingprep public image-stock endpoint (no key required for img).
     return `https://financialmodelingprep.com/image-stock/${encodeURIComponent(s)}.png`;
   }
   if (cls === 'crypto') {
-    const base = s.includes('/') ? s.split('/')[0] : s;
-    return `https://assets.coincap.io/assets/icons/${base.toLowerCase()}@2x.png`;
+    return `https://assets.coincap.io/assets/icons/${s.toLowerCase()}@2x.png`;
   }
   return null; // fx / commodity / unknown → badge
 }

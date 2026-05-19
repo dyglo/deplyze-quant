@@ -249,42 +249,66 @@ export function normalizeBatchRows(rows: BatchQuoteRow[], assetClass: ScreenerRo
     });
 }
 
+// ─── Movers fallback ──────────────────────────────────────────────────────────
+// When the dedicated movers endpoint (FMP) returns an empty list — e.g., key not
+// configured or quota exceeded — synthesise movers by fetching batch quotes for
+// the curated large-cap universe and sorting by changePercent. This guarantees
+// the screener always shows something meaningful.
+
+const MOVERS_FALLBACK_SYMBOLS = [...MEGA_CAP_SYMBOLS, 'NVDA', 'AMD', 'TSLA', 'AMZN', 'NFLX', 'SHOP', 'COIN', 'PLTR', 'SNOW'];
+
+async function fetchMoversWithFallback(type: 'gainers' | 'losers' | 'active'): Promise<ScreenerRow[]> {
+  const apiData = await fetchMarketMovers(type);
+  if (apiData.length > 0) {
+    return apiData.map(normalizeMoverRow);
+  }
+  // FMP returned nothing — synthesise from batch quotes
+  const uniqueSymbols = [...new Set(MOVERS_FALLBACK_SYMBOLS)];
+  const rows = await fetchQuotes(uniqueSymbols);
+  const normalized = normalizeBatchRows(rows, 'equity');
+  if (type === 'gainers') {
+    return normalized.filter(r => r.changePercent > 0).sort((a, b) => b.changePercent - a.changePercent);
+  }
+  if (type === 'losers') {
+    return normalized.filter(r => r.changePercent < 0).sort((a, b) => a.changePercent - b.changePercent);
+  }
+  // active: sort by absolute change
+  return normalized.sort((a, b) => Math.abs(b.changePercent) - Math.abs(a.changePercent));
+}
+
 // ─── Screener fetch functions ─────────────────────────────────────────────────
 
 export async function fetchScreenerRows(tab: DiscoveryTab, pinnedSymbols: string[] = []): Promise<ScreenerRow[]> {
   switch (tab) {
     case 'gainers': {
-      const data = await fetchMarketMovers('gainers');
-      return data.map(normalizeMoverRow);
+      return fetchMoversWithFallback('gainers');
     }
     case 'losers': {
-      const data = await fetchMarketMovers('losers');
-      return data.map(normalizeMoverRow);
+      return fetchMoversWithFallback('losers');
     }
     case 'active': {
-      const data = await fetchMarketMovers('active');
-      return data.map(normalizeMoverRow);
+      return fetchMoversWithFallback('active');
     }
     case 'unusual-volume': {
-      // Derived: active movers sorted by inferred volume intensity
-      const data = await fetchMarketMovers('active');
-      return data.map(normalizeMoverRow).sort((a, b) => Math.abs(b.changePercent) - Math.abs(a.changePercent));
+      const rows = await fetchMoversWithFallback('active');
+      return rows.sort((a, b) => Math.abs(b.changePercent) - Math.abs(a.changePercent));
     }
     case 'vol-expansion': {
-      // Gainers + losers filtered to |change| > 2.5%
-      const [g, l] = await Promise.all([fetchMarketMovers('gainers'), fetchMarketMovers('losers')]);
-      const combined = [...g, ...l].map(normalizeMoverRow);
-      return combined
+      const [g, l] = await Promise.all([
+        fetchMoversWithFallback('gainers'),
+        fetchMoversWithFallback('losers'),
+      ]);
+      return [...g, ...l]
         .filter((r) => r.volatilityState === 'elevated' || r.volatilityState === 'extreme')
         .sort((a, b) => Math.abs(b.changePercent) - Math.abs(a.changePercent));
     }
     case 'gap-up': {
-      const data = await fetchMarketMovers('gainers');
-      return data.map(normalizeMoverRow).filter((r) => r.changePercent > 2);
+      const rows = await fetchMoversWithFallback('gainers');
+      return rows.filter((r) => r.changePercent > 2);
     }
     case 'gap-down': {
-      const data = await fetchMarketMovers('losers');
-      return data.map(normalizeMoverRow).filter((r) => r.changePercent < -2);
+      const rows = await fetchMoversWithFallback('losers');
+      return rows.filter((r) => r.changePercent < -2);
     }
     case 'mega-caps': {
       const rows = await fetchQuotes(MEGA_CAP_SYMBOLS);

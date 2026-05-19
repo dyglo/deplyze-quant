@@ -96,14 +96,18 @@ router.get('/quotes', async (req, res, next) => {
                 };
               } : undefined,
               finnhub: !isCrossAsset
-                // Equities: standard Finnhub quote
+                // Equities: standard Finnhub quote.
+                // Outside market hours c=0 is normal; use pc as the effective price.
                 ? async () => {
                     const q = await finnhub.getQuote(sym);
+                    // Only reject when both current price AND previous close are zero
+                    // (meaning the symbol is truly unknown, not just market-closed).
                     if (q.c === 0 && q.pc === 0) throw new Error('Finnhub: no data for symbol');
+                    const price = q.c !== 0 ? q.c : q.pc;
                     return {
-                      symbol: sym, price: q.c, open: q.o, high: q.h, low: q.l,
+                      symbol: sym, price, open: q.o || q.pc, high: q.h || q.pc, low: q.l || q.pc,
                       previousClose: q.pc, change: q.d, changePercent: q.dp,
-                      ts: q.t * 1000, source: 'finnhub',
+                      ts: q.t ? q.t * 1000 : Date.now(), source: 'finnhub',
                     };
                   }
                 // FX / Crypto: use Finnhub OANDA/Binance endpoints

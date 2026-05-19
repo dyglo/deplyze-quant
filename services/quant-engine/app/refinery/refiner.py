@@ -70,6 +70,18 @@ def _normalize_ohlcv_row(row: pd.Series) -> dict:
         "updated_at": _now_iso(),
     }
     enrich_record(rec, score_ohlcv_record)
+    
+    # SLA Outlier Check: If z-score is > 5.0, dock the quality score
+    z_score = row.get("z_score", 0.0)
+    if pd.notna(z_score) and z_score > 5.0:
+        rec["data_quality_score"] = max(0.0, round(rec["data_quality_score"] - 0.5, 4))
+        # Add metadata anomaly tag
+        rec["metadata"] = json.dumps({
+            "outlier_detected": True,
+            "z_score": float(z_score),
+            "rolling_mean": float(row.get("rolling_mean", 0.0)),
+            "rolling_std": float(row.get("rolling_std", 0.0))
+        })
     return rec
 
 
@@ -119,6 +131,16 @@ async def run_refine(run_id: str, symbols: List[str]) -> None:
             if df.empty:
                 log.info("refine.no_raw_data", symbol=symbol)
                 continue
+            
+            # Compute rolling 20-day statistics for outlier detection
+            df = df.sort_values("observation_time")
+            df['rolling_mean'] = df['close'].rolling(window=20, min_periods=1).mean()
+            df['rolling_std'] = df['close'].rolling(window=20, min_periods=1).std().fillna(0)
+            df['z_score'] = 0.0
+            
+            non_zero_std = df['rolling_std'] > 0
+            df.loc[non_zero_std, 'z_score'] = abs(df.loc[non_zero_std, 'close'] - df.loc[non_zero_std, 'rolling_mean']) / df.loc[non_zero_std, 'rolling_std']
+
             rows = [_normalize_ohlcv_row(row) for _, row in df.iterrows()]
             written = _write_cleaned(cleaned_table, rows)
             total += written
@@ -134,3 +156,4 @@ async def run_refine(run_id: str, symbols: List[str]) -> None:
         "errors": errors,
     })
     log.info("refine.complete", run_id=run_id, total=total)
+

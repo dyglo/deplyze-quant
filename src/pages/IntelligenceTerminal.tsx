@@ -7,14 +7,17 @@ import { useDrawer } from '../components/quant/DataDrawer';
 import { PageHeader } from '../components/quant/PageHeader';
 import { MarketTile } from '../components/quant/MarketTile';
 import { IntelligenceFeed } from '../components/quant/IntelligenceFeed';
+import { AgentIntelligenceFeed } from '../components/quant/AgentIntelligenceFeed';
 import { ResearchTimeline } from '../components/quant/ResearchTimeline';
 import { ArtifactDetailDrawerBody } from '../components/quant/ArtifactDetailDrawerBody';
 import { Disclaimer } from '../components/quant/Disclaimer';
 import { FreshnessBadge } from '../components/quant/FreshnessBadge';
 import { InstrumentDrawerBody } from '../components/quant/InstrumentDrawerBody';
 import { HeadlineDrawerBody } from '../components/quant/HeadlineDrawerBody';
+import { RegimeStatusChip, RiskLevelChip } from '../components/quant/SystemAnalyzingState';
 import { RefreshCw } from 'lucide-react';
 import { usePins } from '../hooks/usePins';
+import { useAgentOutputs, useCompositeRegime, useRiskEnvironment } from '../hooks/useAgentIntelligence';
 
 // Grouped by asset class for breadth of market coverage
 const DEFAULT_WATCH = [
@@ -58,7 +61,10 @@ export const IntelligenceTerminal: React.FC = () => {
   const timeline = useTimeline(currentWorkspace?.id ?? null, currentProject?.id ?? null);
   const { pinMap, pin, unpin } = usePins(currentWorkspace?.id ?? null, currentProject?.id ?? null);
   const pinnedIds = useMemo(() => new Set(pinMap.keys()), [pinMap]);
-  const [activeTab, setActiveTab] = useState<'feed' | 'timeline'>('feed');
+  const [activeTab, setActiveTab] = useState<'agents' | 'feed' | 'timeline'>('agents');
+  const agentOutputs = useAgentOutputs({ placement: 'IntelligenceTerminal', limit: 40 });
+  const { regimeLabel, data: regimeData } = useCompositeRegime();
+  const { riskLevel, data: riskData } = useRiskEnvironment();
 
   // Feed shows only agent-generated artifacts; user saves go to Research Library
   const agentArtifacts = useMemo(
@@ -83,6 +89,13 @@ export const IntelligenceTerminal: React.FC = () => {
         title="Intelligence Terminal"
         subtitle="Proactive, statistically ranked market intelligence — regime, volatility, correlation, and macro signals refreshed continuously."
       />
+      {/* Live regime + risk status */}
+      {(regimeLabel || riskLevel) && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16, marginTop: -8 }}>
+          <RegimeStatusChip regime={regimeLabel} confidence={regimeData?.confidence ?? null} />
+          <RiskLevelChip riskLevel={riskLevel} severity={riskData?.severity} />
+        </div>
+      )}
 
       {/* Market pulse */}
       <section style={{ marginBottom: 28 }}>
@@ -133,34 +146,47 @@ export const IntelligenceTerminal: React.FC = () => {
         <section>
           {/* Tab bar */}
           <nav style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--border)', marginBottom: 14 }}>
-            {(['feed', 'timeline'] as const).map((tab) => (
+            {([
+              { id: 'agents', label: 'Live Intelligence' },
+              { id: 'feed', label: 'Research Feed' },
+              { id: 'timeline', label: 'Timeline' },
+            ] as const).map((tab) => (
               <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
                 style={{
                   padding: '7px 14px',
                   border: 'none',
-                  borderBottom: activeTab === tab ? '2px solid var(--primary)' : '2px solid transparent',
+                  borderBottom: activeTab === tab.id ? '2px solid var(--primary)' : '2px solid transparent',
                   background: 'transparent',
                   cursor: 'pointer',
                   fontSize: 13,
-                  fontWeight: activeTab === tab ? 700 : 500,
-                  color: activeTab === tab ? 'var(--primary)' : 'var(--muted-foreground)',
+                  fontWeight: activeTab === tab.id ? 700 : 500,
+                  color: activeTab === tab.id ? 'var(--primary)' : 'var(--muted-foreground)',
                   marginBottom: -1,
                   transition: 'color 0.12s, border-color 0.12s',
                 }}
               >
-                {tab === 'feed' ? 'Intelligence Feed' : 'Research Timeline'}
+                {tab.label}
               </button>
             ))}
           </nav>
 
-          {activeTab === 'feed' ? (
+          {activeTab === 'agents' ? (
+            <AgentIntelligenceFeed
+              outputs={agentOutputs.data}
+              loading={agentOutputs.loading}
+              analyzing={agentOutputs.loading}
+              title="Live Intelligence"
+              showFilters
+              onRefresh={agentOutputs.refetch}
+            />
+          ) : activeTab === 'feed' ? (
             <IntelligenceFeed
               items={agentArtifacts}
               loading={artifacts.loading}
               emptyTitle="No intelligence artifacts yet"
-              emptyHint="Autonomous research agents start producing artifacts in Phase 5. Until then the feed will be empty; the Research Copilot is available for on-demand analysis."
+              emptyHint="Agents run on scheduled cadences. The Research Copilot is available for on-demand analysis."
               onOpen={handleOpenArtifact}
             />
           ) : (

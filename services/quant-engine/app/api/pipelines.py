@@ -165,6 +165,10 @@ async def daily_run(req: DailyRunRequest, background_tasks: BackgroundTasks):
     return {"run_id": run["run_id"], "status": "queued", "dry_run": req.dry_run}
 
 
+class ReconcileRequest(BaseModel):
+    pass
+
+
 @router.post("/backfill")
 async def backfill(req: BackfillRequest, background_tasks: BackgroundTasks):
     """Historical backfill for a date range."""
@@ -172,6 +176,16 @@ async def backfill(req: BackfillRequest, background_tasks: BackgroundTasks):
     run = _new_run("backfill")
     background_tasks.add_task(run_backfill, run["run_id"], req.symbols, req.start_date, req.end_date)
     return {"run_id": run["run_id"], "status": "queued"}
+
+
+@router.post("/reconcile")
+async def reconcile(req: ReconcileRequest, background_tasks: BackgroundTasks):
+    """Trigger active CDC deduplication (Warehouse Janitor) across cleaned datasets."""
+    from app.refinery.reconciler import run_reconcile
+    run = _new_run("reconcile")
+    background_tasks.add_task(run_reconcile, run["run_id"])
+    return {"run_id": run["run_id"], "status": "queued"}
+
 
 
 @router.post("/ingest/edgar")

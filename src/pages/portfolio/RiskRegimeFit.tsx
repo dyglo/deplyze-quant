@@ -14,6 +14,7 @@ import { correlationMatrix } from '../../lib/quant/correlation';
 import { portfolioReturnSeries } from '../../lib/quant/portfolio';
 import type { OHLCVBar } from '../../types';
 import { PortfolioIntelligencePanel } from '../../components/portfolio/PortfolioIntelligencePanel';
+import { AgentPortfolioInsights } from '../../components/portfolio/AgentPortfolioInsights';
 import { fmtPct, fmtBoth } from '../../lib/portfolio/fmt';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -428,7 +429,7 @@ export const RiskRegimeFit: React.FC = () => {
           </SectionCard>
         )}
 
-        {/* ── Row 4: Regime interpretation ──────────────���──────────────────── */}
+        {/* ── Row 4: Regime interpretation ─────────────────────────────────── */}
         {hasSeries && (
           <SectionCard title="Regime Interpretation" subtitle="Contextual portfolio surveillance intelligence" icon={<AlertCircle size={13} />}>
             <RegimePanel
@@ -441,6 +442,11 @@ export const RiskRegimeFit: React.FC = () => {
             />
           </SectionCard>
         )}
+
+        {/* ── Row 5: Agent Intelligence ─────────────────────────────────────── */}
+        <SectionCard title="Background Intelligence" subtitle="Macro, regime, risk, and volatility observations from background agents" icon={<Activity size={13} />}>
+          <AgentPortfolioInsights portfolioId={selectedPortfolio?.id} />
+        </SectionCard>
       </div>
     </div>
   );

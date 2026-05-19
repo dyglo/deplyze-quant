@@ -31,12 +31,23 @@ async def _ingest_ohlcv_polygon(symbol: str, from_date: str, to_date: str) -> Li
     raw = await client.get_ohlcv(symbol, from_date, to_date)
     results = raw.get("results", [])
     records = []
+    
+    # Determine asset class dynamically based on symbol structure
+    asset_type = "equity"
+    sym_upper = symbol.upper()
+    if sym_upper.startswith("C:") or (len(sym_upper) == 6 and sym_upper.isalpha()):
+        asset_type = "fx"
+    elif sym_upper in ["GLD", "USO", "UNG", "SLV", "DBA"]:
+        asset_type = "commodity"
+    elif sym_upper in ["SPY", "QQQ", "VXX", "IWM", "DIA", "VIX"]:
+        asset_type = "index"
+        
     for r in results:
         obs_ts = datetime.fromtimestamp(r["t"] / 1000, tz=timezone.utc).isoformat()
         rec = {
             "id": str(uuid.uuid4()),
             "symbol": symbol,
-            "asset_type": "equity",
+            "asset_type": asset_type,
             "provider": "polygon",
             "source_type": "api",
             "observation_time": obs_ts,

@@ -16,7 +16,7 @@ import type { Request, Response } from 'express';
 
 export const rateLimiter = rateLimit({
   windowMs: 60 * 1000,        // 1 minute
-  max: 200,                    // 200 requests per IP per minute
+  max: 600,                    // 600 requests per IP per minute
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   keyGenerator: (req: Request) => {
@@ -38,7 +38,7 @@ export const rateLimiter = rateLimit({
 
 export const userRateLimiter = rateLimit({
   windowMs: 60 * 1000,        // 1 minute
-  max: 60,                     // 60 requests per user per minute
+  max: 300,                     // 300 requests per user per minute
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   keyGenerator: (req: Request) => {

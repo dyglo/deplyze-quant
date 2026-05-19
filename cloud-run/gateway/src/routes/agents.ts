@@ -301,6 +301,21 @@ router.get('/reasoning', async (_req, res, next) => {
 
 const QUANT_ENGINE_URL = process.env.QUANT_ENGINE_URL ?? '';
 
+// Fetches a short-lived Google-signed OIDC token for service-to-service auth.
+async function getEngineIdToken(audience: string): Promise<string> {
+  try {
+    const metaUrl =
+      `http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity` +
+      `?audience=${encodeURIComponent(audience)}`;
+    const resp = await fetch(metaUrl, {
+      headers: { 'Metadata-Flavor': 'Google' },
+      signal: AbortSignal.timeout(3_000),
+    });
+    if (resp.ok) return resp.text();
+  } catch { /* local dev — no metadata server */ }
+  return '';
+}
+
 router.get('/analog', async (req, res, next) => {
   try {
     if (!QUANT_ENGINE_URL) {
@@ -310,7 +325,10 @@ router.get('/analog', async (req, res, next) => {
     if (req.query.lookback_years) qs.set('lookback_years', String(req.query.lookback_years));
     if (req.query.top_k) qs.set('top_k', String(req.query.top_k));
     const url = `${QUANT_ENGINE_URL}/agents/analog?${qs.toString()}`;
-    const response = await fetch(url, { signal: AbortSignal.timeout(20_000) });
+    const idToken = await getEngineIdToken(QUANT_ENGINE_URL);
+    const headers: Record<string, string> = {};
+    if (idToken) headers['Authorization'] = `Bearer ${idToken}`;
+    const response = await fetch(url, { headers, signal: AbortSignal.timeout(20_000) });
     if (!response.ok) throw new Error(`quant-engine ${response.status}`);
     res.json(await response.json());
   } catch (err) {
@@ -325,9 +343,12 @@ router.post('/vulnerability', async (req, res, next) => {
     if (!QUANT_ENGINE_URL) {
       return res.status(503).json({ error: 'Vulnerability engine not configured' });
     }
+    const idToken = await getEngineIdToken(QUANT_ENGINE_URL);
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (idToken) headers['Authorization'] = `Bearer ${idToken}`;
     const response = await fetch(`${QUANT_ENGINE_URL}/agents/vulnerability`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(req.body),
       signal: AbortSignal.timeout(20_000),
     });
@@ -378,6 +399,7 @@ router.get('/narrative-exposure', async (req, res, next) => {
             SELECT 1 FROM UNNEST(m.related_symbols) rs
             WHERE rs IN (${symIn})
           )
+        QUALIFY ROW_NUMBER() OVER (PARTITION BY m.theme_id ORDER BY m.last_seen_at DESC) = 1
         ORDER BY m.lifetime_score DESC
         LIMIT 20
       `);

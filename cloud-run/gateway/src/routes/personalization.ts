@@ -311,6 +311,23 @@ function ensureEngine(res: Response): boolean {
   return true;
 }
 
+// Fetches a short-lived Google-signed OIDC token so Cloud Run IAM accepts
+// service-to-service calls from the gateway to the quant-engine.
+async function getEngineIdToken(): Promise<string> {
+  try {
+    // On Cloud Run the metadata server is always available.
+    const metaUrl =
+      `http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity` +
+      `?audience=${encodeURIComponent(QUANT_ENGINE_URL)}`;
+    const resp = await fetch(metaUrl, {
+      headers: { 'Metadata-Flavor': 'Google' },
+      signal: AbortSignal.timeout(3_000),
+    });
+    if (resp.ok) return resp.text();
+  } catch { /* fall through to empty token in dev */ }
+  return '';
+}
+
 async function callEngine(
   method: 'GET' | 'POST' | 'PATCH',
   path: string,
@@ -321,9 +338,12 @@ async function callEngine(
     if (v !== undefined && v !== '') qs.set(k, v);
   }
   const url = `${QUANT_ENGINE_URL}${path}${qs.toString() ? `?${qs.toString()}` : ''}`;
+  const idToken = await getEngineIdToken();
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (idToken) headers['Authorization'] = `Bearer ${idToken}`;
   const response = await fetch(url, {
     method,
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
     signal: AbortSignal.timeout(ENGINE_TIMEOUT_MS),
   });

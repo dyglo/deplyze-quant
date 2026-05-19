@@ -33,6 +33,14 @@ const BriefingKind = z.enum([
   'instrument-snapshot',
   'cross-asset',
   'sentiment',
+  'weekly-regime',
+  'volatility',
+  'market-stress',
+  'earnings',
+  'sector-rotation',
+  'positioning',
+  'risk',
+  'trade-thesis',
 ]);
 
 const Body = z.object({
@@ -65,6 +73,14 @@ const KIND_TITLES: Record<z.infer<typeof BriefingKind>, string> = {
   'instrument-snapshot': 'Instrument Snapshot Brief',
   'cross-asset':         'Cross-Asset Relationship Brief',
   'sentiment':           'Sentiment Brief',
+  'weekly-regime':       'Weekly Regime Report',
+  'volatility':          'Volatility Intelligence Brief',
+  'market-stress':       'Market Stress Report',
+  'earnings':            'Earnings Intelligence Brief',
+  'sector-rotation':     'Sector Rotation Brief',
+  'positioning':         'Positioning Report',
+  'risk':                'Risk Environment Brief',
+  'trade-thesis':        'Trade Thesis Brief',
 };
 
 const DEFAULT_PULSE_SYMBOLS = ['SPY', 'QQQ', 'GLD', 'TLT', 'UUP', 'BTC/USD'];
@@ -317,6 +333,14 @@ function buildPrompt(kind: z.infer<typeof BriefingKind>, draft: BriefingDraft): 
     'instrument-snapshot': 'Sections: ## Quote, ## Directional Bias, ## Volatility Profile, ## Catalysts, ## Risks.',
     'cross-asset':         'Sections: ## Universe, ## Notable Pairs, ## Breakdowns vs Historical, ## Implications.',
     'sentiment':           'Sections: ## Tone, ## Dominant Themes, ## Source Mix, ## Caveats.',
+    'weekly-regime':       'Sections: ## Macro Regime, ## Asset Allocation, ## Leading Indicators, ## Risks.',
+    'volatility':          'Sections: ## Volatility Regime, ## Realised vs Implied, ## Term Structure, ## Risk Events.',
+    'market-stress':       'Sections: ## Stress Indicators, ## Spreads & Liquidity, ## Credit/Funding Stress, ## Implications.',
+    'earnings':            'Sections: ## Earnings Calendar, ## Consensus Beats/Misses, ## Guidance Shifts, ## Investment Context.',
+    'sector-rotation':     'Sections: ## Sector Performance, ## Relative Momentum, ## Flow Dynamics, ## Strategy Implications.',
+    'positioning':         'Sections: ## Speculative Positioning, ## Sentiment Shifts, ## Flow of Funds, ## Contrarian Signals.',
+    'risk':                'Sections: ## Tail Risks, ## Drawdown Watch, ## Correlation Shifts, ## Hedging Actions.',
+    'trade-thesis':        'Sections: ## Investment Thesis, ## Catalysts, ## Valuation & Timing, ## Risks & Mitigants.',
   }[kind];
 
   return [
@@ -348,6 +372,40 @@ router.post('/generate', async (req, res, next) => {
       }
       case 'cross-asset':          draft = await gatherCrossAsset(body.params?.symbols ?? []); break;
       case 'sentiment':            draft = await gatherSentiment(body.params?.query); break;
+
+      case 'earnings':
+      case 'trade-thesis': {
+        const sym = body.params?.symbol;
+        if (!sym) { res.status(400).json({ error: `params.symbol required for ${body.kind}` }); return; }
+        draft = await gatherInstrumentSnapshot(sym);
+        draft.title = `${KIND_TITLES[body.kind]}: ${sym.toUpperCase()}`;
+        break;
+      }
+
+      case 'weekly-regime':
+      case 'volatility':
+      case 'market-stress':
+      case 'sector-rotation':
+      case 'positioning':
+      case 'risk': {
+        const macroDraft = await gatherMacro();
+        const sentimentDraft = await gatherSentiment(body.params?.query ?? `market ${body.kind}`);
+        draft = {
+          title: KIND_TITLES[body.kind],
+          summary: '',
+          body: '',
+          highlights: [...macroDraft.highlights.slice(0, 2), ...sentimentDraft.highlights.slice(0, 1)],
+          symbols: [],
+          evidenceLines: [
+            ...macroDraft.evidenceLines,
+            '',
+            ...sentimentDraft.evidenceLines,
+          ],
+          sourceCoverage: macroDraft.sourceCoverage + sentimentDraft.sourceCoverage,
+          dataCompleteness: (macroDraft.dataCompleteness + sentimentDraft.dataCompleteness) / 2,
+        };
+        break;
+      }
     }
 
     const prompt = buildPrompt(body.kind, draft);

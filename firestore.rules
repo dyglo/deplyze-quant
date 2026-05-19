@@ -114,6 +114,34 @@ service cloud.firestore {
       allow read, write: if isSignedIn();
     }
 
+    // ─── V5 Personalization · low-latency mirrors ─────────────────────────
+    // BigQuery is the source of truth (raw_app.user_events,
+    // features.user_profile_daily, artifacts.investigation_memory). Firestore
+    // mirrors are intentionally scoped to a single user under /users/{uid}
+    // so client reads stay cheap and security stays strict — no
+    // cross-user reads possible by construction.
+    //
+    // personalizationProfile + savedBriefings (write side) are populated by
+    // the gateway / engine via the Admin SDK (bypasses rules). Clients only
+    // read them. Investigations + workflowMemory + personalizationControls
+    // are user-owned for read+write under their own /users/{uid} path.
+    match /users/{userId}/personalizationProfile/{docId} {
+      allow read:  if isSignedIn() && request.auth.uid == userId;
+      allow write: if false;
+    }
+    match /users/{userId}/investigations/{investigationId} {
+      allow read, write: if isSignedIn() && request.auth.uid == userId;
+    }
+    match /users/{userId}/savedBriefings/{briefingId} {
+      allow read, write: if isSignedIn() && request.auth.uid == userId;
+    }
+    match /users/{userId}/workflowMemory/{memoryId} {
+      allow read, write: if isSignedIn() && request.auth.uid == userId;
+    }
+    match /users/{userId}/personalizationControls/{docId} {
+      allow read, write: if isSignedIn() && request.auth.uid == userId;
+    }
+
     // ─── Server-only collections ──────────────────────────────────────────
     match /providerCache/{key}  { allow read, write: if false; }
     match /auditLogs/{logId}    { allow read, write: if false; }

@@ -35,6 +35,21 @@
         { "fieldPath": "workspaceId", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "investigations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "savedBriefings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "briefingDate", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

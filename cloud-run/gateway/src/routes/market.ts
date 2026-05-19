@@ -159,7 +159,10 @@ function intervalToPolygon(interval: string): { multiplier: number; timespan: po
   return map[interval] ?? null;
 }
 
-router.get('/ohlcv/:symbol', async (req, res, next) => {
+// GET /ohlcv/:symbol(*) — matches any symbol string including those containing slashes
+// (e.g. FX / Crypto like ETH/USD), which get double-decoded (%2F → /) before routing.
+router.get('/ohlcv/:symbol(*)', async (req, res, next) => {
+
   try {
     const symbol = req.params.symbol.toUpperCase();
     const { interval, outputsize } = OhlcvQuery.parse(req.query);

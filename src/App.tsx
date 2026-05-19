@@ -10,6 +10,7 @@ import { DrawerProvider } from './components/quant/DataDrawer';
 import { Activity } from 'lucide-react';
 
 import { IntelligenceTerminal } from './pages/IntelligenceTerminal';
+import { MorningTerminal } from './pages/MorningTerminal';
 import { InstrumentIntelligence } from './pages/InstrumentIntelligence';
 import { InstrumentDetail } from './pages/InstrumentDetail';
 import { MacroRegimeDesk } from './pages/MacroRegimeDesk';
@@ -77,6 +78,7 @@ export default function App() {
           <Routes>
             <Route path="/login"                element={<Login />} />
             <Route path="/"                     element={<ProtectedRoute><IntelligenceTerminal /></ProtectedRoute>} />
+            <Route path="/morning"              element={<ProtectedRoute><MorningTerminal /></ProtectedRoute>} />
             <Route path="/instruments"          element={<ProtectedRoute><InstrumentIntelligence /></ProtectedRoute>} />
             <Route path="/instruments/:symbol"  element={<ProtectedRoute><InstrumentDetail /></ProtectedRoute>} />
             <Route path="/macro"                element={<ProtectedRoute><MacroRegimeDesk /></ProtectedRoute>} />

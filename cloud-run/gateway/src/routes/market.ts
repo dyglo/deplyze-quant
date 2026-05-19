@@ -20,6 +20,8 @@ import * as serper from '../providers/serper';
 import { withCache, cacheSet, TTL } from '../services/cache';
 import { withFallback, quoteChain, ohlcvChain, newsChain } from '../lib/providerRouter';
 import type { OHLCVBar } from '../providers/twelvedata';
+import * as fred from '../providers/fred';
+import * as coingecko from '../providers/coingecko';
 
 const router = Router();
 
@@ -93,15 +95,28 @@ router.get('/quotes', async (req, res, next) => {
                   ts: s.updated ? Math.floor(s.updated / 1_000_000) : Date.now(), source: 'polygon',
                 };
               } : undefined,
-              finnhub: !isCrossAsset ? async () => {
-                const q = await finnhub.getQuote(sym);
-                if (q.c === 0 && q.pc === 0) throw new Error('Finnhub: no data for symbol');
-                return {
-                  symbol: sym, price: q.c, open: q.o, high: q.h, low: q.l,
-                  previousClose: q.pc, change: q.d, changePercent: q.dp,
-                  ts: q.t * 1000, source: 'finnhub',
-                };
-              } : undefined,
+              finnhub: !isCrossAsset
+                // Equities: standard Finnhub quote
+                ? async () => {
+                    const q = await finnhub.getQuote(sym);
+                    if (q.c === 0 && q.pc === 0) throw new Error('Finnhub: no data for symbol');
+                    return {
+                      symbol: sym, price: q.c, open: q.o, high: q.h, low: q.l,
+                      previousClose: q.pc, change: q.d, changePercent: q.dp,
+                      ts: q.t * 1000, source: 'finnhub',
+                    };
+                  }
+                // FX / Crypto: use Finnhub OANDA/Binance endpoints
+                : finnhub.toFinnhubCrossAssetSymbol(sym)
+                  ? async () => {
+                      const q = await finnhub.getCrossAssetQuote(sym);
+                      return {
+                        symbol: sym, price: q.c, open: q.o, high: q.h, low: q.l,
+                        previousClose: q.pc, change: q.d, changePercent: q.dp,
+                        ts: q.t ? q.t * 1000 : Date.now(), source: 'finnhub',
+                      };
+                    }
+                  : undefined,
               twelve_data: async () => {
                 const q = await td.getQuote(td.normalizeTdSymbol(sym));
                 return { ...q, symbol: sym, source: 'twelve_data' };
@@ -146,20 +161,41 @@ router.get('/ohlcv/:symbol', async (req, res, next) => {
     const { interval, outputsize } = OhlcvQuery.parse(req.query);
     const isDaily = interval === '1day' || interval === '1week' || interval === '1month';
     const ttl = isDaily ? TTL.ohlcv_daily : TTL.ohlcv_intraday;
-    // v3: busts pre-sparse-guard cache entries that stored < 280 bars for long requests.
-    const cacheKey = `ohlcv:v3:${symbol}:${interval}:${outputsize}`;
+    const cacheKey = `ohlcv:v4:${symbol}:${interval}:${outputsize}`;
 
-    // Minimum bar threshold: regime/scenario classification needs ≥280 bars.
-    // Any provider returning fewer for a large request is a sparse failure.
-    const SPARSE_MIN = outputsize >= 500 ? 280 : 0;
+    const isFx     = fred.isFxSupported(symbol);
+    const isCrypto = coingecko.isCryptoSupported(symbol);
+    const isCrossAsset = symbol.includes('/');
+
+    // Minimum bar threshold: only applies to large equity history requests.
+    const SPARSE_MIN = (!isCrossAsset && outputsize >= 500) ? 280 : 0;
 
     const fetchFresh = async (): Promise<OHLCVBar[]> => {
-      const today = new Date().toISOString().slice(0, 10);
+      const today    = new Date().toISOString().slice(0, 10);
       const pastDate = new Date(Date.now() - outputsize * 1.5 * 86400_000).toISOString().slice(0, 10);
       const tdInterval = interval as Parameters<typeof td.getTimeSeries>[1];
 
-      // For daily bars: try EODHD first (adjusted close), fall back to Twelve Data, then FMP.
-      // For intraday: Twelve Data is the only provider with minute/hour data in this tier.
+      // ── FX / Commodity: FRED is the primary free source ─────────────────
+      if (isFx) {
+        const { result } = await withFallback(ohlcvChain<OHLCVBar[]>({
+          // FRED daily closing rates — free, 120 req/min, no daily cap
+          eodhd: async () => fred.getFxOhlcvBars(symbol, outputsize),
+          // Twelve Data as fallback for FX (handles slash-format natively)
+          twelve_data: async () => td.getTimeSeries(td.normalizeTdSymbol(symbol), tdInterval, outputsize),
+        }));
+        return result;
+      }
+
+      // ── Crypto: CoinGecko first (free, no key), Twelve Data as fallback ──
+      if (isCrypto) {
+        const { result } = await withFallback(ohlcvChain<OHLCVBar[]>({
+          eodhd: async () => coingecko.getCryptoOhlcvBars(symbol, outputsize),
+          twelve_data: async () => td.getTimeSeries(td.normalizeTdSymbol(symbol), tdInterval, outputsize),
+        }));
+        return result;
+      }
+
+      // ── Equities / ETFs / Indices: EODHD → Twelve Data → FMP ────────────
       const { result } = await withFallback(ohlcvChain<OHLCVBar[]>({
         eodhd: isDaily ? async () => {
           const rawBars = await eodhd.getHistoricalBars(symbol, { from: pastDate, to: today });
@@ -174,8 +210,6 @@ router.get('/ohlcv/:symbol', async (req, res, next) => {
         } : undefined,
         twelve_data: async () => {
           const bars = await td.getTimeSeries(td.normalizeTdSymbol(symbol), tdInterval, outputsize);
-          // Twelve Data free plan silently caps daily history — reject sparse results
-          // so FMP fallback can serve the full history for regime/scenario analysis.
           if (bars.length < SPARSE_MIN) throw new Error(`Twelve Data: sparse result (${bars.length}/${outputsize} bars)`);
           return bars;
         },
@@ -191,14 +225,19 @@ router.get('/ohlcv/:symbol', async (req, res, next) => {
       return result;
     };
 
-    let bars = await withCache(cacheKey, ttl, fetchFresh);
-
-    // Post-cache guard: if a stale sparse entry slipped in (race condition or old key),
-    // re-fetch immediately and overwrite the cache entry so all subsequent requests are clean.
-    if (bars.length < SPARSE_MIN) {
-      console.warn(`[ohlcv] stale sparse cache for ${symbol} (${bars.length} bars, need ${SPARSE_MIN}) — re-fetching`);
-      bars = await fetchFresh();
-      await cacheSet(cacheKey, bars, ttl);
+    let bars: OHLCVBar[];
+    try {
+      bars = await withCache(cacheKey, ttl, fetchFresh);
+      // Post-cache sparse guard (equities only)
+      if (bars.length < SPARSE_MIN) {
+        console.warn(`[ohlcv] stale sparse cache for ${symbol} — re-fetching`);
+        bars = await fetchFresh();
+        await cacheSet(cacheKey, bars, ttl);
+      }
+    } catch (providerErr) {
+      // All providers failed — return empty bars (graceful degradation, not 500).
+      console.warn(`[ohlcv] all providers failed for ${symbol}: ${(providerErr as Error).message}`);
+      bars = [];
     }
 
     res.json({ symbol, interval, bars });
@@ -298,11 +337,18 @@ router.get('/movers', async (req, res, next) => {
   try {
     const type = (req.query.type as string) ?? 'gainers';
     const cacheKey = `movers:fmp:${type}`;
-    const data = await withCache(cacheKey, TTL.quote * 5, async () => {
-      if (type === 'losers') return fmp.getLosers();
-      if (type === 'active') return fmp.getMostActive();
-      return fmp.getGainers();
-    });
+    let data: unknown[];
+    try {
+      data = await withCache(cacheKey, TTL.quote * 5, async () => {
+        if (type === 'losers') return fmp.getLosers();
+        if (type === 'active') return fmp.getMostActive();
+        return fmp.getGainers();
+      });
+    } catch (providerErr) {
+      // FMP key not configured or quota exceeded — return empty list gracefully.
+      console.warn(`[movers] FMP unavailable: ${(providerErr as Error).message}`);
+      data = [];
+    }
     res.json({ type, movers: data });
   } catch (err) { next(err); }
 });

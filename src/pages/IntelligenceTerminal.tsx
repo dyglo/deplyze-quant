@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useBatchQuotes, useHeadlines, useOHLCV } from '../hooks/useMarket';
 import { useArtifacts } from '../hooks/useArtifacts';
 import { useTimeline } from '../hooks/useTimeline';
@@ -16,44 +16,285 @@ import { FreshnessBadge } from '../components/quant/FreshnessBadge';
 import { InstrumentDrawerBody } from '../components/quant/InstrumentDrawerBody';
 import { HeadlineDrawerBody } from '../components/quant/HeadlineDrawerBody';
 import { RegimeStatusChip, RiskLevelChip } from '../components/quant/SystemAnalyzingState';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, Plus, X, GripVertical } from 'lucide-react';
 import { usePins } from '../hooks/usePins';
 import { useAgentOutputs, useCompositeRegime, useRiskEnvironment } from '../hooks/useAgentIntelligence';
+import { symbolSearch } from '../services/marketService';
 
-// Grouped by asset class for breadth of market coverage
+// ─── Persistent watch list ────────────────────────────────────────────────────
+
+const PULSE_STORAGE_KEY = 'deplyze_market_pulse_v1';
+const PULSE_MAX = 24;
 const DEFAULT_WATCH = [
-  'SPY', 'QQQ', 'IWM',          // US Equities — broad market
-  'TLT', 'UUP',                  // Fixed income + USD
-  'XAU/USD', 'WTI/USD',          // Commodities
-  'EUR/USD', 'USD/JPY',          // FX
-  'BTC/USD', 'ETH/USD',          // Crypto
+  'SPY', 'QQQ', 'IWM',
+  'TLT', 'UUP',
+  'XAU/USD', 'WTI/USD',
+  'EUR/USD', 'USD/JPY',
+  'BTC/USD', 'ETH/USD',
 ];
 
-/** Tile with its own (cached) sparkline fetch — small extra round-trip per tile,
- *  but each is cached for 6h and dedup'd by the shared client cache. */
+function loadWatch(): string[] {
+  try {
+    const stored = JSON.parse(localStorage.getItem(PULSE_STORAGE_KEY) ?? 'null');
+    return Array.isArray(stored) && stored.length > 0 ? stored : DEFAULT_WATCH;
+  } catch {
+    return DEFAULT_WATCH;
+  }
+}
+
+function saveWatch(list: string[]): void {
+  localStorage.setItem(PULSE_STORAGE_KEY, JSON.stringify(list));
+}
+
+// ─── Add-symbol input ─────────────────────────────────────────────────────────
+
+const AddSymbolInput: React.FC<{
+  watchList: string[];
+  onAdd: (sym: string) => void;
+}> = ({ watchList, onAdd }) => {
+  const [value, setValue] = useState('');
+  const [error, setError] = useState('');
+  const [suggestions, setSuggestions] = useState<{ symbol: string; name: string }[]>([]);
+  const [searching, setSearching] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleChange = (v: string) => {
+    setValue(v);
+    setError('');
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (v.trim().length < 1) { setSuggestions([]); return; }
+    debounceRef.current = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const results = await symbolSearch(v.trim());
+        // Deduplicate by symbol — symbol search can return the same ticker
+        // from multiple exchanges (NYSE + NASDAQ), causing duplicate React keys.
+        const seen = new Set<string>();
+        const deduped = results.filter(r => {
+          if (seen.has(r.symbol)) return false;
+          seen.add(r.symbol);
+          return true;
+        });
+        setSuggestions(deduped.slice(0, 6).map(r => ({ symbol: r.symbol, name: r.name ?? r.symbol })));
+      } catch {
+        setSuggestions([]);
+      } finally {
+        setSearching(false);
+      }
+    }, 280);
+  };
+
+  const commit = (sym: string) => {
+    const upper = sym.trim().toUpperCase();
+    if (!upper) return;
+    if (watchList.includes(upper)) { setError('Already in pulse'); return; }
+    if (watchList.length >= PULSE_MAX) { setError(`Max ${PULSE_MAX} symbols`); return; }
+    onAdd(upper);
+    setValue('');
+    setSuggestions([]);
+    inputRef.current?.focus();
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') commit(value);
+    if (e.key === 'Escape') { setValue(''); setSuggestions([]); }
+  };
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <div style={{ display: 'flex', gap: 4 }}>
+        <div style={{ position: 'relative' }}>
+          <input
+            ref={inputRef}
+            value={value}
+            onChange={e => handleChange(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Add symbol…"
+            style={{
+              padding: '5px 10px', fontSize: 11, borderRadius: 6, width: 130,
+              border: `1px solid ${error ? '#ef4444' : 'var(--border)'}`,
+              background: 'var(--card)', color: 'var(--foreground)', outline: 'none',
+            }}
+          />
+          {error && (
+            <span style={{
+              position: 'absolute', top: '100%', left: 0, marginTop: 2,
+              fontSize: 9, color: '#ef4444', whiteSpace: 'nowrap',
+            }}>
+              {error}
+            </span>
+          )}
+        </div>
+        <button
+          onClick={() => commit(value)}
+          title="Add symbol"
+          style={{
+            width: 28, height: 28, borderRadius: 6, border: '1px solid var(--border)',
+            background: 'var(--primary)', color: 'var(--primary-foreground)',
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer', flexShrink: 0,
+          }}
+        >
+          <Plus size={13} />
+        </button>
+      </div>
+
+      {/* Suggestions dropdown */}
+      {(suggestions.length > 0 || searching) && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, marginTop: 4,
+          background: 'var(--popover)', border: '1px solid var(--border)', borderRadius: 8,
+          boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 50, minWidth: 200,
+        }}>
+          {searching && (
+            <div style={{ padding: '8px 12px', fontSize: 10, color: 'var(--muted-foreground)' }}>
+              Searching…
+            </div>
+          )}
+          {suggestions.map(s => (
+            <button
+              key={s.symbol}
+              onClick={() => commit(s.symbol)}
+              style={{
+                width: '100%', textAlign: 'left', padding: '7px 12px',
+                border: 'none', background: 'transparent', cursor: 'pointer',
+                display: 'flex', gap: 8, alignItems: 'center',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--muted)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+            >
+              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--foreground)', minWidth: 60 }}>
+                {s.symbol}
+              </span>
+              <span style={{
+                fontSize: 10, color: 'var(--muted-foreground)',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>
+                {s.name}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── Draggable pulse tile wrapper ─────────────────────────────────────────────
+
 const PulseTile: React.FC<{
   symbol: string;
   quote: import('../services/marketService').BatchQuoteRow | undefined;
   loading: boolean;
+  isDragging: boolean;
+  isDragOver: boolean;
   onOpen: () => void;
-}> = ({ symbol, quote, loading, onOpen }) => {
+  onRemove: () => void;
+  onDragStart: () => void;
+  onDragOver: (e: React.DragEvent) => void;
+  onDrop: () => void;
+  onDragEnd: () => void;
+}> = ({ symbol, quote, loading, isDragging, isDragOver, onOpen, onRemove, onDragStart, onDragOver, onDrop, onDragEnd }) => {
   const ohlcv = useOHLCV(symbol, '1day', 60);
-  const closes = (ohlcv.data?.bars ?? []).map((b) => b.close);
+  const closes = (ohlcv.data?.bars ?? []).map(b => b.close);
+  const [hovered, setHovered] = useState(false);
+
   return (
-    <MarketTile
-      symbol={symbol}
-      quote={quote?.ok ? quote.data : undefined}
-      loading={loading}
-      spark={closes}
-      onClick={onOpen}
-    />
+    <div
+      draggable
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+      onDragEnd={onDragEnd}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        position: 'relative',
+        opacity: isDragging ? 0.4 : 1,
+        outline: isDragOver ? '2px solid var(--primary)' : 'none',
+        outlineOffset: 2,
+        borderRadius: 10,
+        transition: 'opacity 0.15s, outline 0.1s',
+        cursor: 'grab',
+      }}
+    >
+      {/* Drag handle — always visible, subtle */}
+      <div style={{
+        position: 'absolute', top: 6, left: 7, zIndex: 2,
+        color: 'var(--muted-foreground)', opacity: hovered ? 0.6 : 0.25,
+        pointerEvents: 'none', transition: 'opacity 0.15s',
+      }}>
+        <GripVertical size={11} />
+      </div>
+
+      {/* Remove button — visible on hover */}
+      <button
+        onClick={e => { e.stopPropagation(); onRemove(); }}
+        title={`Remove ${symbol}`}
+        style={{
+          position: 'absolute', top: 5, right: 5, zIndex: 3,
+          width: 16, height: 16, borderRadius: 4,
+          border: 'none', background: 'rgba(0,0,0,0.35)',
+          color: '#fff', cursor: 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          opacity: hovered ? 1 : 0, transition: 'opacity 0.15s',
+          padding: 0,
+        }}
+      >
+        <X size={9} />
+      </button>
+
+      <MarketTile
+        symbol={symbol}
+        quote={quote?.ok ? quote.data : undefined}
+        loading={loading}
+        spark={closes}
+        onClick={onOpen}
+      />
+    </div>
   );
 };
 
 export const IntelligenceTerminal: React.FC = () => {
   const { currentWorkspace, currentProject } = useWorkspace();
   const drawer = useDrawer();
-  const quotes = useBatchQuotes(DEFAULT_WATCH);
+
+  // ── Editable watch list ──────────────────────────────────────────────────
+  const [watchList, setWatchList] = useState<string[]>(loadWatch);
+  const [dragSrcIdx, setDragSrcIdx] = useState<number | null>(null);
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
+
+  const handleAdd = useCallback((sym: string) => {
+    setWatchList(prev => {
+      const next = [...prev, sym];
+      saveWatch(next);
+      return next;
+    });
+  }, []);
+
+  const handleRemove = useCallback((sym: string) => {
+    setWatchList(prev => {
+      const next = prev.filter(s => s !== sym);
+      saveWatch(next);
+      return next;
+    });
+  }, []);
+
+  const handleDrop = useCallback((toIdx: number) => {
+    setWatchList(prev => {
+      if (dragSrcIdx === null || dragSrcIdx === toIdx) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(dragSrcIdx, 1);
+      next.splice(toIdx, 0, moved);
+      saveWatch(next);
+      return next;
+    });
+    setDragSrcIdx(null);
+    setDragOverIdx(null);
+  }, [dragSrcIdx]);
+
+  const quotes = useBatchQuotes(watchList);
   const headlines = useHeadlines('markets macro central bank');
   const artifacts = useArtifacts(
     currentWorkspace?.id ?? null,
@@ -101,9 +342,15 @@ export const IntelligenceTerminal: React.FC = () => {
 
       {/* Market pulse */}
       <section style={{ marginBottom: 28 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-          <h2 className="ds-heading" style={{ margin: 0 }}>Market Pulse</h2>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <h2 className="ds-heading" style={{ margin: 0 }}>Market Pulse</h2>
+            <span style={{ fontSize: 9, color: 'var(--muted-foreground)', fontWeight: 500 }}>
+              {watchList.length}/{PULSE_MAX} · drag to reorder
+            </span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <AddSymbolInput watchList={watchList} onAdd={handleAdd} />
             <FreshnessBadge status={quotes.status} fetchedAt={quotes.fetchedAt} />
             <button
               onClick={() => quotes.refresh()}
@@ -121,25 +368,53 @@ export const IntelligenceTerminal: React.FC = () => {
             </button>
           </div>
         </div>
+
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 10 }}>
-          {DEFAULT_WATCH.map((sym) => {
-            const row = quotes.data?.find((q) => q.symbol === sym);
+          {watchList.map((sym, idx) => {
+            const row = quotes.data?.find(q => q.symbol === sym);
             return (
               <PulseTile
                 key={sym}
                 symbol={sym}
                 quote={row}
                 loading={quotes.loading}
+                isDragging={dragSrcIdx === idx}
+                isDragOver={dragOverIdx === idx && dragSrcIdx !== idx}
                 onOpen={() => drawer.open({
                   title: sym,
                   subtitle: 'Instrument intelligence',
                   width: 560,
                   body: <InstrumentDrawerBody symbol={sym} />,
                 })}
+                onRemove={() => handleRemove(sym)}
+                onDragStart={() => setDragSrcIdx(idx)}
+                onDragOver={e => { e.preventDefault(); setDragOverIdx(idx); }}
+                onDrop={() => handleDrop(idx)}
+                onDragEnd={() => { setDragSrcIdx(null); setDragOverIdx(null); }}
               />
             );
           })}
+
+          {/* Reset to defaults hint when list is empty */}
+          {watchList.length === 0 && (
+            <div style={{ gridColumn: '1/-1', padding: '16px 0', textAlign: 'center' }}>
+              <p style={{ margin: '0 0 8px', fontSize: 11, color: 'var(--muted-foreground)' }}>
+                No symbols in your pulse. Add some above.
+              </p>
+              <button
+                onClick={() => { setWatchList(DEFAULT_WATCH); saveWatch(DEFAULT_WATCH); }}
+                style={{
+                  fontSize: 11, padding: '5px 14px', borderRadius: 6,
+                  border: '1px solid var(--border)', background: 'var(--card)',
+                  color: 'var(--foreground)', cursor: 'pointer',
+                }}
+              >
+                Reset to defaults
+              </button>
+            </div>
+          )}
         </div>
+
         <style>{`@keyframes spin { from { transform: rotate(0) } to { transform: rotate(360deg) } }`}</style>
       </section>
 

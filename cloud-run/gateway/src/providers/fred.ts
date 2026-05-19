@@ -96,3 +96,85 @@ export async function getMacroSeries(id: string): Promise<MacroSeriesResult> {
 export function isSupported(id: string): boolean {
   return id.toUpperCase() in FRED_SERIES;
 }
+
+// ─── FX / Commodity OHLCV via FRED ───────────────────────────────────────────
+// Maps our internal XX/YY pair format → FRED series IDs.
+// FRED provides daily (business-day) closing rates — no OHLCV volume.
+// Bars are constructed with open=high=low=close so sparklines render correctly.
+
+const FX_FRED_MAP: Record<string, { fredId: string; name: string }> = {
+  'EUR/USD': { fredId: 'DEXUSEU',             name: 'Euro / US Dollar'          },
+  'GBP/USD': { fredId: 'DEXUSUK',             name: 'British Pound / US Dollar'  },
+  'USD/JPY': { fredId: 'DEXJPUS',             name: 'US Dollar / Japanese Yen'   },
+  'AUD/USD': { fredId: 'DEXUSAL',             name: 'Australian Dollar / USD'    },
+  'NZD/USD': { fredId: 'DEXUSNZ',             name: 'New Zealand Dollar / USD'   },
+  'USD/CAD': { fredId: 'DEXCAUS',             name: 'US Dollar / Canadian Dollar' },
+  'USD/CHF': { fredId: 'DEXSZUS',             name: 'US Dollar / Swiss Franc'    },
+  'USD/MXN': { fredId: 'DEXMXUS',             name: 'US Dollar / Mexican Peso'   },
+  'USD/CNY': { fredId: 'DEXCHUS',             name: 'US Dollar / Chinese Yuan'   },
+  'USD/SGD': { fredId: 'DEXSIUS',             name: 'US Dollar / Singapore Dollar'},
+  'USD/HKD': { fredId: 'DEXHKUS',             name: 'US Dollar / Hong Kong Dollar'},
+  'XAU/USD': { fredId: 'GOLDAMGBD228NLBM',    name: 'Gold (London PM Fix, USD/oz)'},
+  'WTI/USD': { fredId: 'DCOILWTICO',          name: 'WTI Crude Oil (USD/barrel)' },
+  'UUP':     { fredId: 'DTWEXBGS',            name: 'US Dollar Index (Broad)'    },
+};
+
+export interface OHLCVBar {
+  ts: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+/**
+ * Returns whether a symbol can be sourced from FRED.
+ */
+export function isFxSupported(symbol: string): boolean {
+  return symbol.toUpperCase() in FX_FRED_MAP;
+}
+
+/**
+ * Fetch FX / commodity daily bars from FRED.
+ * Returns `outputsize` most recent business-day bars.
+ * Each bar has open=high=low=close (FRED provides only closing rate, no intraday).
+ */
+export async function getFxOhlcvBars(
+  symbol: string,
+  outputsize = 60,
+): Promise<OHLCVBar[]> {
+  const k = key();
+  if (!k) throw new Error('FRED: FRED_API_KEY env var not set');
+
+  const spec = FX_FRED_MAP[symbol.toUpperCase()];
+  if (!spec) throw new Error(`FRED: no FX mapping for symbol "${symbol}"`);
+
+  // Request enough extra history to have outputsize trading days after filtering weekends / holidays
+  const lookbackDays = Math.ceil(outputsize * 1.6);
+  const start = new Date(Date.now() - lookbackDays * 86400_000).toISOString().slice(0, 10);
+
+  const params = new URLSearchParams({
+    series_id: spec.fredId,
+    api_key: k,
+    file_type: 'json',
+    sort_order: 'asc',
+    observation_start: start,
+  });
+
+  const resp = await getJson<FredObsResp>('fred', `${BASE}/series/observations?${params}`);
+
+  if (resp.error_code) {
+    throw new Error(`FRED: ${resp.error_message ?? `error ${resp.error_code}`}`);
+  }
+
+  const bars: OHLCVBar[] = (resp.observations ?? [])
+    .filter(o => o.value !== '.' && o.value !== '' && Number.isFinite(Number(o.value)))
+    .map(o => {
+      const close = Number(o.value);
+      return { ts: Date.parse(o.date), open: close, high: close, low: close, close, volume: 0 };
+    })
+    .filter(b => Number.isFinite(b.ts) && b.close > 0);
+
+  return bars.slice(-outputsize);
+}

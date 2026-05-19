@@ -185,3 +185,34 @@ export async function gatewayPost<T>(path: string, body: unknown): Promise<T> {
   });
   return handle<T>(res);
 }
+
+export async function gatewayPatch<T>(path: string, body: unknown): Promise<T> {
+  const headers = await authHeader();
+  const res = await fetch(`${PREFIX}${path}`, {
+    method: 'PATCH',
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  return handle<T>(res);
+}
+
+/**
+ * Fire-and-forget POST — used by telemetry to avoid blocking UI on event
+ * ingest. Errors are swallowed (logged once via console.warn). Returns void.
+ */
+export async function gatewayBeacon(path: string, body: unknown): Promise<void> {
+  try {
+    const headers = await authHeader();
+    await fetch(`${PREFIX}${path}`, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      keepalive: true,
+    });
+  } catch (err) {
+    // Telemetry must never break the UI. Swallow.
+    if (typeof console !== 'undefined' && console.warn) {
+      console.warn('[gatewayBeacon] failed', err);
+    }
+  }
+}

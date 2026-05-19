@@ -41,6 +41,39 @@ class Settings(BaseSettings):
     BQ_DATASET_ARTIFACTS: str = "artifacts"
     BQ_DATASET_MODEL_OUTPUTS: str = "model_outputs"
 
+    # ─── V5 Personalization · new datasets ───────────────────────────────────
+    BQ_DATASET_RAW_APP: str = "raw_app"
+    BQ_DATASET_OPS: str = "ops"
+
+    # ─── V5 Personalization · feature flags and policy knobs ─────────────────
+    # Master switch. When false the gateway short-circuits all /personalization
+    # routes with 404 and the engine skips materialization jobs.
+    PERSONALIZATION_ENABLED: bool = False
+    # When true, ranking falls back to deterministic rule-based scoring only —
+    # no supervised models, no bandits. This is the Phase 1 default and the
+    # rollback target for later phases.
+    PERSONALIZATION_RULES_ONLY: bool = True
+    # Ranker / policy versions stamped onto every materialized artifact so
+    # off-policy evaluation and rollbacks remain unambiguous.
+    PERSONALIZATION_RANKER_VERSION: str = "rules-v1.0"
+    PERSONALIZATION_POLICY_VERSION: str = "policy-v1.0"
+    PERSONALIZATION_PROFILE_VERSION: str = "profile-v1.0"
+    # Bandit exploration is OFF until Phase 3. Keep these knobs so the env
+    # surface is forward-compatible without code churn.
+    BANDIT_ENABLED: bool = False
+    BANDIT_EXPLORATION_RATE: float = 0.0
+    # Hard alert caps. Enforced in the notification decision policy, NOT in
+    # product code, so the policy stays auditable.
+    MAX_ALERTS_PER_DAY: int = 3
+    MIN_ALERT_CONFIDENCE: float = 0.6
+    # All user identifiers in BigQuery are sha256(uid || salt). The salt MUST
+    # be set in production via Secret Manager. Empty salt is rejected when
+    # the personalization writer initializes in production mode.
+    PERSONALIZATION_USER_ID_SALT: str = ""
+    # Always-on safety toggle. Setting to false is explicitly disallowed; it
+    # exists as a config surface so audits can confirm pseudonymization is on.
+    PSEUDONYMIZE_USER_IDS: bool = True
+
     # ─── V3 Phase 2 · public-source connectors ───────────────────────────────
     # SEC EDGAR requires a descriptive User-Agent with contact email.
     # Format suggestion: "Deplyze Quant ops@deplyze.io"

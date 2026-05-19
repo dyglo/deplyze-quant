@@ -9,6 +9,10 @@ import {
 } from 'lucide-react';
 import { usePortfolioWorkspace } from '../../hooks/usePortfolioWorkspace';
 import { usePortfolioIntelligence } from '../../hooks/usePortfolioIntelligence';
+import { AgentIntelligenceFeed } from '../../components/quant/AgentIntelligenceFeed';
+import { useAgentOutputs } from '../../hooks/useAgentIntelligence';
+import { usePortfolioVulnerability } from '../../hooks/useAgentReasoning';
+import { PortfolioVulnerabilityPanel } from '../../components/portfolio/PortfolioVulnerabilityPanel';
 import { DEFAULT_BENCHMARK_ID, BENCHMARK_REGISTRY } from '../../lib/portfolio/benchmarks';
 import type { Holding } from '../../lib/portfolio/schemas';
 import { PortfolioIntelligencePanel } from '../../components/portfolio/PortfolioIntelligencePanel';
@@ -526,6 +530,26 @@ export const HoldingsWatchlist: React.FC = () => {
     holdings.length > 0 ? { holdings, effectiveWeights, hhi, top3Weight } : null,
   );
 
+  // V4: per-holding agent observations + vulnerability
+  const holdingSymbols = holdings.map(h => h.symbol);
+  const holdingsAgentOutputs = useAgentOutputs({
+    placement: 'PortfolioOverview',
+    limit: 20,
+  });
+  const holdingOutputs = holdingsAgentOutputs.data.filter(
+    o => o.symbols?.some(s => holdingSymbols.includes(s))
+  );
+
+  const vulnHoldings = holdings.map(h => ({
+    symbol: h.symbol,
+    weight: effectiveWeights[h.symbol] ?? 0,
+    asset_class: h.assetClass,
+  }));
+  const vulnerability = usePortfolioVulnerability(
+    vulnHoldings,
+    selectedPortfolio?.id,
+  );
+
   const handleRemove = useCallback(async (holding: Holding) => {
     setDrawerHolding(null);
     await removeExistingHolding(holding.id);
@@ -672,6 +696,26 @@ export const HoldingsWatchlist: React.FC = () => {
                 </tbody>
               </table>
             </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── V4: Regime Vulnerability + Per-holding Agent Observations ───────── */}
+      <div style={{ padding: '0 24px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <PortfolioVulnerabilityPanel result={vulnerability.data} loading={vulnerability.loading} />
+        {holdingOutputs.length > 0 && (
+          <div>
+            <h4 style={{ margin: '0 0 10px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--muted-foreground)' }}>
+              Holdings Intelligence
+            </h4>
+            <AgentIntelligenceFeed
+              outputs={holdingOutputs}
+              loading={holdingsAgentOutputs.loading}
+              title="Agent Observations for Holdings"
+              showFilters={false}
+              compact
+              maxItems={8}
+            />
           </div>
         )}
       </div>

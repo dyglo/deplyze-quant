@@ -12,6 +12,10 @@ import { correlationMatrix } from '../../lib/quant/correlation';
 import { rollingAnnualisedVol } from '../../lib/quant/volatility';
 import type { OHLCVBar, AssetClass } from '../../types';
 import { PortfolioIntelligencePanel } from '../../components/portfolio/PortfolioIntelligencePanel';
+import { NarrativeExposurePanel } from '../../components/portfolio/NarrativeExposurePanel';
+import { AgentIntelligenceFeed } from '../../components/quant/AgentIntelligenceFeed';
+import { useAgentOutputs } from '../../hooks/useAgentIntelligence';
+import { useNarrativeExposure } from '../../hooks/useAgentReasoning';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -262,6 +266,11 @@ export const ExposureAnalysis: React.FC = () => {
       : null,
   );
 
+  // V4: cross_asset agent + narrative exposure
+  const crossAssetOutputs = useAgentOutputs({ placement: 'ExposureAnalysis', limit: 8 });
+  const symWeights = Object.fromEntries(holdings.map(h => [h.symbol, effectiveWeights[h.symbol] ?? 0]));
+  const narrativeExposure = useNarrativeExposure(symbols, symWeights);
+
   if (loading || holdingsLoading) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '50vh' }}>
@@ -436,6 +445,25 @@ export const ExposureAnalysis: React.FC = () => {
             </p>
           )}
         </SectionCard>
+
+        {/* ── V4: Narrative Exposure ──────────────────────────────────────── */}
+        <NarrativeExposurePanel
+          result={narrativeExposure.data}
+          loading={narrativeExposure.loading}
+        />
+
+        {/* ── V4: Cross-Asset Agent Intelligence ──────────────────────────── */}
+        {crossAssetOutputs.data.length > 0 && (
+          <SectionCard title="Cross-Asset Intelligence" subtitle="Correlation breakdown + dependency shift observations" icon={<Activity size={13} />}>
+            <AgentIntelligenceFeed
+              outputs={crossAssetOutputs.data}
+              loading={crossAssetOutputs.loading}
+              showFilters={false}
+              compact
+              maxItems={6}
+            />
+          </SectionCard>
+        )}
 
       </div>
     </div>

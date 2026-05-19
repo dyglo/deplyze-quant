@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { PageHeader } from '../components/quant/PageHeader';
 import { Disclaimer } from '../components/quant/Disclaimer';
+import { AgentStatusDashboard } from '../components/quant/AgentStatusDashboard';
 import { FreshnessBadge } from '../components/quant/FreshnessBadge';
 import { useDrawer } from '../components/quant/DataDrawer';
 import { useProviderHealth } from '../hooks/useProviders';
@@ -247,6 +248,11 @@ export const ModelObservatory: React.FC = () => {
         Required datasets are tracked here but ingestion into BigQuery <code>dq_features</code> lands in a
         later phase.
       </p>
+
+      {/* ── V4: Agent Intelligence Status ──────────────────────────────────── */}
+      <section style={{ marginTop: 28, marginBottom: 24 }}>
+        <AgentStatusDashboard />
+      </section>
 
       <Disclaimer />
     </div>

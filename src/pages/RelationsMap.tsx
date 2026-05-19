@@ -14,6 +14,8 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { PageHeader } from '../components/quant/PageHeader';
 import { Disclaimer } from '../components/quant/Disclaimer';
 import { FreshnessBadge } from '../components/quant/FreshnessBadge';
+import { AgentIntelligenceFeed } from '../components/quant/AgentIntelligenceFeed';
+import { useAgentDomain } from '../hooks/useAgentIntelligence';
 import { InstrumentSelector } from '../components/quant/InstrumentSelector';
 import { useDrawer } from '../components/quant/DataDrawer';
 import { useSWR } from '../hooks/useSWR';
@@ -98,6 +100,7 @@ export const RelationsMap: React.FC = () => {
   // Replay: when null, snapshot reflects "present"; otherwise producers
   // slice bars to ≤ replayAsOf.
   const [replayAsOf, setReplayAsOf] = useState<number | null>(null);
+  const crossAssetDomain = useAgentDomain('cross_asset', { days: 3, limit: 6 });
 
   // SWR fetches the raw FocalContext once per focal/window. Replay
   // re-derives the snapshot locally without refetching OHLCV.
@@ -348,6 +351,23 @@ export const RelationsMap: React.FC = () => {
             ))}
           </ul>
         </details>
+      )}
+
+      {/* ── V4: Cross-Asset correlation breakdown observations ───────────── */}
+      {crossAssetDomain.data.length > 0 && (
+        <section style={{ marginTop: 24, padding: '0 24px' }}>
+          <h3 style={{ margin: '0 0 10px', fontSize: 11, fontWeight: 700, letterSpacing: '0.03em', textTransform: 'uppercase', color: 'var(--muted-foreground)' }}>
+            Cross-Asset Intelligence
+          </h3>
+          <AgentIntelligenceFeed
+            outputs={crossAssetDomain.data}
+            loading={crossAssetDomain.loading}
+            title="Correlation Breakdown Observations"
+            showFilters={false}
+            compact
+            maxItems={4}
+          />
+        </section>
       )}
 
       <Disclaimer />

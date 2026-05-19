@@ -7,6 +7,8 @@ import { useBriefingGenerate } from '../hooks/useBriefingGenerate';
 import { PageHeader } from '../components/quant/PageHeader';
 import { Disclaimer } from '../components/quant/Disclaimer';
 import { FreshnessBadge } from '../components/quant/FreshnessBadge';
+import { AgentIntelligenceFeed } from '../components/quant/AgentIntelligenceFeed';
+import { useAgentOutputs } from '../hooks/useAgentIntelligence';
 import { FileText, Loader2, RefreshCw, ArrowRight, Plus } from 'lucide-react';
 import type { BriefingGenerateKind } from '../services/briefingService';
 import type { Briefing } from '../types';
@@ -56,6 +58,9 @@ export const Briefings: React.FC = () => {
   const { items, loading } = useBriefings(currentWorkspace?.id ?? null, currentProject?.id ?? null);
   const gen = useBriefingGenerate();
   const [activeKind, setActiveKind] = useState<string | null>(null);
+
+  // V4: earnings + sentiment agent observations
+  const briefingAgentOutputs = useAgentOutputs({ placement: 'Briefings', limit: 12 });
   const [snapshotInput, setSnapshotInput] = useState('AAPL');
   const [customQuery, setCustomQuery] = useState('');
   const [historyTab, setHistoryTab] = useState<string>('all');
@@ -243,6 +248,21 @@ export const Briefings: React.FC = () => {
           </ul>
         )}
       </section>
+
+      {/* ── V4: Earnings + Sentiment agent intelligence ─────────────────────── */}
+      {briefingAgentOutputs.data.length > 0 && (
+        <section style={{ marginTop: 32 }}>
+          <h2 className="ds-heading" style={{ margin: '0 0 12px' }}>Live Intelligence</h2>
+          <AgentIntelligenceFeed
+            outputs={briefingAgentOutputs.data}
+            loading={briefingAgentOutputs.loading}
+            title="Earnings & Sentiment Agents"
+            showFilters={false}
+            compact
+            maxItems={8}
+          />
+        </section>
+      )}
 
       <Disclaimer />
 

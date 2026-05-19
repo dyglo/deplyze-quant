@@ -3,6 +3,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { X, ExternalLink, Bookmark, MessageSquare, TrendingUp, TrendingDown } from 'lucide-react';
 import { useQuote, useOHLCV, useNews } from '../../hooks/useMarket';
 import { useInstrumentRegime } from '../../hooks/useInstrumentRegime';
+import { useAgentOutputs } from '../../hooks/useAgentIntelligence';
+import { IntelligenceObservationCard } from './IntelligenceObservationCard';
 import { AssetIcon } from './AssetIcon';
 import { Sparkline } from './Sparkline';
 import { RegimeBadge } from './RegimeBadge';
@@ -81,6 +83,13 @@ interface Props {
 export const IntelligenceSidePanel: React.FC<Props> = ({ row, onClose, onSave, isSaved }) => {
   const symbol = row?.symbol ?? null;
   const navigate = useNavigate();
+
+  // V4: symbol-level agent observations
+  const symbolAgentOutputs = useAgentOutputs({
+    symbol: symbol ?? undefined,
+    limit: 4,
+    days: 3,
+  });
 
   const supportsOHLCV = !row || OHLCV_ASSET_CLASSES.has(row.assetClass);
   const supportsRegime = !row || OHLCV_ASSET_CLASSES.has(row.assetClass);
@@ -296,6 +305,20 @@ export const IntelligenceSidePanel: React.FC<Props> = ({ row, onClose, onSave, i
           })()}
         </section>
       </div>
+
+      {/* V4: Symbol-level agent observations */}
+      {symbolAgentOutputs.data.length > 0 && (
+        <section style={{ padding: '12px 14px', borderTop: '1px solid var(--border)' }}>
+          <p style={{ margin: '0 0 8px', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--muted-foreground)' }}>
+            Intelligence
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+            {symbolAgentOutputs.data.slice(0, 3).map(o => (
+              <IntelligenceObservationCard key={o.artifact_id} output={o} compact />
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Quick actions footer */}
       <div style={{

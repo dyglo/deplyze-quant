@@ -292,4 +292,212 @@ router.get('/profile', async (req, res, next) => {
   }
 });
 
+// ─── PR4: engine-proxied read routes ─────────────────────────────────────────
+// These routes hash req.uid and forward to the quant-engine, which holds the
+// ranker, profile, and investigation memory logic. The gateway is the only
+// component that ever sees the raw Firebase UID.
+
+const QUANT_ENGINE_URL = process.env.QUANT_ENGINE_URL ?? '';
+const ENGINE_TIMEOUT_MS = 25_000;
+
+function ensureEngine(res: Response): boolean {
+  if (!QUANT_ENGINE_URL) {
+    res.status(503).json({
+      error: 'Personalization engine not configured',
+      code: 'ENGINE_UNAVAILABLE',
+    });
+    return false;
+  }
+  return true;
+}
+
+async function callEngine(
+  method: 'GET' | 'POST' | 'PATCH',
+  path: string,
+  init: { query?: Record<string, string | undefined>; body?: unknown } = {},
+): Promise<{ status: number; body: unknown }> {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(init.query ?? {})) {
+    if (v !== undefined && v !== '') qs.set(k, v);
+  }
+  const url = `${QUANT_ENGINE_URL}${path}${qs.toString() ? `?${qs.toString()}` : ''}`;
+  const response = await fetch(url, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
+    signal: AbortSignal.timeout(ENGINE_TIMEOUT_MS),
+  });
+  const text = await response.text();
+  let body: unknown = null;
+  try {
+    body = text ? JSON.parse(text) : null;
+  } catch {
+    body = text;
+  }
+  return { status: response.status, body };
+}
+
+/**
+ * GET /v1/personalization/briefing
+ * Returns the latest personalized briefing for the authenticated user.
+ */
+router.get('/briefing', async (req, res, next) => {
+  try {
+    if (!ensureEngine(res)) return;
+    if (!req.uid) {
+      res.status(401).json({ error: 'Unauthorized', code: 'MISSING_UID' });
+      return;
+    }
+    const userIdHash = hashUserId(req.uid);
+    const result = await callEngine('GET', '/personalization/briefing', {
+      query: { user_id_hash: userIdHash },
+    });
+    res.status(result.status).json(result.body);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /v1/personalization/feed?limit=20
+ * Personalized intelligence feed for the authenticated user.
+ */
+router.get('/feed', async (req, res, next) => {
+  try {
+    if (!ensureEngine(res)) return;
+    if (!req.uid) {
+      res.status(401).json({ error: 'Unauthorized', code: 'MISSING_UID' });
+      return;
+    }
+    const userIdHash = hashUserId(req.uid);
+    const limitRaw = req.query.limit;
+    const limit =
+      typeof limitRaw === 'string' && /^\d+$/.test(limitRaw)
+        ? Math.min(Math.max(parseInt(limitRaw, 10), 1), 50)
+        : 20;
+    const result = await callEngine('GET', '/personalization/feed', {
+      query: { user_id_hash: userIdHash, limit: String(limit) },
+    });
+    res.status(result.status).json(result.body);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /v1/personalization/copilot-context
+ * Compact grounding payload for the Research Copilot (PR7 consumes it).
+ */
+router.get('/copilot-context', async (req, res, next) => {
+  try {
+    if (!ensureEngine(res)) return;
+    if (!req.uid) {
+      res.status(401).json({ error: 'Unauthorized', code: 'MISSING_UID' });
+      return;
+    }
+    const userIdHash = hashUserId(req.uid);
+    const result = await callEngine('GET', '/personalization/copilot-context', {
+      query: { user_id_hash: userIdHash },
+    });
+    res.status(result.status).json(result.body);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /v1/personalization/watchlist
+ * Watchlist-aware intelligence — candidates that overlap the user's watchlist.
+ */
+router.get('/watchlist', async (req, res, next) => {
+  try {
+    if (!ensureEngine(res)) return;
+    if (!req.uid) {
+      res.status(401).json({ error: 'Unauthorized', code: 'MISSING_UID' });
+      return;
+    }
+    const userIdHash = hashUserId(req.uid);
+    const result = await callEngine('GET', '/personalization/watchlist', {
+      query: { user_id_hash: userIdHash },
+    });
+    res.status(result.status).json(result.body);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── Investigation memory CRUD ───────────────────────────────────────────────
+
+const InvestigationCreateSchema = z.object({
+  title: z.string().min(1).max(200),
+  thesis: z.string().max(2000).optional(),
+  symbols: z.array(z.string().max(20)).max(50).optional(),
+  themes: z.array(z.string().max(40)).max(40).optional(),
+  tags: z.array(z.string().max(40)).max(40).optional(),
+  unresolved_questions: z.array(z.string().max(500)).max(20).optional(),
+});
+
+const InvestigationPatchSchema = z.object({
+  patch: z.record(z.unknown()),
+});
+
+/**
+ * POST /v1/personalization/investigation — create a new investigation.
+ * GET  /v1/personalization/investigation?status=active — list for the user.
+ * PATCH /v1/personalization/investigation/:id — partial update.
+ */
+router.post('/investigation', async (req, res, next) => {
+  try {
+    if (!ensureEngine(res)) return;
+    if (!req.uid) {
+      res.status(401).json({ error: 'Unauthorized', code: 'MISSING_UID' });
+      return;
+    }
+    const parsed = InvestigationCreateSchema.parse(req.body);
+    const userIdHash = hashUserId(req.uid);
+    const result = await callEngine('POST', '/personalization/investigation', {
+      body: { user_id_hash: userIdHash, ...parsed },
+    });
+    res.status(result.status).json(result.body);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/investigation', async (req, res, next) => {
+  try {
+    if (!ensureEngine(res)) return;
+    if (!req.uid) {
+      res.status(401).json({ error: 'Unauthorized', code: 'MISSING_UID' });
+      return;
+    }
+    const userIdHash = hashUserId(req.uid);
+    const status = typeof req.query.status === 'string' ? req.query.status : 'active';
+    const result = await callEngine('GET', '/personalization/investigation', {
+      query: { user_id_hash: userIdHash, status },
+    });
+    res.status(result.status).json(result.body);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.patch('/investigation/:id', async (req, res, next) => {
+  try {
+    if (!ensureEngine(res)) return;
+    if (!req.uid) {
+      res.status(401).json({ error: 'Unauthorized', code: 'MISSING_UID' });
+      return;
+    }
+    const parsed = InvestigationPatchSchema.parse(req.body);
+    const userIdHash = hashUserId(req.uid);
+    const result = await callEngine('PATCH', `/personalization/investigation/${encodeURIComponent(req.params.id)}`, {
+      body: { user_id_hash: userIdHash, patch: parsed.patch },
+    });
+    res.status(result.status).json(result.body);
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;

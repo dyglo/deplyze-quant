@@ -41,6 +41,7 @@ from app.api.health import router as health_router
 from app.api.pipelines import router as pipelines_router
 from app.api.warehouse import router as warehouse_router
 from app.api.agents import router as agents_router
+from app.api.personalization import router as personalization_router
 
 # ─── Logging ────────────────────────────────────────────────────────────────
 
@@ -97,7 +98,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.ALLOWED_ORIGINS,
     allow_credentials=False,
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "PATCH"],
     allow_headers=["Content-Type", "Authorization"],
 )
 
@@ -107,6 +108,9 @@ app.include_router(health_router, tags=["Health"])
 app.include_router(pipelines_router, prefix="/pipelines", tags=["Pipelines"])
 app.include_router(warehouse_router, prefix="/warehouse", tags=["Warehouse"])
 app.include_router(agents_router, prefix="/agents", tags=["Agents"])
+app.include_router(personalization_router, prefix="/personalization", tags=["Personalization"])
+# PATCH is needed for /investigation/{id}; CORS allow_methods updated below
+# would otherwise drop it. Allow_methods is set on the middleware above.
 
 
 # ─── Global error handler ────────────────────────────────────────────────────

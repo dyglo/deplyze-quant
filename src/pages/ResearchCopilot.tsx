@@ -12,6 +12,7 @@ import { useResearchContext } from '../hooks/useResearchContext';
 import { useQuantCopilotContext } from '../hooks/useQuantCopilotContext';
 import { useWorkspace } from '../components/WorkspaceContext';
 import { useAgentOutputs, useCompositeRegime, useRiskEnvironment } from '../hooks/useAgentIntelligence';
+import { useCopilotContext as useV5CopilotContext } from '../hooks/usePersonalization';
 import { extractRegimeLabel, extractRiskLevel } from '../services/agentService';
 import { RegimeStatusChip, RiskLevelChip } from '../components/quant/SystemAnalyzingState';
 import { useAuth } from '../components/AuthProvider';
@@ -62,6 +63,9 @@ export const ResearchCopilot: React.FC = () => {
   const { data: riskOutput } = useRiskEnvironment();
   const regimeLabel = extractRegimeLabel(regimeOutput);
   const riskLevel = extractRiskLevel(riskOutput);
+
+  // V5: Personalized user context (profile + active investigations + top evidence)
+  const v5Ctx = useV5CopilotContext();
 
   const buildSnapshot = useCallback(() => {
     const lines: string[] = [
@@ -129,9 +133,46 @@ export const ResearchCopilot: React.FC = () => {
         lines.push(`  - [${o.domain.toUpperCase()}/${o.severity?.toUpperCase() ?? 'INFO'}] ${o.title}: ${o.summary ?? ''}`);
       }
     }
+    // V5: Personalized user context (profile + active investigations + top evidence).
+    // The Copilot uses this to answer with the user's preferred style, ground in
+    // their active theses, and reference their portfolio/watchlist without
+    // forcing them to repeat it every prompt.
+    if (v5Ctx.data) {
+      const v5 = v5Ctx.data;
+      const profileBits: string[] = [];
+      if (v5.profile_summary?.regime_style) profileBits.push(`style=${v5.profile_summary.regime_style}`);
+      if (v5.profile_summary?.preferred_depth) profileBits.push(`preferred_depth=${v5.profile_summary.preferred_depth}`);
+      const wl = v5.profile_summary?.watchlist_symbols ?? [];
+      const pf = v5.profile_summary?.portfolio_symbols ?? [];
+      if (wl.length) profileBits.push(`watchlist=${wl.slice(0, 10).join(',')}`);
+      if (pf.length) profileBits.push(`portfolio=${pf.slice(0, 10).join(',')}`);
+      if (profileBits.length) {
+        lines.push('');
+        lines.push(`User profile snapshot: ${profileBits.join(' · ')}`);
+      }
+      const invs = v5.active_investigations ?? [];
+      if (invs.length) {
+        lines.push('Active investigations (workflow memory):');
+        for (const inv of invs.slice(0, 5)) {
+          const sym = inv.symbols.length ? ` [${inv.symbols.slice(0, 6).join(', ')}]` : '';
+          lines.push(`  - "${inv.title ?? 'Untitled'}"${sym}${inv.thesis ? ' — ' + inv.thesis : ''}`);
+          for (const q of (inv.unresolved_questions ?? []).slice(0, 3)) {
+            lines.push(`      • Unresolved: ${q}`);
+          }
+        }
+      }
+      const ev = v5.top_evidence ?? [];
+      if (ev.length) {
+        lines.push('Top personalized evidence (ranked for this user):');
+        for (const e of ev.slice(0, 3)) {
+          lines.push(`  - ${e.title ?? 'Observation'} (${e.kind}, base_score=${e.base_score.toFixed(2)}; ${e.reason_codes.slice(0, 3).join(', ')})`);
+        }
+      }
+    }
+
     lines.push('Use this snapshot as grounding evidence. Cite values explicitly. Probabilistic language only.');
     return lines.join('\n');
-  }, [location.pathname, pulse.data, fedFunds.data, dgs10.data, cpi.data, artifacts.items, briefings.items, ctx.pinnedArtifacts, quantContext.snapshot, regimeLabel, riskLevel, agentOutputs.data, regimeOutput, riskOutput]);
+  }, [location.pathname, pulse.data, fedFunds.data, dgs10.data, cpi.data, artifacts.items, briefings.items, ctx.pinnedArtifacts, quantContext.snapshot, regimeLabel, riskLevel, agentOutputs.data, regimeOutput, riskOutput, v5Ctx.data]);
 
   const contextResolver = useCallback(() => ({
     context: {

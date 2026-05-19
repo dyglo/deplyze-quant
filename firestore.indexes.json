@@ -43,13 +43,6 @@
         { "fieldPath": "status", "order": "ASCENDING" },
         { "fieldPath": "updatedAt", "order": "DESCENDING" }
       ]
-    },
-    {
-      "collectionGroup": "savedBriefings",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "briefingDate", "order": "DESCENDING" }
-      ]
     }
   ],
   "fieldOverrides": []

@@ -2,12 +2,16 @@
 V4 Agents API — FastAPI router for agent orchestration and output queries.
 
 Routes:
-  POST /agents/run           — trigger full orchestration run (all agents)
-  POST /agents/run/:agent_id — trigger a single agent
-  GET  /agents/registry      — return static registry definitions
-  GET  /agents/outputs       — query recent agent outputs from BQ
-  GET  /agents/outputs/portfolio/:portfolio_id — portfolio-specific outputs
-  GET  /agents/status        — today's run summary (from BQ)
+  POST /agents/run                            — trigger full orchestration run
+  POST /agents/run/:agent_id                  — trigger single agent
+  GET  /agents/registry                       — static registry definitions
+  GET  /agents/outputs                        — query recent agent outputs
+  GET  /agents/outputs/portfolio/:pid         — portfolio-specific outputs
+  GET  /agents/status                         — today's run summary
+  GET  /agents/reasoning                      — multi-system synthesized reasoning
+  GET  /agents/analog                         — historical analog results
+  POST /agents/vulnerability                  — portfolio regime vulnerability
+  GET  /agents/narrative-exposure             — narrative exposure by symbols
 """
 
 import uuid
@@ -20,6 +24,11 @@ from pydantic import BaseModel
 
 from app.agents.orchestrator import run_all, run_one, ensure_agent_outputs_table
 from app.agents.registry import AGENT_REGISTRY, REGISTRY_BY_ID
+from app.agents import reasoning as reasoning_engine
+from app.agents import historical_analog as analog_engine
+from app.agents import vulnerability as vulnerability_engine
+from app.agents import narrative_exposure as narrative_engine
+from app.agents.orchestrator import _persist
 from app.bigquery.client import get_bigquery_client, fully_qualified
 from app.core.config import settings
 
@@ -228,3 +237,126 @@ async def get_status():
     except Exception as e:
         log.error("agents.status_query_failed", error=str(e))
         return {"date": today, "ran": [], "pending": [], "error": str(e)}
+
+
+# ─── GET /agents/reasoning ───────────────────────────────────────────────────
+
+@router.get("/reasoning")
+async def get_reasoning(
+    portfolio_id: Optional[str] = Query(None),
+    background_tasks: BackgroundTasks = None,
+):
+    """
+    Return multi-system synthesised reasoning from today's agent outputs.
+    If no reasoning outputs exist for today, run the engine on-demand.
+    """
+    bq = get_bigquery_client()
+    table = fully_qualified(settings.BQ_DATASET_ARTIFACTS, "agent_outputs")
+    today = datetime.now(timezone.utc).date().isoformat()
+
+    # Check for cached today reasoning
+    sql = f"""
+        SELECT artifact_id, domain, artifact_type, title, summary, body,
+               confidence, severity, evidence, generated_at, tags
+        FROM `{table}`
+        WHERE artifact_type = 'multi_system_reasoning'
+          AND DATE(observation_date) = '{today}'
+          AND is_test = FALSE
+        ORDER BY generated_at DESC
+        LIMIT 5
+    """
+    try:
+        cached = [dict(r) for r in bq.query(sql).result()]
+    except Exception:
+        cached = []
+
+    if cached:
+        return {"reasoning": cached, "count": len(cached), "source": "cached"}
+
+    # Run on-demand
+    try:
+        outputs = await reasoning_engine.run(portfolio_id=portfolio_id)
+        if outputs:
+            await _persist(outputs)
+        return {
+            "reasoning": [o.to_bq_row() for o in outputs],
+            "count": len(outputs),
+            "source": "computed",
+        }
+    except Exception as e:
+        log.error("agents.reasoning_failed", error=str(e))
+        return {"reasoning": [], "count": 0, "error": str(e)}
+
+
+# ─── GET /agents/analog ──────────────────────────────────────────────────────
+
+@router.get("/analog")
+async def get_analog(
+    lookback_years: int = Query(default=10, ge=3, le=20),
+    top_k: int = Query(default=4, ge=1, le=8),
+):
+    """Historical analog search for current macro/vol conditions."""
+    try:
+        result = await analog_engine.find_analogs(
+            lookback_years=lookback_years,
+            top_k=top_k,
+        )
+        return result
+    except Exception as e:
+        log.error("agents.analog_failed", error=str(e))
+        return {"analogs": [], "error": str(e)}
+
+
+# ─── POST /agents/vulnerability ───────────────────────────────────────────────
+
+class HoldingInput(BaseModel):
+    symbol: str
+    weight: float
+    asset_class: Optional[str] = None
+
+
+class VulnerabilityRequest(BaseModel):
+    holdings: List[HoldingInput]
+    portfolio_id: Optional[str] = None
+
+
+@router.post("/vulnerability")
+async def compute_vulnerability(req: VulnerabilityRequest):
+    """Compute portfolio regime vulnerability across 6 dimensions."""
+    holdings = [h.model_dump() for h in req.holdings]
+    try:
+        result = await vulnerability_engine.compute_vulnerability(
+            holdings=holdings,
+            portfolio_id=req.portfolio_id,
+        )
+        return result
+    except Exception as e:
+        log.error("agents.vulnerability_failed", error=str(e))
+        return {"error": str(e), "dimensions": {}}
+
+
+# ─── GET /agents/narrative-exposure ──────────────────────────────────────────
+
+@router.get("/narrative-exposure")
+async def get_narrative_exposure(
+    symbols: str = Query(..., description="Comma-separated symbols"),
+    weights: Optional[str] = Query(None, description="Comma-separated weights matching symbols"),
+    top_k: int = Query(default=8, ge=1, le=20),
+):
+    """Compute narrative theme exposure for a list of symbols."""
+    sym_list = [s.strip().upper() for s in symbols.split(",") if s.strip()]
+    weight_map: Optional[dict[str, float]] = None
+    if weights:
+        w_list = [float(w.strip()) for w in weights.split(",") if w.strip()]
+        if len(w_list) == len(sym_list):
+            weight_map = dict(zip(sym_list, w_list))
+    try:
+        result = await narrative_engine.compute_narrative_exposure(
+            symbols=sym_list,
+            weights=weight_map,
+            top_k=top_k,
+        )
+        return result
+    except Exception as e:
+        log.error("agents.narrative_exposure_failed", error=str(e))
+        return {"exposures": [], "error": str(e)}

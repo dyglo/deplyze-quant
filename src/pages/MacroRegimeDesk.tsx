@@ -19,6 +19,10 @@ import { MacroYieldCurvePanel } from '../components/quant/MacroYieldCurvePanel';
 import { MacroRegimeQuadrant } from '../components/quant/MacroRegimeQuadrant';
 import { MacroRealRatesPanel } from '../components/quant/MacroRealRatesPanel';
 import { V3P2MacroRegimePanel } from '../components/quant/V3P2MacroRegimePanel';
+import { AgentIntelligenceFeed } from '../components/quant/AgentIntelligenceFeed';
+import { MacroAnalogPanel } from '../components/quant/MacroAnalogPanel';
+import { useAgentOutputs } from '../hooks/useAgentIntelligence';
+import { useHistoricalAnalog } from '../hooks/useAgentReasoning';
 
 interface SeriesMeta {
   id: string;
@@ -157,6 +161,10 @@ export const MacroRegimeDesk: React.FC = () => {
       .slice(0, 4),
     [artifacts.items, active],
   );
+
+  // V4: macro + liquidity agent intelligence
+  const macroAgentOutputs = useAgentOutputs({ placement: 'MacroRegimeDesk', limit: 20 });
+  const analogResult = useHistoricalAnalog({ lookback_years: 10, top_k: 3 });
 
   const handleSaveMacroContext = async () => {
     if (!currentWorkspace?.id || !currentProject?.id || !user) return;
@@ -405,6 +413,29 @@ export const MacroRegimeDesk: React.FC = () => {
 
       {/* ── V3 Phase 2: warehouse-backed regime classifier ──────────────────── */}
       <V3P2MacroRegimePanel />
+
+      {/* ── V4: Agent intelligence (macro + liquidity) ──────────────────────── */}
+      <section style={{ marginBottom: 28 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 20 }}>
+          <div>
+            <h2 className="ds-heading" style={{ margin: '0 0 12px' }}>Macro Intelligence</h2>
+            <AgentIntelligenceFeed
+              outputs={macroAgentOutputs.data}
+              loading={macroAgentOutputs.loading}
+              analyzing={macroAgentOutputs.loading}
+              title="Macro & Liquidity Agents"
+              showFilters={false}
+              compact
+              maxItems={8}
+              onRefresh={macroAgentOutputs.refetch}
+            />
+          </div>
+          <div>
+            <h2 className="ds-heading" style={{ margin: '0 0 12px' }}>Historical Analogs</h2>
+            <MacroAnalogPanel result={analogResult.data} loading={analogResult.loading} compact />
+          </div>
+        </div>
+      </section>
 
       {/* Macro web research */}
       <section>

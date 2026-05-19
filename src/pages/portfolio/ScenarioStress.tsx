@@ -24,6 +24,10 @@ import {
 } from '../../services/portfolioService';
 import { fmtPct, fmtUSD, fmtBoth } from '../../lib/portfolio/fmt';
 import { PortfolioIntelligencePanel } from '../../components/portfolio/PortfolioIntelligencePanel';
+import { AgentIntelligenceFeed } from '../../components/quant/AgentIntelligenceFeed';
+import { MacroAnalogPanel } from '../../components/quant/MacroAnalogPanel';
+import { useAgentOutputs } from '../../hooks/useAgentIntelligence';
+import { useHistoricalAnalog } from '../../hooks/useAgentReasoning';
 import type { OHLCVBar } from '../../types';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -424,6 +428,10 @@ export const ScenarioStress: React.FC = () => {
   const worstScenarioImpact = allImpacts.length > 0
     ? Math.min(...allImpacts.map(s => s.impact)) : undefined;
 
+  // V4: regime + risk agent outputs for scenario context
+  const scenarioAgentOutputs = useAgentOutputs({ placement: 'ScenarioStress', limit: 10 });
+  const analogResult = useHistoricalAnalog({ lookback_years: 10, top_k: 3 });
+
   const { observations, acknowledge } = usePortfolioIntelligence(
     selectedPortfolio?.id,
     holdings.length > 0 ? { holdings, effectiveWeights, worstScenarioImpact } : null,
@@ -742,6 +750,30 @@ export const ScenarioStress: React.FC = () => {
             </div>
           </SectionCard>
         )}
+      </div>
+
+      {/* ── V4: Regime & Risk Intelligence ─────────────────────────────────── */}
+      <div style={{ padding: '0 24px 24px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+        <div>
+          <h4 style={{ margin: '0 0 10px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--muted-foreground)' }}>
+            Regime & Risk Intelligence
+          </h4>
+          <AgentIntelligenceFeed
+            outputs={scenarioAgentOutputs.data}
+            loading={scenarioAgentOutputs.loading}
+            analyzing={scenarioAgentOutputs.loading}
+            title="Regime & Risk Agents"
+            showFilters={false}
+            compact
+            maxItems={6}
+          />
+        </div>
+        <div>
+          <h4 style={{ margin: '0 0 10px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--muted-foreground)' }}>
+            Historical Macro Analogs
+          </h4>
+          <MacroAnalogPanel result={analogResult.data} loading={analogResult.loading} compact />
+        </div>
       </div>
 
       {showCreate && <ScenarioModal title="New Scenario" onSave={handleCreate} onClose={() => setShowCreate(false)} />}

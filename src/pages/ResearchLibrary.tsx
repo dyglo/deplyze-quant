@@ -1,5 +1,7 @@
 import React, { useCallback, useMemo, useState, useRef } from 'react';
 import { Library, Lightbulb } from 'lucide-react';
+import { AgentIntelligenceFeed } from '../components/quant/AgentIntelligenceFeed';
+import { useAgentDomain } from '../hooks/useAgentIntelligence';
 import { useWorkspace } from '../components/WorkspaceContext';
 import { useArtifacts } from '../hooks/useArtifacts';
 import { usePins } from '../hooks/usePins';
@@ -123,6 +125,7 @@ export const ResearchLibrary: React.FC = () => {
   );
 
   const stats = useLibraryStats(userArtifacts);
+  const earningsAgentOutputs = useAgentDomain('earnings', { days: 7, limit: 6 });
 
   const handleOpen = useCallback((id: string) => {
     const artifact = allArtifacts.items.find(a => a.id === id);
@@ -279,6 +282,21 @@ export const ResearchLibrary: React.FC = () => {
       {/* AI Overview — deterministic insight paragraph */}
       {userArtifacts.length >= 3 && (
         <ResearchOverviewPanel stats={stats} artifacts={userArtifacts} />
+      )}
+
+      {/* ── V4: Earnings & Filing Intelligence from earnings_agent ─────────── */}
+      {earningsAgentOutputs.data.length > 0 && (
+        <section style={{ marginTop: 24 }}>
+          <h2 className="ds-heading" style={{ margin: '0 0 12px' }}>Filing & Earnings Intelligence</h2>
+          <AgentIntelligenceFeed
+            outputs={earningsAgentOutputs.data}
+            loading={earningsAgentOutputs.loading}
+            title="Earnings Agent"
+            showFilters={false}
+            compact
+            maxItems={6}
+          />
+        </section>
       )}
 
       <Disclaimer />

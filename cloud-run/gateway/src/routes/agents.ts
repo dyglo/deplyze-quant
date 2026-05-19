@@ -272,4 +272,121 @@ router.get('/risk', async (_req, res, next) => {
   }
 });
 
+// ─── GET /agents/reasoning ────────────────────────────────────────────────────
+
+router.get('/reasoning', async (_req, res, next) => {
+  try {
+    const rows = await withCache<AgentOutputRow[]>('agents:reasoning:today', TTL.quote * 6, () =>
+      runQuery<AgentOutputRow>(`
+        SELECT
+          artifact_id, agent_id, domain, artifact_type,
+          title, summary, body, confidence, severity,
+          evidence, generated_at, observation_date, tags
+        FROM \`${PROJECT}.${ARTIFACTS_DS}.agent_outputs\`
+        WHERE artifact_type = 'multi_system_reasoning'
+          AND DATE(observation_date) >= DATE_SUB(CURRENT_DATE(), INTERVAL 2 DAY)
+          AND is_test = FALSE
+        ORDER BY generated_at DESC
+        LIMIT 8
+      `),
+    );
+    res.json({ reasoning: rows, count: rows.length });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── GET /agents/analog ──────────────────────────────────────────────────────
+// Proxies to quant-engine /agents/analog (BQ-heavy computation — not done in gateway)
+
+const QUANT_ENGINE_URL = process.env.QUANT_ENGINE_URL ?? '';
+
+router.get('/analog', async (req, res, next) => {
+  try {
+    if (!QUANT_ENGINE_URL) {
+      return res.status(503).json({ error: 'Analog engine not configured', analogs: [] });
+    }
+    const qs = new URLSearchParams();
+    if (req.query.lookback_years) qs.set('lookback_years', String(req.query.lookback_years));
+    if (req.query.top_k) qs.set('top_k', String(req.query.top_k));
+    const url = `${QUANT_ENGINE_URL}/agents/analog?${qs.toString()}`;
+    const response = await fetch(url, { signal: AbortSignal.timeout(20_000) });
+    if (!response.ok) throw new Error(`quant-engine ${response.status}`);
+    res.json(await response.json());
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── POST /agents/vulnerability ───────────────────────────────────────────────
+
+router.post('/vulnerability', async (req, res, next) => {
+  try {
+    if (!QUANT_ENGINE_URL) {
+      return res.status(503).json({ error: 'Vulnerability engine not configured' });
+    }
+    const response = await fetch(`${QUANT_ENGINE_URL}/agents/vulnerability`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req.body),
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!response.ok) throw new Error(`quant-engine ${response.status}`);
+    res.json(await response.json());
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── GET /agents/narrative-exposure ──────────────────────────────────────────
+
+router.get('/narrative-exposure', async (req, res, next) => {
+  try {
+    const symbols = String(req.query.symbols ?? '');
+    if (!symbols) return res.status(400).json({ error: 'symbols parameter required' });
+
+    const cacheKey = `agents:narrative:${symbols}:${req.query.weights ?? ''}`;
+    // For narrative exposure we query BQ directly (narrative_memory + narrative_features)
+    // to avoid routing through quant-engine for a read-only query.
+    const rows = await withCache<unknown[]>(cacheKey, TTL.quote * 15, async () => {
+      const symList = symbols.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+      if (!symList.length) return [];
+      const symIn = symList.map(s => `'${s}'`).join(',');
+
+      return runQuery<unknown>(`
+        WITH sym_set AS (
+          SELECT unnested AS symbol
+          FROM UNNEST([${symIn}]) AS unnested
+        )
+        SELECT
+          m.theme_id,
+          m.theme_label,
+          m.polarity_mean,
+          m.intensity_mean,
+          m.lifetime_score,
+          m.related_symbols,
+          m.tags,
+          ARRAY(
+            SELECT s.symbol
+            FROM sym_set s
+            WHERE s.symbol IN UNNEST(m.related_symbols)
+          ) AS matching_symbols
+        FROM \`${PROJECT}.research.narrative_memory\` m
+        WHERE TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), m.last_seen_at, DAY) <= 30
+          AND m.theme_label IS NOT NULL
+          AND EXISTS (
+            SELECT 1 FROM UNNEST(m.related_symbols) rs
+            WHERE rs IN (${symIn})
+          )
+        ORDER BY m.lifetime_score DESC
+        LIMIT 20
+      `);
+    });
+
+    res.json({ exposures: rows, symbols: symbols.split(',').map(s => s.trim().toUpperCase()), count: (rows as unknown[]).length });
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;

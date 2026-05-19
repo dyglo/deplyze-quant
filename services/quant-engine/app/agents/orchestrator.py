@@ -20,7 +20,8 @@ import structlog
 
 from app.agents import (
     macro_agent, sentiment_agent, volatility_agent, cross_asset_agent,
-    liquidity_agent, regime_agent, opportunity_agent, earnings_agent, risk_agent,
+    liquidity_agent, regime_agent, opportunity_agent, earnings_agent,
+    risk_agent, reasoning,
 )
 from app.agents.schemas import AgentOutput, AGENT_OUTPUTS_SCHEMA
 from app.agents.registry import AGENT_REGISTRY, REGISTRY_BY_ID
@@ -40,16 +41,16 @@ _AGENT_RUNNERS = {
     "opportunity_agent": opportunity_agent.run,
     "earnings_agent": earnings_agent.run,
     "risk_agent": risk_agent.run,
+    "reasoning_agent": reasoning.run,
 }
 
-# Agents that depend on others must run after their dependencies.
-# Regime requires macro + liquidity + vol outputs in BQ.
-# Risk requires all others.
+# Dependency order — reasoning runs last so it can read all other outputs.
 _DEPENDENCY_ORDER = [
     ["earnings_agent", "macro_agent", "sentiment_agent", "volatility_agent",
      "cross_asset_agent", "liquidity_agent"],  # tier 1 — parallel
     ["regime_agent", "opportunity_agent"],       # tier 2 — after vol+macro
     ["risk_agent"],                              # tier 3 — after all
+    ["reasoning_agent"],                         # tier 4 — after risk, reads all
 ]
 
 

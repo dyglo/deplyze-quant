@@ -8,6 +8,7 @@ import { PageHeader } from '../components/quant/PageHeader';
 import { MarketTile } from '../components/quant/MarketTile';
 import { IntelligenceFeed } from '../components/quant/IntelligenceFeed';
 import { AgentIntelligenceFeed } from '../components/quant/AgentIntelligenceFeed';
+import { ContextualReasoningCard } from '../components/quant/ContextualReasoningCard';
 import { ResearchTimeline } from '../components/quant/ResearchTimeline';
 import { ArtifactDetailDrawerBody } from '../components/quant/ArtifactDetailDrawerBody';
 import { Disclaimer } from '../components/quant/Disclaimer';
@@ -63,6 +64,7 @@ export const IntelligenceTerminal: React.FC = () => {
   const pinnedIds = useMemo(() => new Set(pinMap.keys()), [pinMap]);
   const [activeTab, setActiveTab] = useState<'agents' | 'feed' | 'timeline'>('agents');
   const agentOutputs = useAgentOutputs({ placement: 'IntelligenceTerminal', limit: 40 });
+  const reasoningOutputs = useAgentOutputs({ artifact_type: 'multi_system_reasoning', limit: 4 });
   const { regimeLabel, data: regimeData } = useCompositeRegime();
   const { riskLevel, data: riskData } = useRiskEnvironment();
 
@@ -173,14 +175,27 @@ export const IntelligenceTerminal: React.FC = () => {
           </nav>
 
           {activeTab === 'agents' ? (
-            <AgentIntelligenceFeed
-              outputs={agentOutputs.data}
-              loading={agentOutputs.loading}
-              analyzing={agentOutputs.loading}
-              title="Live Intelligence"
-              showFilters
-              onRefresh={agentOutputs.refetch}
-            />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {/* Multi-system synthesis at top */}
+              {reasoningOutputs.data.length > 0 && (
+                <div>
+                  <p style={{ margin: '0 0 6px', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--muted-foreground)' }}>
+                    Cross-Signal Synthesis
+                  </p>
+                  {reasoningOutputs.data.map(o => (
+                    <ContextualReasoningCard key={o.artifact_id} output={o} />
+                  ))}
+                </div>
+              )}
+              <AgentIntelligenceFeed
+                outputs={agentOutputs.data}
+                loading={agentOutputs.loading}
+                analyzing={agentOutputs.loading}
+                title="Live Intelligence"
+                showFilters
+                onRefresh={agentOutputs.refetch}
+              />
+            </div>
           ) : activeTab === 'feed' ? (
             <IntelligenceFeed
               items={agentArtifacts}

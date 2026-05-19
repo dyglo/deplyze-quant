@@ -310,10 +310,9 @@ router.get('/analog', async (req, res, next) => {
     if (req.query.lookback_years) qs.set('lookback_years', String(req.query.lookback_years));
     if (req.query.top_k) qs.set('top_k', String(req.query.top_k));
     const url = `${QUANT_ENGINE_URL}/agents/analog?${qs.toString()}`;
-    // Use node-native fetch (Node 18+) or fall back to axios if available
-    const { default: axios } = await import('axios');
-    const { data } = await axios.get(url, { timeout: 20_000 });
-    res.json(data);
+    const response = await fetch(url, { signal: AbortSignal.timeout(20_000) });
+    if (!response.ok) throw new Error(`quant-engine ${response.status}`);
+    res.json(await response.json());
   } catch (err) {
     next(err);
   }
@@ -326,13 +325,14 @@ router.post('/vulnerability', async (req, res, next) => {
     if (!QUANT_ENGINE_URL) {
       return res.status(503).json({ error: 'Vulnerability engine not configured' });
     }
-    const { default: axios } = await import('axios');
-    const { data } = await axios.post(
-      `${QUANT_ENGINE_URL}/agents/vulnerability`,
-      req.body,
-      { timeout: 20_000, headers: { 'Content-Type': 'application/json' } },
-    );
-    res.json(data);
+    const response = await fetch(`${QUANT_ENGINE_URL}/agents/vulnerability`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req.body),
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!response.ok) throw new Error(`quant-engine ${response.status}`);
+    res.json(await response.json());
   } catch (err) {
     next(err);
   }

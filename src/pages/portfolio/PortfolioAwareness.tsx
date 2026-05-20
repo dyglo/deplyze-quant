@@ -25,6 +25,8 @@ import { DEFAULT_BENCHMARK_ID } from '../../lib/portfolio/benchmarks';
 import { isAwarenessWorkspaceEnabled } from '../../lib/portfolio/awarenessFlag';
 import { AwarenessHero } from '../../components/portfolio/awareness/AwarenessHero';
 import { DriverDecomposition } from '../../components/portfolio/awareness/DriverDecomposition';
+import { ReturnDecomposition } from '../../components/portfolio/awareness/ReturnDecomposition';
+import { useSectorMetadata } from '../../hooks/useSectorMetadata';
 import { EmergingRiskCluster } from '../../components/portfolio/awareness/EmergingRiskCluster';
 import { RelationshipShifts } from '../../components/portfolio/awareness/RelationshipShifts';
 import { HistoricalAnalogContext } from '../../components/portfolio/awareness/HistoricalAnalogContext';
@@ -74,6 +76,8 @@ export const PortfolioAwareness: React.FC = () => {
   const { data: analog, loading: analogLoading } = useHistoricalAnalog({ top_k: 3 });
 
   const { data: reasoningOutputs } = useReasoningOutputs();
+
+  const { bySymbol: sectorBySymbol, loading: sectorLoading } = useSectorMetadata(symbols);
 
   const holdingsCount = portfolioHoldings.length;
 
@@ -162,6 +166,19 @@ export const PortfolioAwareness: React.FC = () => {
         chartSeries={performanceSeries}
       />
 
+      <ReturnDecomposition
+        holdings={portfolioHoldings}
+        effectiveWeights={effectiveWeights}
+        holdingCurves={holdingCurves}
+        sectorBySymbol={sectorBySymbol}
+        totalReturn={totalReturn}
+        benchmarkTotalReturn={benchmarkTotalReturn}
+        benchmarkId={portfolio.benchmarkId}
+        periodLabel="1Y"
+        loadingSectors={sectorLoading}
+      />
+
+      {/* Drivers (legacy lens view) kept temporarily for the by-region / by-asset / by-narrative lenses that the Bloomberg-style ReturnDecomposition does not yet cover. Will be folded in during the next pass. */}
       <DriverDecomposition
         holdings={portfolioHoldings}
         effectiveWeights={effectiveWeights}

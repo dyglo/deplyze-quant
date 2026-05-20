@@ -13,8 +13,23 @@ import React, { useEffect, useMemo } from 'react';
 import { useParams, useNavigate, Navigate } from 'react-router-dom';
 import { ArrowLeft, Sparkles } from 'lucide-react';
 import { usePortfolioWorkspace } from '../../hooks/usePortfolioWorkspace';
+import { usePortfolioPerformance } from '../../hooks/usePortfolioPerformance';
+import { usePortfolioAgentOutputs } from '../../hooks/useAgentIntelligence';
+import {
+  useHistoricalAnalog,
+  usePortfolioVulnerability,
+  useNarrativeExposure,
+  useReasoningOutputs,
+} from '../../hooks/useAgentReasoning';
+import { DEFAULT_BENCHMARK_ID } from '../../lib/portfolio/benchmarks';
 import { isAwarenessWorkspaceEnabled } from '../../lib/portfolio/awarenessFlag';
 import { AwarenessHero } from '../../components/portfolio/awareness/AwarenessHero';
+import { DriverDecomposition } from '../../components/portfolio/awareness/DriverDecomposition';
+import { EmergingRiskCluster } from '../../components/portfolio/awareness/EmergingRiskCluster';
+import { RelationshipShifts } from '../../components/portfolio/awareness/RelationshipShifts';
+import { HistoricalAnalogContext } from '../../components/portfolio/awareness/HistoricalAnalogContext';
+import { NarrativeAndExposureSection } from '../../components/portfolio/awareness/NarrativeAndExposureSection';
+import { CausalTimeline } from '../../components/portfolio/awareness/CausalTimeline';
 import { Disclaimer } from '../../components/quant/Disclaimer';
 import { logPageView, logOpen } from '../../lib/telemetry';
 
@@ -23,12 +38,41 @@ export const PortfolioAwareness: React.FC = () => {
   const navigate = useNavigate();
   const portfolioId = params.portfolioId ?? '';
 
-  const { portfolios, holdings, loading } = usePortfolioWorkspace();
+  const { portfolios, holdings, loading, effectiveWeights } = usePortfolioWorkspace();
   const portfolio = useMemo(
     () => portfolios.find(p => p.id === portfolioId) ?? null,
     [portfolios, portfolioId],
   );
-  const holdingsCount = portfolio ? holdings.filter(h => h.portfolioId === portfolio.id).length : 0;
+  const portfolioHoldings = useMemo(
+    () => (portfolio ? holdings.filter(h => h.portfolioId === portfolio.id) : []),
+    [portfolio, holdings],
+  );
+  const symbols = useMemo(() => portfolioHoldings.map(h => h.symbol), [portfolioHoldings]);
+  const benchmarkId = portfolio?.benchmarkId ?? DEFAULT_BENCHMARK_ID;
+
+  const { holdingCurves, totalReturn } = usePortfolioPerformance(symbols, effectiveWeights, benchmarkId, 252);
+
+  const { data: portfolioAgentOutputs } = usePortfolioAgentOutputs(portfolio?.id ?? null, { days: 7, limit: 50 });
+
+  const vulnerabilityHoldings = useMemo(
+    () => portfolioHoldings.map(h => ({
+      symbol: h.symbol,
+      weight: effectiveWeights[h.symbol] ?? 0,
+      asset_class: h.assetClass,
+    })),
+    [portfolioHoldings, effectiveWeights],
+  );
+  const { data: vulnerability, loading: vulnerabilityLoading } =
+    usePortfolioVulnerability(vulnerabilityHoldings, portfolio?.id);
+
+  const { data: narrativeExposure, loading: narrativeLoading } =
+    useNarrativeExposure(symbols, effectiveWeights);
+
+  const { data: analog, loading: analogLoading } = useHistoricalAnalog({ top_k: 3 });
+
+  const { data: reasoningOutputs } = useReasoningOutputs();
+
+  const holdingsCount = portfolioHoldings.length;
 
   useEffect(() => {
     logPageView('portfolio_awareness', { portfolio_id: portfolioId });
@@ -107,25 +151,40 @@ export const PortfolioAwareness: React.FC = () => {
         benchmarkId={portfolio.benchmarkId}
       />
 
-      {/* Future sections (P1+) anchor here */}
-      <section style={{
-        maxWidth: 1180, margin: '40px auto 0', padding: '0 32px',
-      }}>
-        <div style={{
-          padding: '40px 32px', borderRadius: 10,
-          border: '1px dashed var(--border)', background: 'var(--card)',
-          color: 'var(--muted-foreground)', fontSize: 12, lineHeight: 1.6,
-        }}>
-          <p style={{ margin: 0, fontWeight: 600, color: 'var(--foreground)' }}>
-            Awareness synthesis is being assembled.
-          </p>
-          <p style={{ margin: '8px 0 0' }}>
-            Drivers, causal timeline, emerging risks, relationship shifts, historical context,
-            narrative exposure and monitoring focus will appear here as the cognition engine
-            completes today's pass.
-          </p>
-        </div>
-      </section>
+      <DriverDecomposition
+        holdings={portfolioHoldings}
+        effectiveWeights={effectiveWeights}
+        holdingCurves={holdingCurves}
+        narrativeExposure={narrativeExposure}
+        totalReturn={totalReturn}
+        periodLabel="1Y"
+      />
+
+      <CausalTimeline
+        portfolioObservations={portfolioAgentOutputs ?? []}
+        reasoningOutputs={reasoningOutputs ?? []}
+      />
+
+      <EmergingRiskCluster
+        vulnerability={vulnerability}
+        vulnerabilityLoading={vulnerabilityLoading}
+        portfolioObservations={portfolioAgentOutputs ?? []}
+        holdingsCount={holdingsCount}
+      />
+
+      <RelationshipShifts
+        portfolioObservations={portfolioAgentOutputs ?? []}
+      />
+
+      <HistoricalAnalogContext
+        analog={analog}
+        loading={analogLoading}
+      />
+
+      <NarrativeAndExposureSection
+        result={narrativeExposure}
+        loading={narrativeLoading}
+      />
 
       <div style={{ maxWidth: 1180, margin: '40px auto 0', padding: '0 32px' }}>
         <Disclaimer />

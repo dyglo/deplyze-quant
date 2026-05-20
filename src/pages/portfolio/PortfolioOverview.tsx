@@ -7,9 +7,12 @@ import {
 import {
   Briefcase, Plus, ChevronDown, TrendingUp,
   Activity, BarChart3, ShieldAlert, PieChart, AlertCircle, X, Check,
-  Loader2, LayoutDashboard, Brain, RefreshCw,
+  Loader2, LayoutDashboard, Brain, RefreshCw, Sparkles,
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { usePortfolioWorkspace } from '../../hooks/usePortfolioWorkspace';
+import { isAwarenessWorkspaceEnabled } from '../../lib/portfolio/awarenessFlag';
+import { logOpen } from '../../lib/telemetry';
 import { usePortfolioPerformance } from '../../hooks/usePortfolioPerformance';
 import { usePortfolioIntelligence } from '../../hooks/usePortfolioIntelligence';
 import { DEFAULT_BENCHMARK_ID, BENCHMARK_REGISTRY } from '../../lib/portfolio/benchmarks';
@@ -939,6 +942,8 @@ export const PortfolioOverview: React.FC = () => {
   const [showCreate, setShowCreate] = useState(false);
   const [period, setPeriod] = useState<PeriodLabel>('1Y');
   const [intelligenceOpen, setIntelligenceOpen] = useState(false);
+  const navigate = useNavigate();
+  const awarenessEnabled = isAwarenessWorkspaceEnabled();
 
   const symbols = useMemo(() => holdings.map(h => h.symbol), [holdings]);
   const benchmarkId = selectedPortfolio?.benchmarkId ?? DEFAULT_BENCHMARK_ID;
@@ -1048,6 +1053,32 @@ export const PortfolioOverview: React.FC = () => {
             onSelect={selectPortfolio}
             onCreateNew={() => setShowCreate(true)}
           />
+          {/* Portfolio Awareness — subtle, gated entry to the dedicated cognition workspace. */}
+          {awarenessEnabled && selectedPortfolio && (
+            <button
+              onClick={() => {
+                logOpen({
+                  category: 'portfolio',
+                  placement: 'portfolio_overview_awareness_entry',
+                  entity_id: selectedPortfolio.id,
+                });
+                navigate(`/portfolio/${selectedPortfolio.id}/awareness`);
+              }}
+              title="Open the awareness workspace — synthesized context, drivers, risks, and what to monitor."
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '5px 11px', borderRadius: 7,
+                border: '1px solid var(--border)', background: 'transparent',
+                color: 'var(--muted-foreground)',
+                cursor: 'pointer', fontSize: 11, fontWeight: 600,
+                letterSpacing: '0.01em',
+              }}
+            >
+              <Sparkles size={12} style={{ color: 'var(--primary)', opacity: 0.85 }} />
+              Portfolio Awareness
+              <span style={{ opacity: 0.5, fontWeight: 500 }}>→</span>
+            </button>
+          )}
           {/* Intelligence button */}
           <button
             onClick={() => setIntelligenceOpen(true)}

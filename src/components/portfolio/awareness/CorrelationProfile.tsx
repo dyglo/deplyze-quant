@@ -15,6 +15,8 @@ import React, { useMemo } from 'react';
 import type { Holding } from '../../../lib/portfolio/schemas';
 import { correlation, computePositionMetrics } from '../../../lib/portfolio/holdingAnalytics';
 import type { HoldingCurveInput } from '../../../lib/portfolio/clientStress';
+import { SectionNarrative } from './SectionNarrative';
+import { narrateCorrelationProfile } from '../../../lib/portfolio/sectionNarratives';
 
 interface Props {
   holdings: Holding[];
@@ -129,6 +131,19 @@ export const CorrelationProfile: React.FC<Props> = ({
     return m;
   }, [positions, topSymbols]);
 
+  // Mean intra-portfolio off-diagonal correlation
+  const meanIntraCorr = useMemo(() => {
+    if (matrix.length < 2) return 0;
+    let sum = 0, count = 0;
+    for (let i = 0; i < matrix.length; i++) {
+      for (let j = i + 1; j < matrix[i].length; j++) {
+        sum += matrix[i][j];
+        count++;
+      }
+    }
+    return count > 0 ? sum / count : 0;
+  }, [matrix]);
+
   return (
     <section aria-label="Correlation profile" style={{ padding: '0 32px', marginTop: 56 }}>
       <div style={{ maxWidth: 1180, margin: '0 auto' }}>
@@ -146,6 +161,14 @@ export const CorrelationProfile: React.FC<Props> = ({
             How positions move together.
           </h2>
         </header>
+
+        <SectionNarrative
+          lines={narrateCorrelationProfile({
+            positions,
+            benchmarkId,
+            meanIntraCorr,
+          })}
+        />
 
         <div style={{
           display: 'grid',

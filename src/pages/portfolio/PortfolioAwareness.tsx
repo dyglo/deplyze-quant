@@ -162,7 +162,6 @@ export const PortfolioAwareness: React.FC = () => {
           sharpe,
           maxDrawdown,
         }}
-        chartSeries={performanceSeries}
       />
 
       <ReturnDecomposition

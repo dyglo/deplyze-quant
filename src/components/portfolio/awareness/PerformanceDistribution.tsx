@@ -17,6 +17,8 @@ import {
   type PositionMetrics,
 } from '../../../lib/portfolio/holdingAnalytics';
 import type { HoldingCurveInput } from '../../../lib/portfolio/clientStress';
+import { SectionNarrative } from './SectionNarrative';
+import { narratePerformanceDistribution } from '../../../lib/portfolio/sectionNarratives';
 
 interface Props {
   holdings: Holding[];
@@ -141,6 +143,13 @@ export const PerformanceDistribution: React.FC<Props> = ({
             How returns distributed by sector.
           </h2>
         </header>
+
+        <SectionNarrative
+          lines={narratePerformanceDistribution({
+            sectorRows: rows,
+            portfolioReturn: totalPortfolioReturn,
+          })}
+        />
 
         <div style={{
           borderRadius: 10, overflow: 'hidden',

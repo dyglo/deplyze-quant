@@ -12,10 +12,13 @@
  */
 
 import React, { useMemo, useState } from 'react';
-import { ChevronUp, ChevronDown, ArrowUpDown } from 'lucide-react';
+import { ChevronUp, ChevronDown, ArrowUpDown, ExternalLink } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import type { Holding } from '../../../lib/portfolio/schemas';
 import { computePositionMetrics, type PositionMetrics } from '../../../lib/portfolio/holdingAnalytics';
 import type { HoldingCurveInput } from '../../../lib/portfolio/clientStress';
+import { SectionNarrative } from './SectionNarrative';
+import { narratePositionActivity } from '../../../lib/portfolio/sectionNarratives';
 
 interface Props {
   holdings: Holding[];
@@ -84,6 +87,127 @@ const HeaderCell: React.FC<{
   );
 };
 
+function describePosition(row: PositionMetrics, benchmarkId?: string): string {
+  const parts: string[] = [];
+  if (row.retFull >= 0.30) parts.push('a major outperformer on the period');
+  else if (row.retFull >= 0.10) parts.push('a positive contributor');
+  else if (row.retFull <= -0.20) parts.push('a meaningful detractor');
+  else if (row.retFull < 0) parts.push('a mild detractor');
+  else parts.push('roughly flat');
+
+  if (row.vol > 0.40) parts.push('high realised volatility');
+  else if (row.vol < 0.15 && row.vol > 0) parts.push('compressed volatility');
+
+  if (row.beta >= 1.4) parts.push(`amplifies ${benchmarkId ?? 'benchmark'} moves`);
+  else if (row.beta > 0 && row.beta < 0.6) parts.push(`partially decoupled from ${benchmarkId ?? 'benchmark'}`);
+
+  if (row.mdd <= -0.30) parts.push(`carried a drawdown of ${(row.mdd * 100).toFixed(0)}%`);
+
+  if (parts.length === 0) return '';
+  return `${row.symbol} is ${parts.slice(0, 3).join('; ')}.`;
+}
+
+const MiniSpark: React.FC<{ values: number[]; height?: number }> = ({ values, height = 40 }) => {
+  if (values.length < 2) return null;
+  const width = 320;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = max - min || 1;
+  const padding = 4;
+  const innerH = height - padding * 2;
+  const last = values[values.length - 1];
+  const first = values[0];
+  const positive = last >= first;
+  const d = values.map((v, i) => {
+    const x = (i / (values.length - 1)) * width;
+    const y = padding + (1 - (v - min) / span) * innerH;
+    return `${i === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`;
+  }).join(' ');
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} width="100%" height={height} preserveAspectRatio="none" style={{ display: 'block' }}>
+      <path d={d} fill="none" stroke={positive ? 'var(--chart-2)' : 'var(--destructive)'} strokeWidth={1.5} strokeLinecap="round" />
+    </svg>
+  );
+};
+
+const PositionDetail: React.FC<{
+  row: PositionMetrics;
+  benchmarkId?: string;
+  onOpenInstrument: () => void;
+}> = ({ row, benchmarkId, onOpenInstrument }) => {
+  const sentence = describePosition(row, benchmarkId);
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: 'minmax(0, 1.2fr) minmax(0, 1fr)',
+      gap: 18, alignItems: 'flex-start',
+    }}>
+      <div>
+        <p style={{
+          margin: 0, fontSize: 9, fontWeight: 700, letterSpacing: '0.12em',
+          textTransform: 'uppercase', color: 'var(--primary)',
+        }}>
+          Deplyze observes
+        </p>
+        {sentence && (
+          <p style={{
+            margin: '6px 0 12px', fontSize: 12, lineHeight: 1.55,
+            color: 'var(--foreground)', maxWidth: 540,
+          }}>
+            {sentence}
+          </p>
+        )}
+        <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+          <DetailKv label="Max DD" value={fmtPctSigned(row.mdd)} color="var(--destructive)" />
+          <DetailKv label="Corr to Bmk" value={row.corrToBenchmark.toFixed(2)} />
+          <DetailKv label="Ann. Vol" value={fmtPct(row.vol)} color="var(--chart-4)" />
+          <DetailKv label={`β ${benchmarkId ?? 'Bmk'}`} value={row.beta.toFixed(2)} />
+        </div>
+        <button
+          onClick={onOpenInstrument}
+          style={{
+            marginTop: 12, display: 'inline-flex', alignItems: 'center', gap: 5,
+            padding: '5px 10px', fontSize: 10, fontWeight: 600,
+            border: '1px solid var(--border)', background: 'transparent',
+            color: 'var(--foreground)', borderRadius: 6, cursor: 'pointer',
+          }}
+        >
+          Open {row.symbol} workspace <ExternalLink size={10} />
+        </button>
+      </div>
+      <div style={{
+        padding: '10px 12px', borderRadius: 8,
+        border: '1px solid var(--border)', background: 'var(--card)',
+      }}>
+        <p style={{
+          margin: '0 0 6px', fontSize: 9, fontWeight: 700, letterSpacing: '0.1em',
+          textTransform: 'uppercase', color: 'var(--muted-foreground)',
+        }}>
+          1Y rebased path
+        </p>
+        <MiniSpark values={row.values} />
+      </div>
+    </div>
+  );
+};
+
+const DetailKv: React.FC<{ label: string; value: string; color?: string }> = ({ label, value, color }) => (
+  <div>
+    <p style={{
+      margin: 0, fontSize: 9, fontWeight: 700, letterSpacing: '0.1em',
+      textTransform: 'uppercase', color: 'var(--muted-foreground)',
+    }}>
+      {label}
+    </p>
+    <p style={{
+      margin: '2px 0 0', fontSize: 13, fontWeight: 700,
+      color: color ?? 'var(--foreground)', fontVariantNumeric: 'tabular-nums',
+    }}>
+      {value}
+    </p>
+  </div>
+);
+
 const BodyCell: React.FC<React.PropsWithChildren<{ align?: 'left' | 'right'; color?: string; weight?: number; bold?: boolean }>> = ({ children, align = 'right', color, weight, bold }) => (
   <td style={{
     padding: '6px 10px',
@@ -108,6 +232,8 @@ export const PositionActivity: React.FC<Props> = ({
 }) => {
   const [sortKey, setSortKey] = useState<SortKey>('contribution');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const [expandedSymbol, setExpandedSymbol] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   const rows = useMemo(() => {
     const symbols = holdings.map(h => h.symbol);
@@ -168,6 +294,10 @@ export const PositionActivity: React.FC<Props> = ({
           </h2>
         </header>
 
+        <SectionNarrative
+          lines={narratePositionActivity({ positions: rows, benchmarkId })}
+        />
+
         <div style={{
           borderRadius: 10, overflow: 'hidden',
           border: '1px solid var(--border)', background: 'var(--card)',
@@ -193,19 +323,43 @@ export const PositionActivity: React.FC<Props> = ({
                   </tr>
                 </thead>
                 <tbody>
-                  {sorted.map(r => (
-                    <tr key={r.symbol}>
-                      <BodyCell align="left" bold>{r.symbol}</BodyCell>
-                      <BodyCell color="var(--muted-foreground)">{fmtPct(r.weight)}</BodyCell>
-                      <BodyCell color={returnColor(r.ret5)} weight={600}>{fmtPctSigned(r.ret5)}</BodyCell>
-                      <BodyCell color={returnColor(r.ret21)} weight={600}>{fmtPctSigned(r.ret21)}</BodyCell>
-                      <BodyCell color={returnColor(r.ret63)} weight={600}>{fmtPctSigned(r.ret63)}</BodyCell>
-                      <BodyCell color={returnColor(r.retFull)} bold>{fmtPctSigned(r.retFull)}</BodyCell>
-                      <BodyCell color="var(--chart-4)">{fmtPct(r.vol)}</BodyCell>
-                      <BodyCell>{fmtNum(r.beta)}</BodyCell>
-                      <BodyCell color={returnColor(r.contribution)} bold>{fmtPctSigned(r.contribution)}</BodyCell>
-                    </tr>
-                  ))}
+                  {sorted.map(r => {
+                    const isExpanded = expandedSymbol === r.symbol;
+                    return (
+                      <React.Fragment key={r.symbol}>
+                        <tr
+                          onClick={() => setExpandedSymbol(prev => prev === r.symbol ? null : r.symbol)}
+                          style={{
+                            cursor: 'pointer',
+                            background: isExpanded ? 'color-mix(in oklab, var(--primary) 5%, transparent)' : undefined,
+                          }}
+                        >
+                          <BodyCell align="left" bold>{r.symbol}</BodyCell>
+                          <BodyCell color="var(--muted-foreground)">{fmtPct(r.weight)}</BodyCell>
+                          <BodyCell color={returnColor(r.ret5)} weight={600}>{fmtPctSigned(r.ret5)}</BodyCell>
+                          <BodyCell color={returnColor(r.ret21)} weight={600}>{fmtPctSigned(r.ret21)}</BodyCell>
+                          <BodyCell color={returnColor(r.ret63)} weight={600}>{fmtPctSigned(r.ret63)}</BodyCell>
+                          <BodyCell color={returnColor(r.retFull)} bold>{fmtPctSigned(r.retFull)}</BodyCell>
+                          <BodyCell color="var(--chart-4)">{fmtPct(r.vol)}</BodyCell>
+                          <BodyCell>{fmtNum(r.beta)}</BodyCell>
+                          <BodyCell color={returnColor(r.contribution)} bold>{fmtPctSigned(r.contribution)}</BodyCell>
+                        </tr>
+                        {isExpanded && (
+                          <tr style={{ background: 'color-mix(in oklab, var(--primary) 3%, transparent)' }}>
+                            <td colSpan={9} style={{
+                              padding: '14px 16px', borderBottom: '1px solid var(--border)',
+                            }}>
+                              <PositionDetail
+                                row={r}
+                                benchmarkId={benchmarkId}
+                                onOpenInstrument={() => navigate(`/instruments/${r.symbol}`)}
+                              />
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
                 </tbody>
                 <tfoot>
                   <tr style={{ background: 'var(--muted)' }}>

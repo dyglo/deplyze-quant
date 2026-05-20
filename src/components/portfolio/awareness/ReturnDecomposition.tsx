@@ -29,7 +29,7 @@
  * Pure presentational — all math lives in `awarenessAttribution.ts`.
  */
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import type { Holding } from '../../../lib/portfolio/schemas';
 import {
   contributionByHolding,
@@ -39,6 +39,8 @@ import {
 } from '../../../lib/portfolio/awarenessAttribution';
 import type { SectorClassification } from '../../../hooks/useSectorMetadata';
 import { SectorDonut, SECTOR_PALETTE, type SectorSlice } from './SectorDonut';
+import { SectionNarrative } from './SectionNarrative';
+import { narrateReturnDecomposition } from '../../../lib/portfolio/sectionNarratives';
 
 interface Props {
   holdings: Holding[];
@@ -144,12 +146,14 @@ export const ReturnDecomposition: React.FC<Props> = ({
   periodLabel,
   loadingSectors,
 }) => {
+  const [activeSector, setActiveSector] = useState<string | null>(null);
+
   const resolvedHoldings = useMemo(
     () => withSectors(holdings, sectorBySymbol),
     [holdings, sectorBySymbol],
   );
 
-  const holdingRows = useMemo(
+  const allHoldingRows = useMemo(
     () => contributionByHolding(resolvedHoldings, effectiveWeights, holdingCurves),
     [resolvedHoldings, effectiveWeights, holdingCurves],
   );
@@ -158,6 +162,17 @@ export const ReturnDecomposition: React.FC<Props> = ({
     () => contributionBySector(resolvedHoldings, effectiveWeights, holdingCurves),
     [resolvedHoldings, effectiveWeights, holdingCurves],
   );
+
+  // Filter contributors by active sector when one is selected.
+  const holdingRows = useMemo(() => {
+    if (!activeSector) return allHoldingRows;
+    const sectorSymbols = new Set(
+      resolvedHoldings
+        .filter(h => (h.resolvedSector ?? h.sector) === activeSector)
+        .map(h => h.symbol),
+    );
+    return allHoldingRows.filter(r => sectorSymbols.has(r.symbol));
+  }, [allHoldingRows, activeSector, resolvedHoldings]);
 
   const positives = useMemo(
     () => holdingRows.filter(r => r.contribution > 0).slice(0, 8),
@@ -243,6 +258,42 @@ export const ReturnDecomposition: React.FC<Props> = ({
           </div>
         </header>
 
+        <SectionNarrative
+          lines={narrateReturnDecomposition({
+            totalReturn,
+            benchmarkTotalReturn,
+            benchmarkId,
+            holdingRows: allHoldingRows,
+            sectorRows,
+          })}
+        />
+
+        {activeSector && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12,
+            fontSize: 11, color: 'var(--muted-foreground)',
+          }}>
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '3px 9px', borderRadius: 5,
+              background: 'color-mix(in oklab, var(--primary) 12%, transparent)',
+              color: 'var(--foreground)', fontWeight: 600,
+            }}>
+              Filtered: {activeSector}
+              <button
+                onClick={() => setActiveSector(null)}
+                aria-label="Clear filter"
+                style={{
+                  border: 'none', background: 'transparent',
+                  color: 'var(--foreground)', cursor: 'pointer',
+                  padding: 0, fontSize: 13, lineHeight: 1,
+                }}
+              >×</button>
+            </span>
+            <span>Click a sector legend row to filter; click again to clear.</span>
+          </div>
+        )}
+
         {/* Body: donut + tables */}
         <div style={{
           display: 'grid',
@@ -264,29 +315,42 @@ export const ReturnDecomposition: React.FC<Props> = ({
             </div>
             {donutSlices.length > 0 ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                {donutSlices.slice(0, 8).map((s, i) => (
-                  <div key={s.label} style={{
-                    display: 'grid', gridTemplateColumns: '10px 1fr 44px', gap: 6,
-                    alignItems: 'center', fontSize: 10,
-                  }}>
-                    <span style={{
-                      width: 9, height: 9, borderRadius: 2,
-                      background: SECTOR_PALETTE[i % SECTOR_PALETTE.length],
-                    }} />
-                    <span style={{
-                      color: 'var(--foreground)', fontWeight: 500,
-                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                    }} title={s.label}>
-                      {s.label}
-                    </span>
-                    <span style={{
-                      color: 'var(--muted-foreground)', textAlign: 'right',
-                      fontVariantNumeric: 'tabular-nums', fontWeight: 600,
-                    }}>
-                      {fmtPct(s.weight)}
-                    </span>
-                  </div>
-                ))}
+                {donutSlices.slice(0, 8).map((s, i) => {
+                  const isActive = activeSector === s.label;
+                  return (
+                    <button
+                      key={s.label}
+                      onClick={() => setActiveSector(prev => prev === s.label ? null : s.label)}
+                      style={{
+                        display: 'grid', gridTemplateColumns: '10px 1fr 44px', gap: 6,
+                        alignItems: 'center', fontSize: 10,
+                        border: '1px solid transparent',
+                        padding: '3px 4px',
+                        borderRadius: 5,
+                        background: isActive ? 'color-mix(in oklab, var(--primary) 10%, transparent)' : 'transparent',
+                        cursor: 'pointer', textAlign: 'left',
+                      }}
+                    >
+                      <span style={{
+                        width: 9, height: 9, borderRadius: 2,
+                        background: SECTOR_PALETTE[i % SECTOR_PALETTE.length],
+                      }} />
+                      <span style={{
+                        color: isActive ? 'var(--foreground)' : 'var(--foreground)',
+                        fontWeight: isActive ? 700 : 500,
+                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                      }} title={s.label}>
+                        {s.label}
+                      </span>
+                      <span style={{
+                        color: 'var(--muted-foreground)', textAlign: 'right',
+                        fontVariantNumeric: 'tabular-nums', fontWeight: 600,
+                      }}>
+                        {fmtPct(s.weight)}
+                      </span>
+                    </button>
+                  );
+                })}
                 {unclassifiedWeight > 0 && (
                   <p style={{
                     margin: '8px 0 0', fontSize: 9, color: 'var(--muted-foreground)',

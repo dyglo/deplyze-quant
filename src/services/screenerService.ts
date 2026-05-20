@@ -11,6 +11,31 @@ import { gatewayGet, ClientTTL } from './gatewayClient';
 import { fetchQuotes, fetchMarketMovers } from './marketService';
 import type { BatchQuoteRow } from './marketService';
 
+// Chunk large symbol lists so each request stays within the gateway's 100-symbol
+// batch limit. Chunks are fetched in parallel and results are merged.
+// The deployed gateway caps /market/quotes at 25 symbols. Split large requests
+// into chunks of 24 so every chunk fits under that limit, even before the
+// gateway source change (slice 25→100) is compiled and redeployed.
+async function fetchQuotesBatched(symbols: string[], chunkSize = 24): Promise<BatchQuoteRow[]> {
+  const chunks: string[][] = [];
+  for (let i = 0; i < symbols.length; i += chunkSize) chunks.push(symbols.slice(i, i + chunkSize));
+  const results = await Promise.all(
+    chunks.map(async (chunk) => {
+      try {
+        return await fetchQuotes(chunk);
+      } catch (err) {
+        console.error('[fetchQuotesBatched] Failed to fetch chunk:', chunk, err);
+        return chunk.map((sym) => ({
+          symbol: sym,
+          ok: false,
+          error: err instanceof Error ? err.message : String(err),
+        }));
+      }
+    })
+  );
+  return results.flat();
+}
+
 // ─── Domain types ────────────────────────────────────────────────────────────
 
 export type VolatilityState = 'low' | 'normal' | 'elevated' | 'extreme';
@@ -171,22 +196,21 @@ export const HEATMAP_SECTORS_EXTENDED: typeof HEATMAP_SECTORS = [
 
 export async function fetchExtendedHeatmapData(): Promise<HeatmapSector[]> {
   const allSymbols = HEATMAP_SECTORS_EXTENDED.flatMap((s) => s.symbols);
-  const rows = await fetchQuotes(allSymbols);
+  const rows = await fetchQuotesBatched(allSymbols);
   const rowMap = new Map(rows.filter((r) => r.ok && r.data).map((r) => [r.symbol, r.data!]));
 
   return HEATMAP_SECTORS_EXTENDED.map((sector) => {
-    const cells: HeatmapCell[] = sector.symbols
-      .filter((sym) => rowMap.has(sym))
-      .map((sym) => ({
-        symbol: sym,
-        name: sym,
-        sector: sector.name,
-        changePercent: rowMap.get(sym)!.changePercent ?? 0,
-        price: rowMap.get(sym)!.price,
-        weight: sector.weights[sym] ?? 'sm',
-      }));
-    const avgChange = cells.length
-      ? cells.reduce((s, c) => s + c.changePercent, 0) / cells.length
+    const cells: HeatmapCell[] = sector.symbols.map((sym) => ({
+      symbol: sym,
+      name: sym,
+      sector: sector.name,
+      changePercent: rowMap.get(sym)?.changePercent ?? 0,
+      price: rowMap.get(sym)?.price,
+      weight: sector.weights[sym] ?? 'sm',
+    }));
+    const live = cells.filter((c) => rowMap.has(c.symbol));
+    const avgChange = live.length
+      ? live.reduce((s, c) => s + c.changePercent, 0) / live.length
       : 0;
     return { name: sector.name, avgChange, cells };
   });
@@ -395,22 +419,21 @@ export async function fetchScreenerRows(tab: DiscoveryTab, pinnedSymbols: string
 // Fetch heatmap data for all sectors in one batch
 export async function fetchHeatmapData(): Promise<HeatmapSector[]> {
   const allSymbols = HEATMAP_SECTORS.flatMap((s) => s.symbols);
-  const rows = await fetchQuotes(allSymbols);
+  const rows = await fetchQuotesBatched(allSymbols);
   const rowMap = new Map(rows.filter((r) => r.ok && r.data).map((r) => [r.symbol, r.data!]));
 
   return HEATMAP_SECTORS.map((sector) => {
-    const cells: HeatmapCell[] = sector.symbols
-      .filter((sym) => rowMap.has(sym))
-      .map((sym) => ({
-        symbol: sym,
-        name: sym,
-        sector: sector.name,
-        changePercent: rowMap.get(sym)!.changePercent ?? 0,
-        price: rowMap.get(sym)!.price,
-        weight: sector.weights[sym] ?? 'sm',
-      }));
-    const avgChange = cells.length
-      ? cells.reduce((s, c) => s + c.changePercent, 0) / cells.length
+    const cells: HeatmapCell[] = sector.symbols.map((sym) => ({
+      symbol: sym,
+      name: sym,
+      sector: sector.name,
+      changePercent: rowMap.get(sym)?.changePercent ?? 0,
+      price: rowMap.get(sym)?.price,
+      weight: sector.weights[sym] ?? 'sm',
+    }));
+    const live = cells.filter((c) => rowMap.has(c.symbol));
+    const avgChange = live.length
+      ? live.reduce((s, c) => s + c.changePercent, 0) / live.length
       : 0;
     return { name: sector.name, avgChange, cells };
   });

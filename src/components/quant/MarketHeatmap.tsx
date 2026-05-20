@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, X as XIcon, PlusCircle } from 'lucide-react';
 import { useHeatmapData, useExtendedHeatmapData } from '../../hooks/useScreener';
 import type { HeatmapCell, HeatmapSector } from '../../services/screenerService';
 
@@ -151,73 +151,168 @@ interface Props {
   bare?: boolean;
   /** In bare mode, loads the full cross-asset universe (equity + FX + crypto + commodities + ETFs). */
   extended?: boolean;
+  /** Bare mode: show ×-remove controls on each sector header. */
+  editMode?: boolean;
+  /** Bare mode: sectors in this set are hidden from the canvas. */
+  hiddenSectors?: Set<string>;
+  /** Bare mode: called when the user removes a sector in edit mode. */
+  onHideSector?: (name: string) => void;
+  /** Optional pre-fetched sector data — skips the internal hook when provided. */
+  sectors?: HeatmapSector[];
+  /** Paired with sectors prop: loading state from the parent fetch. */
+  sectorsLoading?: boolean;
 }
 
 export const MarketHeatmap: React.FC<Props> = ({
   onSelect, selectedSymbol, alwaysExpanded = false, bare = false, extended = false,
+  editMode = false, hiddenSectors, onHideSector,
+  sectors: sectorsProp, sectorsLoading: sectorsLoadingProp,
 }) => {
   const equity = useHeatmapData();
   const full   = useExtendedHeatmapData();
-  const { data, loading, error, refresh } = extended ? full : equity;
+  const internal = extended ? full : equity;
+  const data    = sectorsProp ?? internal.data;
+  const loading = sectorsLoadingProp ?? internal.loading;
+  const error   = sectorsProp ? null : internal.error;
+  const refresh = sectorsProp ? (() => {}) : internal.refresh;
   const [expanded, setExpanded] = useState(alwaysExpanded);
 
   // ── Bare mode: two-column canvas, no stretch, fills parent ──────────────
   if (bare) {
-    // Only render sectors that actually returned data
-    const populated = data.filter((s) => s.cells.length > 0);
+    const populated = data
+      .filter((s) => s.cells.length > 0)
+      .filter((s) => !hiddenSectors?.has(s.name));
     const mid = Math.ceil(populated.length / 2);
     const col1 = populated.slice(0, mid);
     const col2 = populated.slice(mid);
 
-    const renderSectorCells = (sector: HeatmapSector) => (
-      <div key={sector.name} style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
-        {sector.cells.map((cell) => (
-          <HeatCell
-            key={cell.symbol}
-            cell={cell}
-            onSelect={onSelect}
-            isSelected={cell.symbol === selectedSymbol}
-          />
-        ))}
-      </div>
-    );
+    const renderSectorGroup = (sector: HeatmapSector) => {
+      const pos = sector.avgChange > 0;
+      const neg = sector.avgChange < 0;
+      const changeClr = pos ? '#4E6040' : neg ? '#C15F3C' : 'var(--muted-foreground)';
+      const advancers = sector.cells.filter((c) => c.changePercent > 0).length;
+      const breadthPct = sector.cells.length > 0
+        ? (advancers / sector.cells.length) * 100 : 50;
+
+      return (
+        <div key={sector.name}>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5,
+          }}>
+            <span style={{
+              fontSize: 9, fontWeight: 700, letterSpacing: '0.08em',
+              textTransform: 'uppercase', color: 'var(--muted-foreground)',
+              flexShrink: 0,
+            }}>
+              {sector.name}
+            </span>
+            <span style={{
+              fontSize: 9, fontWeight: 700, fontVariantNumeric: 'tabular-nums',
+              color: changeClr, flexShrink: 0,
+            }}>
+              {pos ? '+' : ''}{sector.avgChange.toFixed(2)}%
+            </span>
+            <div style={{
+              flex: 1, height: 2, background: 'var(--border)',
+              borderRadius: 1, overflow: 'hidden',
+            }}>
+              <div style={{
+                height: '100%', width: `${breadthPct}%`,
+                background: breadthPct >= 50 ? '#4E6040' : '#C15F3C',
+                transition: 'width 0.4s ease',
+              }} />
+            </div>
+            <span style={{
+              fontSize: 8, fontWeight: 500, color: 'var(--muted-foreground)',
+              fontVariantNumeric: 'tabular-nums', flexShrink: 0,
+            }}>
+              {advancers}/{sector.cells.length}
+            </span>
+            {editMode && onHideSector && (
+              <button
+                onClick={() => onHideSector(sector.name)}
+                title={`Hide ${sector.name}`}
+                style={{
+                  flexShrink: 0, display: 'inline-flex', alignItems: 'center',
+                  justifyContent: 'center', width: 16, height: 16, borderRadius: 4,
+                  border: '1px solid color-mix(in srgb, var(--destructive) 40%, transparent)',
+                  background: 'color-mix(in srgb, var(--destructive) 8%, transparent)',
+                  color: 'var(--destructive)', cursor: 'pointer', padding: 0,
+                  transition: 'background 120ms',
+                }}
+              >
+                <XIcon size={9} />
+              </button>
+            )}
+          </div>
+          <div style={{
+            display: 'flex', flexWrap: 'wrap', gap: 3,
+            alignContent: 'flex-start',
+          }}>
+            {sector.cells.map((cell) => (
+              <HeatCell
+                key={cell.symbol}
+                cell={cell}
+                onSelect={onSelect}
+                isSelected={cell.symbol === selectedSymbol}
+              />
+            ))}
+          </div>
+        </div>
+      );
+    };
 
     const renderColumn = (sectors: HeatmapSector[]) => (
-      <div style={{
-        flex: 1, display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0,
-      }}>
-        {sectors.map((sector, i) => (
-          <React.Fragment key={sector.name}>
-            {renderSectorCells(sector)}
-            {i < sectors.length - 1 && (
-              <div style={{ height: 1, background: 'var(--border)', opacity: 0.6 }} />
-            )}
-          </React.Fragment>
-        ))}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0 }}>
+        {sectors.map((sector) => renderSectorGroup(sector))}
       </div>
     );
 
     return (
-      <div style={{ flex: 1, display: 'flex', gap: 12 }}>
+      <div style={{ flex: 1, display: 'flex', gap: 16, flexDirection: populated.length === 0 ? 'column' : 'row' }}>
         {loading && data.length === 0 ? (
-          <>
+          <div style={{ display: 'flex', gap: 16, width: '100%' }}>
             {[0, 1].map((col) => (
-              <div key={col} style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <div key={i} style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
-                    {Array.from({ length: 10 }).map((_, j) => (
-                      <div key={j} style={{
-                        flex: j < 3 ? '2.2 0 80px' : j < 6 ? '1.6 0 64px' : '1.1 0 52px',
-                        height: j < 3 ? 60 : j < 6 ? 50 : 42,
-                        background: 'var(--muted)', borderRadius: 5,
-                        animation: 'hm-pulse 1.5s ease infinite',
-                      }} />
-                    ))}
+              <div key={col} style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i}>
+                    <div style={{ height: 12, width: 80, background: 'var(--muted)', borderRadius: 3, marginBottom: 5, animation: 'hm-pulse 1.5s ease infinite' }} />
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, alignContent: 'flex-start' }}>
+                      {Array.from({ length: 10 }).map((_, j) => (
+                        <div key={j} style={{
+                          flex: j < 3 ? '2.2 0 80px' : j < 6 ? '1.6 0 64px' : '1.1 0 52px',
+                          height: j < 3 ? 60 : j < 6 ? 50 : 42,
+                          background: 'var(--muted)', borderRadius: 5,
+                          animation: 'hm-pulse 1.5s ease infinite',
+                        }} />
+                      ))}
+                    </div>
                   </div>
                 ))}
               </div>
             ))}
-          </>
+          </div>
+        ) : populated.length === 0 ? (
+          <div style={{
+            flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            padding: 40, border: '1px dashed var(--border)', borderRadius: 8, background: 'var(--card)',
+            color: 'var(--muted-foreground)', textAlign: 'center', gap: 10
+          }}>
+            <p style={{ fontSize: 13, fontWeight: 600 }}>No Heatmap Data Available</p>
+            <p style={{ fontSize: 11, maxWidth: 360 }}>
+              {error ? `Failed to load: ${error.message}` : 'All sectors are hidden or no symbols were returned by the gateway.'}
+            </p>
+            <button
+              onClick={refresh}
+              style={{
+                fontSize: 10, fontWeight: 600, padding: '6px 12px', borderRadius: 4,
+                background: 'var(--primary)', color: 'var(--primary-foreground)',
+                border: 'none', cursor: 'pointer', marginTop: 8
+              }}
+            >
+              Retry Connection
+            </button>
+          </div>
         ) : (
           <>
             {col1.length > 0 && renderColumn(col1)}

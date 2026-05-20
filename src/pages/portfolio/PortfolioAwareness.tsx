@@ -1,9 +1,15 @@
 /**
  * PortfolioAwareness — institutional reflective workspace.
  *
- * P0 shell: route, page chrome, AwarenessHero. Future phases add Driver
- * Decomposition, Causal Timeline, Emerging Risks, Relationship Shifts,
- * Historical Context, Narrative & Exposure, and Monitor Next.
+ * Bloomberg-PORT-inspired layout. Sections in vertical order:
+ *
+ *   1. Hero          (sparkline + KPI strip + chips)
+ *   2. ReturnDecomp  (sector donut + Top/Bottom contributors)
+ *   3. RiskDecomp    (Risk KPIs + Risk-by-Sector + Per-holding stress + Macro)
+ *   4. CausalTimeline
+ *   5. HistoricalScenarios (analog grid)
+ *   6. RelationshipShifts
+ *   7. Disclaimer
  *
  * Reachable only via the subtle "Portfolio Awareness →" entry button in
  * `PortfolioOverview` when the feature flag is enabled. Not a sidebar item.
@@ -18,19 +24,16 @@ import { usePortfolioAgentOutputs } from '../../hooks/useAgentIntelligence';
 import {
   useHistoricalAnalog,
   usePortfolioVulnerability,
-  useNarrativeExposure,
   useReasoningOutputs,
 } from '../../hooks/useAgentReasoning';
+import { useSectorMetadata } from '../../hooks/useSectorMetadata';
 import { DEFAULT_BENCHMARK_ID } from '../../lib/portfolio/benchmarks';
 import { isAwarenessWorkspaceEnabled } from '../../lib/portfolio/awarenessFlag';
 import { AwarenessHero } from '../../components/portfolio/awareness/AwarenessHero';
-import { DriverDecomposition } from '../../components/portfolio/awareness/DriverDecomposition';
 import { ReturnDecomposition } from '../../components/portfolio/awareness/ReturnDecomposition';
-import { useSectorMetadata } from '../../hooks/useSectorMetadata';
-import { EmergingRiskCluster } from '../../components/portfolio/awareness/EmergingRiskCluster';
+import { RiskDecomposition } from '../../components/portfolio/awareness/RiskDecomposition';
+import { HistoricalScenarios } from '../../components/portfolio/awareness/HistoricalScenarios';
 import { RelationshipShifts } from '../../components/portfolio/awareness/RelationshipShifts';
-import { HistoricalAnalogContext } from '../../components/portfolio/awareness/HistoricalAnalogContext';
-import { NarrativeAndExposureSection } from '../../components/portfolio/awareness/NarrativeAndExposureSection';
 import { CausalTimeline } from '../../components/portfolio/awareness/CausalTimeline';
 import { Disclaimer } from '../../components/quant/Disclaimer';
 import { logPageView, logOpen } from '../../lib/telemetry';
@@ -70,10 +73,7 @@ export const PortfolioAwareness: React.FC = () => {
   const { data: vulnerability, loading: vulnerabilityLoading } =
     usePortfolioVulnerability(vulnerabilityHoldings, portfolio?.id);
 
-  const { data: narrativeExposure, loading: narrativeLoading } =
-    useNarrativeExposure(symbols, effectiveWeights);
-
-  const { data: analog, loading: analogLoading } = useHistoricalAnalog({ top_k: 3 });
+  const { data: analog, loading: analogLoading } = useHistoricalAnalog({ top_k: 5 });
 
   const { data: reasoningOutputs } = useReasoningOutputs();
 
@@ -178,14 +178,15 @@ export const PortfolioAwareness: React.FC = () => {
         loadingSectors={sectorLoading}
       />
 
-      {/* Drivers (legacy lens view) kept temporarily for the by-region / by-asset / by-narrative lenses that the Bloomberg-style ReturnDecomposition does not yet cover. Will be folded in during the next pass. */}
-      <DriverDecomposition
+      <RiskDecomposition
         holdings={portfolioHoldings}
         effectiveWeights={effectiveWeights}
         holdingCurves={holdingCurves}
-        narrativeExposure={narrativeExposure}
-        totalReturn={totalReturn}
-        periodLabel="1Y"
+        sectorBySymbol={sectorBySymbol}
+        vulnerability={vulnerability}
+        vulnerabilityLoading={vulnerabilityLoading}
+        annVol={annVol}
+        maxDrawdown={maxDrawdown}
       />
 
       <CausalTimeline
@@ -193,28 +194,10 @@ export const PortfolioAwareness: React.FC = () => {
         reasoningOutputs={reasoningOutputs ?? []}
       />
 
-      <EmergingRiskCluster
-        vulnerability={vulnerability}
-        vulnerabilityLoading={vulnerabilityLoading}
-        portfolioObservations={portfolioAgentOutputs ?? []}
-        holdings={portfolioHoldings}
-        effectiveWeights={effectiveWeights}
-        holdingsCount={holdingsCount}
-        holdingCurves={holdingCurves}
-      />
+      <HistoricalScenarios analog={analog} loading={analogLoading} />
 
       <RelationshipShifts
         portfolioObservations={portfolioAgentOutputs ?? []}
-      />
-
-      <HistoricalAnalogContext
-        analog={analog}
-        loading={analogLoading}
-      />
-
-      <NarrativeAndExposureSection
-        result={narrativeExposure}
-        loading={narrativeLoading}
       />
 
       <div style={{ maxWidth: 1180, margin: '40px auto 0', padding: '0 32px' }}>

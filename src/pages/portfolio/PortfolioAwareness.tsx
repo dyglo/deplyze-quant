@@ -19,6 +19,7 @@ import {
   useHistoricalAnalog,
   usePortfolioVulnerability,
   useNarrativeExposure,
+  useReasoningOutputs,
 } from '../../hooks/useAgentReasoning';
 import { DEFAULT_BENCHMARK_ID } from '../../lib/portfolio/benchmarks';
 import { isAwarenessWorkspaceEnabled } from '../../lib/portfolio/awarenessFlag';
@@ -28,6 +29,7 @@ import { EmergingRiskCluster } from '../../components/portfolio/awareness/Emergi
 import { RelationshipShifts } from '../../components/portfolio/awareness/RelationshipShifts';
 import { HistoricalAnalogContext } from '../../components/portfolio/awareness/HistoricalAnalogContext';
 import { NarrativeAndExposureSection } from '../../components/portfolio/awareness/NarrativeAndExposureSection';
+import { CausalTimeline } from '../../components/portfolio/awareness/CausalTimeline';
 import { Disclaimer } from '../../components/quant/Disclaimer';
 import { logPageView, logOpen } from '../../lib/telemetry';
 
@@ -67,6 +69,8 @@ export const PortfolioAwareness: React.FC = () => {
     useNarrativeExposure(symbols, effectiveWeights);
 
   const { data: analog, loading: analogLoading } = useHistoricalAnalog({ top_k: 3 });
+
+  const { data: reasoningOutputs } = useReasoningOutputs();
 
   const holdingsCount = portfolioHoldings.length;
 
@@ -154,6 +158,11 @@ export const PortfolioAwareness: React.FC = () => {
         narrativeExposure={narrativeExposure}
         totalReturn={totalReturn}
         periodLabel="1Y"
+      />
+
+      <CausalTimeline
+        portfolioObservations={portfolioAgentOutputs ?? []}
+        reasoningOutputs={reasoningOutputs ?? []}
       />
 
       <EmergingRiskCluster

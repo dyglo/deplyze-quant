@@ -20,21 +20,17 @@ import { useParams, useNavigate, Navigate } from 'react-router-dom';
 import { ArrowLeft, Sparkles } from 'lucide-react';
 import { usePortfolioWorkspace } from '../../hooks/usePortfolioWorkspace';
 import { usePortfolioPerformance } from '../../hooks/usePortfolioPerformance';
-import { usePortfolioAgentOutputs } from '../../hooks/useAgentIntelligence';
-import {
-  useHistoricalAnalog,
-  usePortfolioVulnerability,
-  useReasoningOutputs,
-} from '../../hooks/useAgentReasoning';
+import { usePortfolioVulnerability } from '../../hooks/useAgentReasoning';
 import { useSectorMetadata } from '../../hooks/useSectorMetadata';
 import { DEFAULT_BENCHMARK_ID } from '../../lib/portfolio/benchmarks';
 import { isAwarenessWorkspaceEnabled } from '../../lib/portfolio/awarenessFlag';
+import { logReturns } from '../../lib/portfolio/holdingAnalytics';
 import { AwarenessHero } from '../../components/portfolio/awareness/AwarenessHero';
 import { ReturnDecomposition } from '../../components/portfolio/awareness/ReturnDecomposition';
 import { RiskDecomposition } from '../../components/portfolio/awareness/RiskDecomposition';
-import { HistoricalScenarios } from '../../components/portfolio/awareness/HistoricalScenarios';
-import { RelationshipShifts } from '../../components/portfolio/awareness/RelationshipShifts';
-import { CausalTimeline } from '../../components/portfolio/awareness/CausalTimeline';
+import { PositionActivity } from '../../components/portfolio/awareness/PositionActivity';
+import { PerformanceDistribution } from '../../components/portfolio/awareness/PerformanceDistribution';
+import { CorrelationProfile } from '../../components/portfolio/awareness/CorrelationProfile';
 import { Disclaimer } from '../../components/quant/Disclaimer';
 import { logPageView, logOpen } from '../../lib/telemetry';
 
@@ -60,7 +56,6 @@ export const PortfolioAwareness: React.FC = () => {
     annVol, sharpe, maxDrawdown, performanceSeries,
   } = usePortfolioPerformance(symbols, effectiveWeights, benchmarkId, 252);
 
-  const { data: portfolioAgentOutputs } = usePortfolioAgentOutputs(portfolio?.id ?? null, { days: 7, limit: 50 });
 
   const vulnerabilityHoldings = useMemo(
     () => portfolioHoldings.map(h => ({
@@ -73,11 +68,15 @@ export const PortfolioAwareness: React.FC = () => {
   const { data: vulnerability, loading: vulnerabilityLoading } =
     usePortfolioVulnerability(vulnerabilityHoldings, portfolio?.id);
 
-  const { data: analog, loading: analogLoading } = useHistoricalAnalog({ top_k: 5 });
-
-  const { data: reasoningOutputs } = useReasoningOutputs();
-
   const { bySymbol: sectorBySymbol, loading: sectorLoading } = useSectorMetadata(symbols);
+
+  /** Benchmark log-return series, derived from the rebased performanceSeries
+   *  produced by usePortfolioPerformance. Re-used by PositionActivity,
+   *  PerformanceDistribution, and CorrelationProfile so we don't refetch. */
+  const benchLogReturns = useMemo(() => {
+    const benchValues = performanceSeries.map(p => p.benchmark).filter(v => v > 0 && isFinite(v));
+    return logReturns(benchValues);
+  }, [performanceSeries]);
 
   const holdingsCount = portfolioHoldings.length;
 
@@ -189,15 +188,29 @@ export const PortfolioAwareness: React.FC = () => {
         maxDrawdown={maxDrawdown}
       />
 
-      <CausalTimeline
-        portfolioObservations={portfolioAgentOutputs ?? []}
-        reasoningOutputs={reasoningOutputs ?? []}
+      <PositionActivity
+        holdings={portfolioHoldings}
+        effectiveWeights={effectiveWeights}
+        holdingCurves={holdingCurves}
+        benchLogReturns={benchLogReturns}
+        benchmarkId={portfolio.benchmarkId}
       />
 
-      <HistoricalScenarios analog={analog} loading={analogLoading} />
+      <PerformanceDistribution
+        holdings={portfolioHoldings}
+        effectiveWeights={effectiveWeights}
+        holdingCurves={holdingCurves}
+        sectorBySymbol={sectorBySymbol}
+        benchLogReturns={benchLogReturns}
+        totalPortfolioReturn={totalReturn}
+      />
 
-      <RelationshipShifts
-        portfolioObservations={portfolioAgentOutputs ?? []}
+      <CorrelationProfile
+        holdings={portfolioHoldings}
+        effectiveWeights={effectiveWeights}
+        holdingCurves={holdingCurves}
+        benchLogReturns={benchLogReturns}
+        benchmarkId={portfolio.benchmarkId}
       />
 
       <div style={{ maxWidth: 1180, margin: '40px auto 0', padding: '0 32px' }}>

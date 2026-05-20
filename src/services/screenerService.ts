@@ -144,6 +144,54 @@ export const HEATMAP_SECTORS: { name: string; symbols: string[]; weights: Record
   },
 ];
 
+// Extended heatmap universe — equity + FX + crypto + commodities + ETFs
+export const HEATMAP_SECTORS_EXTENDED: typeof HEATMAP_SECTORS = [
+  ...HEATMAP_SECTORS,
+  {
+    name: 'ETFs',
+    symbols: ['SPY', 'QQQ', 'IWM', 'EFA', 'EEM', 'TLT', 'GLD', 'HYG', 'LQD', 'XLF', 'XLK', 'XLE'],
+    weights: { SPY: 'xl', QQQ: 'xl', IWM: 'lg', EFA: 'lg', EEM: 'md', TLT: 'md', GLD: 'md', HYG: 'sm', LQD: 'sm', XLF: 'sm', XLK: 'sm', XLE: 'sm' },
+  },
+  {
+    name: 'FX',
+    symbols: ['EUR/USD', 'USD/JPY', 'GBP/USD', 'AUD/USD', 'USD/CHF', 'USD/CAD', 'NZD/USD', 'USD/MXN'],
+    weights: { 'EUR/USD': 'xl', 'USD/JPY': 'xl', 'GBP/USD': 'lg', 'AUD/USD': 'md', 'USD/CHF': 'md', 'USD/CAD': 'md', 'NZD/USD': 'sm', 'USD/MXN': 'sm' },
+  },
+  {
+    name: 'Crypto',
+    symbols: ['BTC/USD', 'ETH/USD', 'SOL/USD', 'XRP/USD', 'ADA/USD', 'AVAX/USD', 'DOGE/USD'],
+    weights: { 'BTC/USD': 'xl', 'ETH/USD': 'xl', 'SOL/USD': 'lg', 'XRP/USD': 'md', 'ADA/USD': 'sm', 'AVAX/USD': 'sm', 'DOGE/USD': 'sm' },
+  },
+  {
+    name: 'Commodities',
+    symbols: ['XAU/USD', 'XAG/USD', 'WTI/USD', 'BCO/USD', 'NG/USD', 'HG/USD'],
+    weights: { 'XAU/USD': 'xl', 'XAG/USD': 'lg', 'WTI/USD': 'lg', 'BCO/USD': 'md', 'NG/USD': 'sm', 'HG/USD': 'sm' },
+  },
+];
+
+export async function fetchExtendedHeatmapData(): Promise<HeatmapSector[]> {
+  const allSymbols = HEATMAP_SECTORS_EXTENDED.flatMap((s) => s.symbols);
+  const rows = await fetchQuotes(allSymbols);
+  const rowMap = new Map(rows.filter((r) => r.ok && r.data).map((r) => [r.symbol, r.data!]));
+
+  return HEATMAP_SECTORS_EXTENDED.map((sector) => {
+    const cells: HeatmapCell[] = sector.symbols
+      .filter((sym) => rowMap.has(sym))
+      .map((sym) => ({
+        symbol: sym,
+        name: sym,
+        sector: sector.name,
+        changePercent: rowMap.get(sym)!.changePercent ?? 0,
+        price: rowMap.get(sym)!.price,
+        weight: sector.weights[sym] ?? 'sm',
+      }));
+    const avgChange = cells.length
+      ? cells.reduce((s, c) => s + c.changePercent, 0) / cells.length
+      : 0;
+    return { name: sector.name, avgChange, cells };
+  });
+}
+
 // Index symbols for market pulse strip
 export const PULSE_SYMBOLS = [
   { symbol: 'SPY',   label: 'SPY' },

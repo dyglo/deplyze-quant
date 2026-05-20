@@ -12,7 +12,7 @@
  */
 
 import React, { useMemo, useState } from 'react';
-import { ChevronUp, ChevronDown, ArrowUpDown, ExternalLink } from 'lucide-react';
+import { ChevronUp, ChevronDown, ChevronRight, ArrowUpDown, ExternalLink } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import type { Holding } from '../../../lib/portfolio/schemas';
 import { computePositionMetrics, type PositionMetrics } from '../../../lib/portfolio/holdingAnalytics';
@@ -311,6 +311,11 @@ export const PositionActivity: React.FC<Props> = ({
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr>
+                    <th style={{
+                      padding: '7px 4px 7px 10px',
+                      borderBottom: '1px solid var(--border)',
+                      background: 'var(--muted)', width: 22,
+                    }} />
                     <HeaderCell label="Symbol" sortKey="symbol" align="left" active={sortKey} dir={sortDir} onSort={onSort} />
                     <HeaderCell label="Weight" sortKey="weight" active={sortKey} dir={sortDir} onSort={onSort} />
                     <HeaderCell label="5D" sortKey="ret5" active={sortKey} dir={sortDir} onSort={onSort} />
@@ -329,11 +334,39 @@ export const PositionActivity: React.FC<Props> = ({
                       <React.Fragment key={r.symbol}>
                         <tr
                           onClick={() => setExpandedSymbol(prev => prev === r.symbol ? null : r.symbol)}
+                          role="button"
+                          aria-expanded={isExpanded}
+                          tabIndex={0}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              setExpandedSymbol(prev => prev === r.symbol ? null : r.symbol);
+                            }
+                          }}
                           style={{
                             cursor: 'pointer',
-                            background: isExpanded ? 'color-mix(in oklab, var(--primary) 5%, transparent)' : undefined,
+                            background: isExpanded
+                              ? 'color-mix(in oklab, var(--primary) 6%, transparent)'
+                              : undefined,
+                            transition: 'background 120ms',
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!isExpanded) (e.currentTarget as HTMLTableRowElement).style.background = 'var(--muted)';
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!isExpanded) (e.currentTarget as HTMLTableRowElement).style.background = '';
                           }}
                         >
+                          <td style={{
+                            padding: '6px 4px 6px 10px',
+                            borderBottom: '1px solid var(--border)',
+                            color: isExpanded ? 'var(--primary)' : 'var(--muted-foreground)',
+                            width: 22,
+                          }}>
+                            {isExpanded
+                              ? <ChevronDown size={12} strokeWidth={2.5} />
+                              : <ChevronRight size={12} strokeWidth={2} />}
+                          </td>
                           <BodyCell align="left" bold>{r.symbol}</BodyCell>
                           <BodyCell color="var(--muted-foreground)">{fmtPct(r.weight)}</BodyCell>
                           <BodyCell color={returnColor(r.ret5)} weight={600}>{fmtPctSigned(r.ret5)}</BodyCell>
@@ -346,7 +379,7 @@ export const PositionActivity: React.FC<Props> = ({
                         </tr>
                         {isExpanded && (
                           <tr style={{ background: 'color-mix(in oklab, var(--primary) 3%, transparent)' }}>
-                            <td colSpan={9} style={{
+                            <td colSpan={10} style={{
                               padding: '14px 16px', borderBottom: '1px solid var(--border)',
                             }}>
                               <PositionDetail
@@ -363,6 +396,7 @@ export const PositionActivity: React.FC<Props> = ({
                 </tbody>
                 <tfoot>
                   <tr style={{ background: 'var(--muted)' }}>
+                    <td style={{ padding: '6px 4px 6px 10px', borderBottom: '1px solid var(--border)' }} />
                     <BodyCell align="left" bold>Portfolio</BodyCell>
                     <BodyCell bold>{fmtPct(totalWeight)}</BodyCell>
                     <BodyCell color="var(--muted-foreground)">—</BodyCell>

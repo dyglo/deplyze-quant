@@ -207,7 +207,6 @@ export const AwarenessHero: React.FC<AwarenessHeroProps> = ({
                 regimeLabel,
                 riskLevel,
               })}
-              label="Deplyze observes"
             />
           </div>
         )}

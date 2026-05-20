@@ -171,7 +171,7 @@ export const ReturnDecomposition: React.FC<Props> = ({
         .filter(h => (h.resolvedSector ?? h.sector) === activeSector)
         .map(h => h.symbol),
     );
-    return allHoldingRows.filter(r => sectorSymbols.has(r.symbol));
+    return allHoldingRows.filter(r => sectorSymbols.has(r.key));
   }, [allHoldingRows, activeSector, resolvedHoldings]);
 
   const positives = useMemo(

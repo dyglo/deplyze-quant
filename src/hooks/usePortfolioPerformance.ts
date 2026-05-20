@@ -3,7 +3,7 @@
  * then runs the quant engine to produce portfolio visualizations.
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { fetchOHLCV } from '../services/marketService';
 import {
   logReturns,
@@ -39,22 +39,27 @@ export interface HoldingCurve {
   totalReturn: number;   // fraction — for sorting/coloring
 }
 
-export interface PortfolioPerformanceResult {
+// Internal state — no functions stored in state
+interface PerfState {
   performanceSeries: PortfolioPerformanceSeries[];
   volSeries: PortfolioVolSeries[];
   drawdownSeries: DrawdownSeries[];
-  holdingCurves: HoldingCurve[];   // per-holding rebased equity curves
+  holdingCurves: HoldingCurve[];
   maxDrawdown: number;
-  annReturn: number;        // fraction
-  annVol: number;           // fraction
-  totalReturn: number;      // fraction
+  annReturn: number;
+  annVol: number;
+  totalReturn: number;
   sharpe: number;
   benchmarkTotalReturn: number;
   loading: boolean;
   error: string | null;
 }
 
-const EMPTY: PortfolioPerformanceResult = {
+export interface PortfolioPerformanceResult extends PerfState {
+  retry: () => void;
+}
+
+const EMPTY: PerfState = {
   performanceSeries: [],
   volSeries: [],
   drawdownSeries: [],
@@ -89,8 +94,12 @@ export function usePortfolioPerformance(
   benchmarkId: string,
   windowDays = 252,
 ): PortfolioPerformanceResult {
-  const [result, setResult] = useState<PortfolioPerformanceResult>(EMPTY);
+  const [result, setResult] = useState<PerfState>(EMPTY);
+  const [retryCount, setRetryCount] = useState(0);
   const abortRef = useRef<boolean>(false);
+
+  // Stable retry — never stored in state, merged at return time
+  const retry = useCallback(() => setRetryCount(c => c + 1), []);
 
   useEffect(() => {
     if (symbols.length === 0) {
@@ -121,7 +130,21 @@ export function usePortfolioPerformance(
 
         const validSymbols = symbols.filter(s => barMap[s]);
         if (validSymbols.length === 0) {
-          setResult({ ...EMPTY, error: 'Insufficient historical data for holdings.' });
+          // Check if all requests were rejected (API/gateway error) vs providers returning empty data
+          const allRejected = responses.every(r => r.status === 'rejected');
+          if (allRejected) {
+            const firstReason = (responses[0] as PromiseRejectedResult).reason;
+            const msg = firstReason instanceof Error ? firstReason.message : String(firstReason);
+            const is404 = msg.includes('404');
+            setResult({
+              ...EMPTY,
+              error: is404
+                ? 'Market data API not found (404). The gateway may need to be deployed — run: npm run dev:all'
+                : `Market data unavailable: ${msg}`,
+            });
+          } else {
+            setResult({ ...EMPTY, error: 'No historical price data found for these holdings.' });
+          }
           return;
         }
 
@@ -248,7 +271,9 @@ export function usePortfolioPerformance(
 
     run();
     return () => { abortRef.current = true; };
-  }, [symbols.join(','), JSON.stringify(weights), benchmarkId, windowDays]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [symbols.join(','), JSON.stringify(weights), benchmarkId, windowDays, retryCount]);
 
-  return result;
+  // retry is stable (useCallback with no deps) — merged here, never stored in state
+  return { ...result, retry };
 }

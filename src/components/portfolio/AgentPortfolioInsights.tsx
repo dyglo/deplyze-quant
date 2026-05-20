@@ -43,10 +43,13 @@ const InsightSection: React.FC<{
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
+export type AgentIntelligenceFilter = 'all' | 'risk' | 'regime' | 'macro';
+
 export const AgentPortfolioInsights: React.FC<{
   portfolioId: string | null | undefined;
   onSymbolClick?: (symbol: string) => void;
-}> = ({ portfolioId, onSymbolClick }) => {
+  filter?: AgentIntelligenceFilter;
+}> = ({ portfolioId, onSymbolClick, filter = 'all' }) => {
   const { data: outputs, loading } = usePortfolioAgentOutputs(portfolioId);
   const { data: regimeOutput, regimeLabel, loading: regimeLoading } = useCompositeRegime();
   const { data: riskOutput, riskLevel, loading: riskLoading } = useRiskEnvironment();
@@ -91,7 +94,7 @@ export const AgentPortfolioInsights: React.FC<{
       </div>
 
       {/* Risk observations */}
-      {(riskObs.length > 0 || riskOutput) && (
+      {(filter === 'all' || filter === 'risk') && (riskObs.length > 0 || riskOutput) && (
         <InsightSection icon={<ShieldAlert size={13} />} title="Risk Environment">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {riskOutput && !riskObs.some(o => o.agent_id === 'risk_agent') && (
@@ -114,7 +117,7 @@ export const AgentPortfolioInsights: React.FC<{
       )}
 
       {/* Regime observations */}
-      {regimeObs.length > 0 && (
+      {(filter === 'all' || filter === 'regime') && regimeObs.length > 0 && (
         <InsightSection icon={<Activity size={13} />} title="Regime Intelligence">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {regimeObs.map(o => (
@@ -130,7 +133,7 @@ export const AgentPortfolioInsights: React.FC<{
       )}
 
       {/* Macro observations */}
-      {macroObs.length > 0 && (
+      {(filter === 'all' || filter === 'macro') && macroObs.length > 0 && (
         <InsightSection icon={<Brain size={13} />} title="Macro Intelligence">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {macroObs.map(o => (
@@ -145,8 +148,8 @@ export const AgentPortfolioInsights: React.FC<{
         </InsightSection>
       )}
 
-      {/* Other domain observations */}
-      {otherObs.length > 0 && (
+      {/* Other domain observations — only in "all" view */}
+      {filter === 'all' && otherObs.length > 0 && (
         <InsightSection icon={<Activity size={13} />} title="Additional Intelligence">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {otherObs.map(o => (

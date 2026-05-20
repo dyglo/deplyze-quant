@@ -202,7 +202,7 @@ router.get('/ohlcv/:symbol(*)', async (req, res, next) => {
         return result;
       }
 
-      // ── Equities / ETFs / Indices: EODHD → Twelve Data → FMP ────────────
+      // ── Equities / ETFs / Indices: EODHD → Twelve Data → FMP → Polygon ──
       const { result } = await withFallback(ohlcvChain<OHLCVBar[]>({
         eodhd: isDaily ? async () => {
           const rawBars = await eodhd.getHistoricalBars(symbol, { from: pastDate, to: today });
@@ -227,6 +227,24 @@ router.get('/ohlcv/:symbol(*)', async (req, res, next) => {
             ts: Date.parse(b.date),
             open: b.open, high: b.high, low: b.low, close: b.adjClose ?? b.close, volume: b.volume,
           }));
+        } : undefined,
+        polygon: isDaily && !isCrossAsset ? async () => {
+          const aggs = await polygon.getAggs({
+            symbol,
+            multiplier: 1,
+            timespan: 'day',
+            from: pastDate,
+            to: today,
+            adjusted: true,
+            limit: outputsize,
+          });
+          if (!aggs.length) throw new Error('Polygon: empty response');
+          const bars = aggs.map((a) => ({
+            ts: a.t,
+            open: a.o, high: a.h, low: a.l, close: a.c, volume: a.v,
+          }));
+          if (bars.length < SPARSE_MIN) throw new Error(`Polygon: sparse result (${bars.length}/${outputsize} bars)`);
+          return bars;
         } : undefined,
       }));
       return result;

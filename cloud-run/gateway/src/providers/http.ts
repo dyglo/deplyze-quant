@@ -27,8 +27,10 @@ export async function getJson<T>(
   });
 
   if (!res.ok) {
+    // Read body once as text, then attempt JSON parse — avoids "Body has already been read"
+    const text = await res.text();
     let body: unknown;
-    try { body = await res.json(); } catch { body = await res.text(); }
+    try { body = JSON.parse(text); } catch { body = text; }
     throw new ProviderError(provider, res.status, res.statusText, body);
   }
 

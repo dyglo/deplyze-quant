@@ -141,13 +141,15 @@ export function ohlcvChain<T>(providers: {
   twelve_data?: ProviderFn<T>;
   alpha_vantage?: ProviderFn<T>;
   fmp?: ProviderFn<T>;
+  polygon?: ProviderFn<T>;
 }): FallbackChain<T> {
   return {
     providers: [
-      ...(providers.eodhd       ? [{ id: 'eodhd',        fn: providers.eodhd }]       : []),
-      ...(providers.twelve_data ? [{ id: 'twelve_data',  fn: providers.twelve_data }] : []),
-      ...(providers.fmp         ? [{ id: 'fmp',          fn: providers.fmp }]         : []),
-      ...(providers.alpha_vantage?[{ id: 'alpha_vantage',fn: providers.alpha_vantage }]: []),
+      ...(providers.eodhd        ? [{ id: 'eodhd',         fn: providers.eodhd }]        : []),
+      ...(providers.twelve_data  ? [{ id: 'twelve_data',   fn: providers.twelve_data }]  : []),
+      ...(providers.fmp          ? [{ id: 'fmp',           fn: providers.fmp }]          : []),
+      ...(providers.alpha_vantage? [{ id: 'alpha_vantage', fn: providers.alpha_vantage }]: []),
+      ...(providers.polygon      ? [{ id: 'polygon',       fn: providers.polygon }]      : []),
     ],
   };
 }

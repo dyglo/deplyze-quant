@@ -16,6 +16,7 @@
 import { auth } from '../lib/firebase';
 
 const PREFIX = '/api/v1';
+const FETCH_TIMEOUT_MS = 30_000;
 
 export class GatewayError extends Error {
   constructor(public status: number, message: string, public body?: unknown) {
@@ -152,10 +153,24 @@ export async function gatewayGetMeta<T>(
 
   const exec = (async (): Promise<T> => {
     const headers = await authHeader();
-    const res = await fetch(`${PREFIX}${path}${buildQuery(params)}`, { headers });
-    const data = await handle<T>(res);
-    cache.set(key, { data, fetchedAt: Date.now(), ttlMs });
-    return data;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    try {
+      const res = await fetch(`${PREFIX}${path}${buildQuery(params)}`, {
+        headers,
+        signal: controller.signal,
+      });
+      const data = await handle<T>(res);
+      cache.set(key, { data, fetchedAt: Date.now(), ttlMs });
+      return data;
+    } catch (e) {
+      if (e instanceof Error && e.name === 'AbortError') {
+        throw new Error('Request timed out. The server may be starting up — please try again.');
+      }
+      throw e;
+    } finally {
+      clearTimeout(timer);
+    }
   })();
 
   inflight.set(key, exec as Promise<unknown>);
@@ -178,22 +193,46 @@ export async function gatewayGetMeta<T>(
 
 export async function gatewayPost<T>(path: string, body: unknown): Promise<T> {
   const headers = await authHeader();
-  const res = await fetch(`${PREFIX}${path}`, {
-    method: 'POST',
-    headers: { ...headers, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  return handle<T>(res);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${PREFIX}${path}`, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    return handle<T>(res);
+  } catch (e) {
+    if (e instanceof Error && e.name === 'AbortError') {
+      throw new Error('Request timed out. The server may be starting up — please try again.');
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export async function gatewayPatch<T>(path: string, body: unknown): Promise<T> {
   const headers = await authHeader();
-  const res = await fetch(`${PREFIX}${path}`, {
-    method: 'PATCH',
-    headers: { ...headers, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  return handle<T>(res);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${PREFIX}${path}`, {
+      method: 'PATCH',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    return handle<T>(res);
+  } catch (e) {
+    if (e instanceof Error && e.name === 'AbortError') {
+      throw new Error('Request timed out. The server may be starting up — please try again.');
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /**

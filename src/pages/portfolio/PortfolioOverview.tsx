@@ -5,9 +5,9 @@ import {
   ComposedChart,
 } from 'recharts';
 import {
-  Briefcase, Plus, ChevronDown, TrendingUp, TrendingDown, Minus,
+  Briefcase, Plus, ChevronDown, TrendingUp,
   Activity, BarChart3, ShieldAlert, PieChart, AlertCircle, X, Check,
-  Loader2, LayoutDashboard,
+  Loader2, LayoutDashboard, Brain, RefreshCw,
 } from 'lucide-react';
 import { usePortfolioWorkspace } from '../../hooks/usePortfolioWorkspace';
 import { usePortfolioPerformance } from '../../hooks/usePortfolioPerformance';
@@ -15,7 +15,7 @@ import { usePortfolioIntelligence } from '../../hooks/usePortfolioIntelligence';
 import { DEFAULT_BENCHMARK_ID, BENCHMARK_REGISTRY } from '../../lib/portfolio/benchmarks';
 import type { Portfolio, Holding } from '../../lib/portfolio/schemas';
 import { PortfolioIntelligencePanel } from '../../components/portfolio/PortfolioIntelligencePanel';
-import { AgentPortfolioInsights } from '../../components/portfolio/AgentPortfolioInsights';
+import { AgentPortfolioInsights, type AgentIntelligenceFilter } from '../../components/portfolio/AgentPortfolioInsights';
 
 // ─── Period options ────────────────────────────────────────────────────────
 
@@ -819,6 +819,113 @@ const NoPortfolioState: React.FC<{ onCreateNew: () => void }> = ({ onCreateNew }
   </div>
 );
 
+// ─── Intelligence filter tabs ─────────────────────────────────────────────────
+
+const INTEL_FILTERS: Array<{ id: AgentIntelligenceFilter | 'signals'; label: string; icon: React.ReactNode }> = [
+  { id: 'all',     label: 'All Intelligence',   icon: <Brain size={11} /> },
+  { id: 'risk',    label: 'Risk Environment',   icon: <ShieldAlert size={11} /> },
+  { id: 'regime',  label: 'Regime Intelligence', icon: <Activity size={11} /> },
+  { id: 'macro',   label: 'Macro Intelligence',  icon: <BarChart3 size={11} /> },
+  { id: 'signals', label: 'Portfolio Signals',   icon: <AlertCircle size={11} /> },
+];
+
+const IntelligenceModal: React.FC<{
+  portfolioId: string | null | undefined;
+  observations: import('../../hooks/usePortfolioIntelligence').CombinedObservation[];
+  onAcknowledge: (id: string) => void;
+  onClose: () => void;
+}> = ({ portfolioId, observations, onAcknowledge, onClose }) => {
+  const [activeFilter, setActiveFilter] = useState<AgentIntelligenceFilter | 'signals'>('all');
+
+  return (
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 200,
+        background: 'rgba(0,0,0,0.45)',
+        display: 'flex', justifyContent: 'flex-end',
+      }}
+      onClick={onClose}
+    >
+      <div
+        style={{
+          width: '100%', maxWidth: 480, height: '100%',
+          background: 'var(--card)', borderLeft: '1px solid var(--border)',
+          display: 'flex', flexDirection: 'column',
+          overflowY: 'auto',
+        }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '14px 16px', borderBottom: '1px solid var(--border)',
+          flexShrink: 0,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Brain size={14} style={{ color: 'var(--primary)' }} />
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--foreground)', letterSpacing: '-0.01em' }}>
+              Portfolio Intelligence
+            </span>
+          </div>
+          <button
+            onClick={onClose}
+            style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--muted-foreground)', display: 'flex', padding: 4 }}
+          >
+            <X size={15} />
+          </button>
+        </div>
+
+        {/* Filter tabs */}
+        <div style={{
+          display: 'flex', gap: 4, padding: '10px 12px',
+          borderBottom: '1px solid var(--border)', flexWrap: 'wrap', flexShrink: 0,
+        }}>
+          {INTEL_FILTERS.map(f => (
+            <button
+              key={f.id}
+              onClick={() => setActiveFilter(f.id)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 5,
+                padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600,
+                border: `1px solid ${activeFilter === f.id ? 'var(--primary)' : 'var(--border)'}`,
+                background: activeFilter === f.id ? 'color-mix(in srgb, var(--primary) 12%, transparent)' : 'transparent',
+                color: activeFilter === f.id ? 'var(--primary)' : 'var(--muted-foreground)',
+                cursor: 'pointer',
+              }}
+            >
+              {f.icon}
+              {f.label}
+              {f.id === 'signals' && observations.length > 0 && (
+                <span style={{
+                  padding: '0 5px', borderRadius: 10, fontSize: 9, fontWeight: 800,
+                  background: 'var(--destructive)', color: 'white', marginLeft: 2,
+                }}>
+                  {observations.length}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* Content */}
+        <div style={{ padding: '14px 14px', display: 'flex', flexDirection: 'column', gap: 12, flex: 1, minHeight: 0 }}>
+          {activeFilter === 'signals' ? (
+            <PortfolioIntelligencePanel
+              observations={observations}
+              onAcknowledge={onAcknowledge}
+            />
+          ) : (
+            <AgentPortfolioInsights
+              portfolioId={portfolioId}
+              filter={activeFilter}
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export const PortfolioOverview: React.FC = () => {
@@ -831,6 +938,7 @@ export const PortfolioOverview: React.FC = () => {
 
   const [showCreate, setShowCreate] = useState(false);
   const [period, setPeriod] = useState<PeriodLabel>('1Y');
+  const [intelligenceOpen, setIntelligenceOpen] = useState(false);
 
   const symbols = useMemo(() => holdings.map(h => h.symbol), [holdings]);
   const benchmarkId = selectedPortfolio?.benchmarkId ?? DEFAULT_BENCHMARK_ID;
@@ -849,6 +957,7 @@ export const PortfolioOverview: React.FC = () => {
     benchmarkTotalReturn,
     loading: perfLoading,
     error: perfError,
+    retry: perfRetry,
   } = usePortfolioPerformance(symbols, effectiveWeights, benchmarkId, periodDays);
 
   const handleCreate = useCallback(async (name: string, bm: string) => {
@@ -939,6 +1048,29 @@ export const PortfolioOverview: React.FC = () => {
             onSelect={selectPortfolio}
             onCreateNew={() => setShowCreate(true)}
           />
+          {/* Intelligence button */}
+          <button
+            onClick={() => setIntelligenceOpen(true)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '5px 11px', borderRadius: 7,
+              border: '1px solid var(--border)', background: 'var(--card)',
+              color: observations.length > 0 ? 'var(--foreground)' : 'var(--muted-foreground)',
+              cursor: 'pointer', fontSize: 11, fontWeight: 600, position: 'relative',
+            }}
+            title="View portfolio intelligence"
+          >
+            <Brain size={12} style={{ color: 'var(--primary)' }} />
+            Intelligence
+            {observations.length > 0 && (
+              <span style={{
+                padding: '1px 5px', borderRadius: 8, fontSize: 9, fontWeight: 800,
+                background: 'var(--destructive)', color: 'white',
+              }}>
+                {observations.length}
+              </span>
+            )}
+          </button>
           <button
             onClick={() => setShowCreate(true)}
             style={{
@@ -952,9 +1084,6 @@ export const PortfolioOverview: React.FC = () => {
           </button>
         </div>
       </div>
-
-      <PortfolioIntelligencePanel observations={observations} onAcknowledge={acknowledge} />
-      <AgentPortfolioInsights portfolioId={selectedPortfolio?.id} />
 
       {!hasHoldings ? (
         <EmptyPortfolioState portfolioName={selectedPortfolio?.name ?? 'Portfolio'} />
@@ -989,17 +1118,11 @@ export const PortfolioOverview: React.FC = () => {
             </div>
           )}
 
-          {/* Loading/error states for performance */}
-          {(perfLoading || holdingsLoading) && !hasPerfData && (
+          {/* Loading state — only while computing, not once errored */}
+          {(perfLoading || holdingsLoading) && !hasPerfData && !perfError && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 16px', background: 'var(--muted)', borderRadius: 8, fontSize: 12, color: 'var(--muted-foreground)' }}>
               <Loader2 size={13} style={{ animation: 'spin 1s linear infinite', color: 'var(--primary)' }} />
               Computing portfolio performance from historical price data…
-            </div>
-          )}
-
-          {perfError && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 16px', background: 'color-mix(in srgb, var(--destructive) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--destructive) 25%, transparent)', borderRadius: 8, fontSize: 12, color: 'var(--destructive)' }}>
-              <AlertCircle size={13} /> {perfError}
             </div>
           )}
 
@@ -1032,9 +1155,28 @@ export const PortfolioOverview: React.FC = () => {
                     />
                   </LineChart>
                 </ResponsiveContainer>
+              ) : perfError ? (
+                <div style={{ height: 200, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+                  <AlertCircle size={18} style={{ color: 'var(--destructive)', opacity: 0.7 }} />
+                  <p style={{ fontSize: 12, color: 'var(--muted-foreground)', margin: 0, textAlign: 'center', maxWidth: 320, lineHeight: 1.5 }}>
+                    {perfError}
+                  </p>
+                  <button
+                    onClick={perfRetry}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 5,
+                      padding: '5px 12px', borderRadius: 6, fontSize: 11, fontWeight: 600,
+                      border: '1px solid var(--border)', background: 'var(--muted)',
+                      color: 'var(--foreground)', cursor: 'pointer',
+                    }}
+                  >
+                    <RefreshCw size={11} /> Retry
+                  </button>
+                </div>
               ) : (
-                <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <p style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>Loading performance data…</p>
+                <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                  <Loader2 size={14} style={{ color: 'var(--primary)', animation: 'spin 1s linear infinite' }} />
+                  <p style={{ fontSize: 12, color: 'var(--muted-foreground)', margin: 0 }}>Loading performance data…</p>
                 </div>
               )}
             </SectionCard>
@@ -1138,6 +1280,16 @@ export const PortfolioOverview: React.FC = () => {
       {/* Create modal */}
       {showCreate && (
         <CreatePortfolioModal onClose={() => setShowCreate(false)} onCreate={handleCreate} />
+      )}
+
+      {/* Intelligence panel */}
+      {intelligenceOpen && (
+        <IntelligenceModal
+          portfolioId={selectedPortfolio?.id}
+          observations={observations}
+          onAcknowledge={acknowledge}
+          onClose={() => setIntelligenceOpen(false)}
+        />
       )}
     </div>
   );

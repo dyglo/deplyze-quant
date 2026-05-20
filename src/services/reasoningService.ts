@@ -8,7 +8,7 @@
  *   GET  /v1/agents/narrative-exposure — narrative theme exposure by symbols
  */
 
-import { gatewayGet, gatewayPost } from './gatewayClient';
+import { gatewayGet, gatewayPost, GatewayError } from './gatewayClient';
 import type { AgentOutput } from '../types/agents';
 
 const REASONING_TTL = 8 * 60_000;   // 8 min
@@ -105,10 +105,16 @@ export async function fetchPortfolioVulnerability(
   portfolioId?: string,
 ): Promise<VulnerabilityResult | null> {
   if (!holdings.length) return null;
-  return gatewayPost<VulnerabilityResult>(
-    '/agents/vulnerability',
-    { holdings, portfolio_id: portfolioId ?? null },
-  );
+  try {
+    return await gatewayPost<VulnerabilityResult>(
+      '/agents/vulnerability',
+      { holdings, portfolio_id: portfolioId ?? null },
+    );
+  } catch (e) {
+    // 503 means the server has insufficient data to run the computation — not a hard error
+    if (e instanceof GatewayError && e.status === 503) return null;
+    throw e;
+  }
 }
 
 // ─── Narrative exposure ───────────────────────────────────────────────────────

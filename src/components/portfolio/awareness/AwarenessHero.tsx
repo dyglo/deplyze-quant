@@ -26,7 +26,58 @@ interface AwarenessHeroProps {
   portfolioName?: string;
   holdingsCount?: number;
   benchmarkId?: string;
+  /** Quantitative KPI block. Numbers are decimals (0.12 = 12%). */
+  metrics?: {
+    totalReturn?: number;
+    benchmarkTotalReturn?: number;
+    annVol?: number;
+    sharpe?: number;
+    maxDrawdown?: number;
+  };
 }
+
+function fmtPctSigned(v: number | undefined): string {
+  if (v == null || !isFinite(v)) return '—';
+  const s = (v * 100).toFixed(2);
+  return v >= 0 ? `+${s}%` : `${s}%`;
+}
+function fmtPct(v: number | undefined): string {
+  if (v == null || !isFinite(v)) return '—';
+  return `${(v * 100).toFixed(2)}%`;
+}
+function fmtNum(v: number | undefined): string {
+  if (v == null || !isFinite(v)) return '—';
+  return v.toFixed(2);
+}
+
+const Kpi: React.FC<{ label: string; value: string; tone?: 'pos' | 'neg' | 'neutral' | 'warn' }> = ({ label, value, tone = 'neutral' }) => {
+  const color =
+    tone === 'pos'  ? 'var(--chart-2)' :
+    tone === 'neg'  ? 'var(--destructive)' :
+    tone === 'warn' ? 'var(--chart-4)' :
+    'var(--foreground)';
+  return (
+    <div style={{
+      padding: '10px 14px',
+      borderRight: '1px solid var(--border)',
+      flex: '1 1 0',
+      minWidth: 0,
+    }}>
+      <p style={{
+        margin: 0, fontSize: 9, fontWeight: 700, letterSpacing: '0.1em',
+        textTransform: 'uppercase', color: 'var(--muted-foreground)',
+      }}>
+        {label}
+      </p>
+      <p style={{
+        margin: '4px 0 0', fontSize: 18, fontWeight: 600,
+        color, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.015em',
+      }}>
+        {value}
+      </p>
+    </div>
+  );
+};
 
 function asCompositeRegime(output: { evidence: Record<string, unknown> | null; confidence: number | null; generated_at: string; severity: AgentSeverity | null } | null): CompositeRegime | null {
   if (!output) return null;
@@ -74,6 +125,7 @@ export const AwarenessHero: React.FC<AwarenessHeroProps> = ({
   portfolioName,
   holdingsCount,
   benchmarkId,
+  metrics,
 }) => {
   const { data: regimeOutput, regimeLabel, loading: regimeLoading } = useCompositeRegime();
   const { data: riskOutput, riskLevel, loading: riskLoading } = useRiskEnvironment();
@@ -101,7 +153,7 @@ export const AwarenessHero: React.FC<AwarenessHeroProps> = ({
       style={{
         padding: '36px 32px 28px',
         borderBottom: '1px solid var(--border)',
-        background: 'linear-gradient(180deg, var(--card) 0%, var(--background) 100%)',
+        background: 'var(--background)',
       }}
     >
       <div style={{ maxWidth: 1180, margin: '0 auto' }}>
@@ -153,6 +205,44 @@ export const AwarenessHero: React.FC<AwarenessHeroProps> = ({
           )}
           {loading && <SystemAnalyzingState compact />}
         </div>
+
+        {/* Quantitative KPI strip */}
+        {metrics && (
+          <div
+            role="group"
+            aria-label="Portfolio metrics"
+            style={{
+              marginTop: 26,
+              display: 'flex', alignItems: 'stretch',
+              border: '1px solid var(--border)',
+              borderRadius: 10, background: 'var(--card)',
+              overflow: 'hidden',
+            }}
+          >
+            <Kpi
+              label="Total Return"
+              value={fmtPctSigned(metrics.totalReturn)}
+              tone={metrics.totalReturn == null ? 'neutral' : metrics.totalReturn >= 0 ? 'pos' : 'neg'}
+            />
+            {metrics.benchmarkTotalReturn != null && (
+              <Kpi
+                label={`vs ${benchmarkId ?? 'Benchmark'}`}
+                value={fmtPctSigned((metrics.totalReturn ?? 0) - metrics.benchmarkTotalReturn)}
+                tone={
+                  (metrics.totalReturn ?? 0) - metrics.benchmarkTotalReturn >= 0 ? 'pos' : 'neg'
+                }
+              />
+            )}
+            <Kpi label="Ann. Volatility" value={fmtPct(metrics.annVol)} tone="warn" />
+            <Kpi
+              label="Sharpe"
+              value={fmtNum(metrics.sharpe)}
+              tone={(metrics.sharpe ?? 0) >= 1 ? 'pos' : (metrics.sharpe ?? 0) >= 0.5 ? 'neutral' : 'neg'}
+            />
+            <Kpi label="Max Drawdown" value={fmtPctSigned(metrics.maxDrawdown)} tone="neg" />
+            <Kpi label="Holdings" value={String(holdingsCount ?? 0)} />
+          </div>
+        )}
 
         {freshness && (
           <p style={{

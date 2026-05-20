@@ -12,8 +12,16 @@ interface Props {
   loading: boolean;
 }
 
+function fmtWeightPct(v: number | null | undefined): string | null {
+  if (v == null) return null;
+  const n = Number(v);
+  if (!isFinite(n)) return null;
+  return `${(n * 100).toFixed(1)}%`;
+}
+
 export const NarrativeAndExposureSection: React.FC<Props> = ({ result, loading }) => {
   const top = result?.exposures?.[0] ?? null;
+  const topWeight = fmtWeightPct(top?.portfolio_weight);
   return (
     <section aria-label="Narrative theme exposure" style={{ padding: '0 32px', marginTop: 56 }}>
       <div style={{ maxWidth: 1180, margin: '0 auto' }}>
@@ -34,8 +42,10 @@ export const NarrativeAndExposureSection: React.FC<Props> = ({ result, loading }
             margin: '6px 0 0', fontSize: 12, lineHeight: 1.6,
             color: 'var(--muted-foreground)', maxWidth: 720,
           }}>
-            {top
-              ? `Dominant theme exposure is "${top.theme_label}" at ${(top.portfolio_weight * 100).toFixed(1)}% portfolio weight.`
+            {top && topWeight
+              ? `Dominant theme exposure is "${top.theme_label}" at ${topWeight} portfolio weight.`
+              : top
+              ? `Dominant theme exposure is "${top.theme_label}" — explicit portfolio weight is unavailable for this theme.`
               : 'Narrative theme exposure will appear once the V3P2 narrative pipeline has matched themes to holdings.'}
           </p>
         </header>

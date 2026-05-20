@@ -78,7 +78,7 @@ const BatchQuery = z.object({ symbols: z.string().min(1) });
 router.get('/quotes', async (req, res, next) => {
   try {
     const { symbols } = BatchQuery.parse(req.query);
-    const list = symbols.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean).slice(0, 25);
+    const list = symbols.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean).slice(0, 100);
     const out = await Promise.all(
       list.map(async (sym) => {
         const isCrossAsset = sym.includes('/');

@@ -182,6 +182,7 @@ export const PortfolioAwareness: React.FC = () => {
         holdings={portfolioHoldings}
         effectiveWeights={effectiveWeights}
         holdingsCount={holdingsCount}
+        holdingCurves={holdingCurves}
       />
 
       <RelationshipShifts

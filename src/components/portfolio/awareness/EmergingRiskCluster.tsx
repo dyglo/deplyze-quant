@@ -20,6 +20,12 @@ import type { Holding } from '../../../lib/portfolio/schemas';
 import type { VulnerabilityResult, VulnerabilityDimension } from '../../../services/reasoningService';
 import type { AgentOutput, AgentSeverity } from '../../../types/agents';
 import { SystemAnalyzingState } from '../../quant/SystemAnalyzingState';
+import {
+  computeClientStress,
+  type ClientHoldingStress,
+  type ClientStressDimensionSummary,
+  type HoldingCurveInput,
+} from '../../../lib/portfolio/clientStress';
 
 interface EmergingRiskClusterProps {
   vulnerability: VulnerabilityResult | null;
@@ -28,6 +34,9 @@ interface EmergingRiskClusterProps {
   holdings: Holding[];
   effectiveWeights: Record<string, number>;
   holdingsCount: number;
+  /** Per-holding rebased price curves from usePortfolioPerformance. Drives the
+   *  client-side stress histogram fallback when /agents/vulnerability is empty. */
+  holdingCurves?: HoldingCurveInput[];
 }
 
 const SEV_ORDER: Record<AgentSeverity, number> = { high: 0, medium: 1, low: 2, info: 3 };
@@ -147,6 +156,45 @@ const StressBar: React.FC<{ row: HoldingStress; maxIntensity: number }> = ({ row
   );
 };
 
+const ClientDimRow: React.FC<{ dim: ClientStressDimensionSummary; totalHoldings: number }> = ({ dim, totalHoldings }) => {
+  const flagged = dim.flaggedSymbols.length;
+  const tone =
+    flagged === 0           ? '#10b981' :
+    flagged >= totalHoldings * 0.5 ? '#ef4444' :
+    flagged >= totalHoldings * 0.25 ? '#f59e0b' :
+    '#6366f1';
+  return (
+    <div
+      title={dim.description}
+      style={{
+        display: 'grid', gridTemplateColumns: '1fr 38px 64px', gap: 10, alignItems: 'center',
+        padding: '6px 10px', borderRadius: 7,
+        border: '1px solid var(--border)', background: 'var(--background)',
+      }}
+    >
+      <span style={{
+        fontSize: 11, fontWeight: 600, color: 'var(--foreground)',
+        letterSpacing: '-0.005em',
+      }}>
+        {dim.label}
+      </span>
+      <span style={{
+        fontSize: 10, fontWeight: 700, color: tone, textAlign: 'right',
+        fontVariantNumeric: 'tabular-nums',
+      }}>
+        {flagged}/{totalHoldings}
+      </span>
+      <span style={{
+        fontSize: 9, fontWeight: 600, color: 'var(--muted-foreground)',
+        letterSpacing: '0.04em', textAlign: 'right',
+        fontVariantNumeric: 'tabular-nums',
+      }}>
+        {flagged > 0 ? `μ ${(dim.meanSeverity * 100).toFixed(0)}` : '—'}
+      </span>
+    </div>
+  );
+};
+
 const DimChip: React.FC<{ dimKey: string; dim: VulnerabilityDimension }> = ({ dimKey, dim }) => {
   const tone = LABEL_TONE[dim.label] ?? LABEL_TONE.neutral;
   return (
@@ -189,13 +237,50 @@ export const EmergingRiskCluster: React.FC<EmergingRiskClusterProps> = ({
   holdings,
   effectiveWeights,
   holdingsCount,
+  holdingCurves = [],
 }) => {
-  const stressRows = useMemo(
+  // Backend (macro-regime) per-holding stress.
+  const backendStress = useMemo(
     () => buildHoldingStress(holdings, effectiveWeights, vulnerability),
     [holdings, effectiveWeights, vulnerability],
   );
+
+  // Client-side (price-derived) per-holding stress. Always computed so the
+  // histogram is informative regardless of backend availability.
+  const clientStress = useMemo(
+    () => computeClientStress(holdings, effectiveWeights, holdingCurves),
+    [holdings, effectiveWeights, holdingCurves],
+  );
+
+  // Blend: prefer backend dims when present for a symbol, but always include
+  // client dims so price-derived flags surface. Total dim count caps at 6
+  // (backend dimensions) + 5 (client dimensions) = 11; display uses the raw count.
+  const stressRows = useMemo(() => {
+    if (vulnerability) {
+      // Merge: per symbol, take max(intensity), union(dimensions), sum count
+      const byKey = new Map<string, { symbol: string; weight: number; intensity: number; count: number; dimensions: string[] }>();
+      for (const r of backendStress) byKey.set(r.symbol, { ...r });
+      for (const r of clientStress.rows) {
+        const existing = byKey.get(r.symbol);
+        if (!existing) {
+          byKey.set(r.symbol, { ...r });
+        } else {
+          existing.intensity += r.intensity;
+          existing.count += r.count;
+          existing.dimensions = [...existing.dimensions, ...r.dimensions];
+        }
+      }
+      return Array.from(byKey.values()).sort((a, b) => b.intensity - a.intensity);
+    }
+    // No backend → use client stress alone
+    return clientStress.rows.map((r: ClientHoldingStress) => ({
+      symbol: r.symbol, weight: r.weight, intensity: r.intensity, count: r.count, dimensions: r.dimensions,
+    }));
+  }, [vulnerability, backendStress, clientStress]);
+
   const maxIntensity = stressRows.reduce((m, r) => Math.max(m, r.intensity), 0);
   const stressedCount = stressRows.filter(r => r.count > 0).length;
+  const usingClientFallback = !vulnerability;
 
   const ranked = useMemo(() => {
     return [...portfolioObservations]
@@ -224,9 +309,9 @@ export const EmergingRiskCluster: React.FC<EmergingRiskClusterProps> = ({
             margin: '6px 0 0', fontSize: 12, lineHeight: 1.6,
             color: 'var(--muted-foreground)', maxWidth: 760,
           }}>
-            {vulnerability
-              ? `${stressedCount}/${holdingsCount} holdings are flagged by at least one of six regime-vulnerability dimensions. Bars below show stress intensity (Σ |dimension.score|); colour encodes how many dimensions stress each holding.`
-              : 'Per-holding stress will appear once the regime vulnerability pipeline has run for this portfolio.'}
+            {usingClientFallback
+              ? `${stressedCount}/${holdingsCount} holdings are flagged by at least one of five price-derived stress dimensions (volatility, drawdown, concentration, underperformance, recent weakness). Bars below show stress intensity; colour encodes how many dimensions stress each holding.`
+              : `${stressedCount}/${holdingsCount} holdings are flagged across price-derived stress and the six macro-regime vulnerability dimensions. Bars below show stress intensity; colour encodes how many dimensions stress each holding.`}
           </p>
         </header>
 
@@ -247,9 +332,9 @@ export const EmergingRiskCluster: React.FC<EmergingRiskClusterProps> = ({
             <span style={{ textAlign: 'right' }}>Dims</span>
           </div>
 
-          {vulnerabilityLoading ? (
+          {vulnerabilityLoading && stressRows.length === 0 ? (
             <div style={{ padding: '16px 0' }}>
-              <SystemAnalyzingState label="Computing per-holding regime vulnerability" />
+              <SystemAnalyzingState label="Computing per-holding stress" />
             </div>
           ) : stressRows.length === 0 ? (
             <p style={{
@@ -257,7 +342,7 @@ export const EmergingRiskCluster: React.FC<EmergingRiskClusterProps> = ({
             }}>
               {holdings.length === 0
                 ? 'Add holdings to enable per-holding stress analysis.'
-                : 'Regime vulnerability data is not available for this portfolio yet.'}
+                : 'No price history yet for any holding — stress profile will appear once historical data has loaded.'}
             </p>
           ) : (
             stressRows.map(r => <StressBar key={r.symbol} row={r} maxIntensity={maxIntensity} />)
@@ -293,27 +378,46 @@ export const EmergingRiskCluster: React.FC<EmergingRiskClusterProps> = ({
               margin: 0, fontSize: 10, fontWeight: 700, letterSpacing: '0.1em',
               textTransform: 'uppercase', color: 'var(--muted-foreground)',
             }}>
-              Regime Vulnerability · 6 Dimensions
+              {usingClientFallback ? 'Stress Dimensions · Price-Derived' : 'Regime Vulnerability · 6 Dimensions'}
             </p>
-            {vulnerability ? (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 12 }}>
-                {Object.entries(vulnerability.dimensions ?? {}).map(([k, d]) => (
-                  <DimChip key={k} dimKey={k} dim={d} />
-                ))}
-              </div>
-            ) : (
-              <p style={{
-                margin: '12px 0 0', fontSize: 12, color: 'var(--muted-foreground)',
-              }}>
-                Vulnerability composite is not yet available for this portfolio.
-              </p>
-            )}
+
+            {/* Client-derived dimensions (always shown — they are the always-available baseline) */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 12 }}>
+              {clientStress.dimensions.map(d => (
+                <ClientDimRow key={d.key} dim={d} totalHoldings={holdings.length} />
+              ))}
+            </div>
+
+            {/* Backend macro-regime dimensions stacked below when available */}
             {vulnerability && (
+              <>
+                <p style={{
+                  margin: '14px 0 8px', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em',
+                  textTransform: 'uppercase', color: 'var(--muted-foreground)',
+                }}>
+                  Macro Regime · 6 Dimensions
+                </p>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  {Object.entries(vulnerability.dimensions ?? {}).map(([k, d]) => (
+                    <DimChip key={k} dimKey={k} dim={d} />
+                  ))}
+                </div>
+                <p style={{
+                  margin: '12px 0 0', fontSize: 10, color: 'var(--muted-foreground)',
+                  fontStyle: 'italic', lineHeight: 1.55,
+                }}>
+                  {vulnerability.safety_note ?? 'For monitoring, not direction.'}
+                </p>
+              </>
+            )}
+
+            {usingClientFallback && (
               <p style={{
-                margin: '12px 0 0', fontSize: 10, color: 'var(--muted-foreground)',
+                margin: '14px 0 0', fontSize: 10, color: 'var(--muted-foreground)',
                 fontStyle: 'italic', lineHeight: 1.55,
               }}>
-                {vulnerability.safety_note ?? 'For monitoring, not direction.'}
+                Macro-regime vulnerability composite is not yet available for this portfolio. The price-derived
+                stress profile above is computed from the holdings' realised returns and concentration.
               </p>
             )}
           </div>

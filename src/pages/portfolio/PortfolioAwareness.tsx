@@ -50,7 +50,10 @@ export const PortfolioAwareness: React.FC = () => {
   const symbols = useMemo(() => portfolioHoldings.map(h => h.symbol), [portfolioHoldings]);
   const benchmarkId = portfolio?.benchmarkId ?? DEFAULT_BENCHMARK_ID;
 
-  const { holdingCurves, totalReturn } = usePortfolioPerformance(symbols, effectiveWeights, benchmarkId, 252);
+  const {
+    holdingCurves, totalReturn, benchmarkTotalReturn,
+    annVol, sharpe, maxDrawdown,
+  } = usePortfolioPerformance(symbols, effectiveWeights, benchmarkId, 252);
 
   const { data: portfolioAgentOutputs } = usePortfolioAgentOutputs(portfolio?.id ?? null, { days: 7, limit: 50 });
 
@@ -149,6 +152,13 @@ export const PortfolioAwareness: React.FC = () => {
         portfolioName={portfolio.name}
         holdingsCount={holdingsCount}
         benchmarkId={portfolio.benchmarkId}
+        metrics={{
+          totalReturn,
+          benchmarkTotalReturn,
+          annVol,
+          sharpe,
+          maxDrawdown,
+        }}
       />
 
       <DriverDecomposition
@@ -169,6 +179,8 @@ export const PortfolioAwareness: React.FC = () => {
         vulnerability={vulnerability}
         vulnerabilityLoading={vulnerabilityLoading}
         portfolioObservations={portfolioAgentOutputs ?? []}
+        holdings={portfolioHoldings}
+        effectiveWeights={effectiveWeights}
         holdingsCount={holdingsCount}
       />
 

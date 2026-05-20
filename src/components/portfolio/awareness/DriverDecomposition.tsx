@@ -111,14 +111,51 @@ const ContributionBar: React.FC<{
 
 function narrativeRows(result: NarrativeExposureResult | null): ContributionRow[] {
   if (!result || !result.exposures.length) return [];
-  return result.exposures.map(e => ({
-    key: e.theme_id,
-    label: e.theme_label,
-    weight: e.portfolio_weight,
-    contribution: e.portfolio_weight * (e.polarity_score ?? 0) * (e.intensity ?? 1),
-    count: e.matching_symbols.length,
-    symbols: e.matching_symbols,
-  })).sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution));
+  return result.exposures.map(e => {
+    const w = Number(e.portfolio_weight);
+    const polarity = Number(e.polarity_score ?? 0);
+    const intensity = Number(e.intensity ?? 1);
+    const weight = isFinite(w) ? w : 0;
+    const contribution = isFinite(weight * polarity * intensity)
+      ? weight * polarity * intensity
+      : 0;
+    return {
+      key: e.theme_id,
+      label: e.theme_label,
+      weight,
+      contribution,
+      count: e.matching_symbols.length,
+      symbols: e.matching_symbols,
+    };
+  }).sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution));
+}
+
+interface LensDiagnostic {
+  classified: number;
+  total: number;
+  unclassifiedSymbols: string[];
+}
+
+function diagnoseLens(
+  lens: LensKey,
+  holdings: { symbol: string; sector?: string; region?: string; country?: string; assetClass?: unknown }[],
+): LensDiagnostic {
+  if (lens === 'holding' || lens === 'narrative') {
+    return { classified: holdings.length, total: holdings.length, unclassifiedSymbols: [] };
+  }
+  const missing: string[] = [];
+  for (const h of holdings) {
+    let has = false;
+    if (lens === 'sector') has = !!h.sector;
+    else if (lens === 'region') has = !!(h.region || h.country);
+    else if (lens === 'asset') has = !!h.assetClass;
+    if (!has) missing.push(h.symbol);
+  }
+  return {
+    classified: holdings.length - missing.length,
+    total: holdings.length,
+    unclassifiedSymbols: missing,
+  };
 }
 
 export const DriverDecomposition: React.FC<DriverDecompositionProps> = ({
@@ -140,6 +177,8 @@ export const DriverDecomposition: React.FC<DriverDecompositionProps> = ({
       case 'narrative': return narrativeRows(narrativeExposure);
     }
   }, [lens, holdings, effectiveWeights, holdingCurves, narrativeExposure]);
+
+  const diagnostic = useMemo(() => diagnoseLens(lens, holdings), [lens, holdings]);
 
   const limited = rows.slice(0, 10);
   const maxAbs = totalAbsContribution(limited) > 0
@@ -197,6 +236,25 @@ export const DriverDecomposition: React.FC<DriverDecompositionProps> = ({
           ))}
         </div>
 
+        {/* Diagnostic banner — explains why a lens looks sparse */}
+        {(lens === 'sector' || lens === 'region' || lens === 'asset') && diagnostic.unclassifiedSymbols.length > 0 && (
+          <div style={{
+            padding: '10px 14px', marginBottom: 14, borderRadius: 8,
+            border: '1px dashed var(--border)', background: 'var(--card)',
+            fontSize: 11, lineHeight: 1.55, color: 'var(--muted-foreground)',
+          }}>
+            <strong style={{ color: 'var(--foreground)', fontWeight: 600 }}>
+              {diagnostic.classified}/{diagnostic.total} holdings classified.
+            </strong>{' '}
+            {diagnostic.unclassifiedSymbols.length} holding{diagnostic.unclassifiedSymbols.length === 1 ? '' : 's'} lack{diagnostic.unclassifiedSymbols.length === 1 ? 's' : ''} {lens === 'asset' ? 'asset class' : lens} metadata:{' '}
+            <span style={{ fontFamily: 'var(--font-mono, ui-monospace)', color: 'var(--foreground)' }}>
+              {diagnostic.unclassifiedSymbols.slice(0, 12).join(' · ')}
+              {diagnostic.unclassifiedSymbols.length > 12 ? ` · +${diagnostic.unclassifiedSymbols.length - 12} more` : ''}
+            </span>.{' '}
+            Set classifications on the Holdings page to populate this lens.
+          </div>
+        )}
+
         {/* Rows */}
         <div style={{
           borderTop: '1px solid var(--border)',
@@ -206,8 +264,10 @@ export const DriverDecomposition: React.FC<DriverDecompositionProps> = ({
               padding: '24px 0', margin: 0, fontSize: 12, color: 'var(--muted-foreground)',
             }}>
               {lens === 'narrative'
-                ? 'No active narrative themes match these holdings yet.'
-                : 'Contribution data will appear once the period has at least 10 sessions of returns.'}
+                ? 'No active narrative themes match these holdings — the narrative pipeline may not have produced data for this portfolio yet.'
+                : lens === 'holding'
+                ? 'Contribution data will appear once the period has at least 10 sessions of returns.'
+                : `No ${lens === 'asset' ? 'asset class' : lens} metadata is set on these holdings yet.`}
             </p>
           ) : (
             limited.map(row => <ContributionBar key={row.key} row={row} maxAbs={maxAbs} />)

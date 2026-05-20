@@ -13,6 +13,8 @@ interface Props {
   stepDays?: number;
   /** ms between auto-play frames. Default 220. */
   playIntervalMs?: number;
+  /** When true, renders as a compact glass HUD pill without the outer card border. */
+  floating?: boolean;
 }
 
 const DAY_MS = 86_400_000;
@@ -27,7 +29,7 @@ const DAY_MS = 86_400_000;
  * replay meaningful (< 90 days of bars).
  */
 export const ReplayTimeline: React.FC<Props> = ({
-  start, end, value, onChange, stepDays = 5, playIntervalMs = 220,
+  start, end, value, onChange, stepDays = 5, playIntervalMs = 220, floating = false,
 }) => {
   const [playing, setPlaying] = useState(false);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -59,15 +61,26 @@ export const ReplayTimeline: React.FC<Props> = ({
     else onChange(ts);
   };
 
+  const floatingStyle: React.CSSProperties = floating ? {
+    display: 'flex', alignItems: 'center', gap: 10,
+    padding: '6px 12px',
+    borderRadius: 10,
+    background: 'color-mix(in srgb, var(--card) 88%, transparent)',
+    backdropFilter: 'blur(12px)',
+    WebkitBackdropFilter: 'blur(12px)',
+    border: '1px solid color-mix(in srgb, var(--border) 65%, transparent)',
+    boxShadow: '0 4px 24px color-mix(in srgb, var(--foreground) 7%, transparent)',
+  } : {
+    display: 'flex', alignItems: 'center', gap: 10,
+    padding: '8px 12px',
+    border: '1px solid var(--border)',
+    borderRadius: 10,
+    background: 'var(--card)',
+    marginBottom: 10,
+  };
+
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 10,
-      padding: '8px 12px',
-      border: '1px solid var(--border)',
-      borderRadius: 10,
-      background: 'var(--card)',
-      marginBottom: 10,
-    }}>
+    <div style={floatingStyle}>
       <span style={{
         fontSize: 10, fontWeight: 700, letterSpacing: '0.08em',
         textTransform: 'uppercase', color: 'var(--muted-foreground)',

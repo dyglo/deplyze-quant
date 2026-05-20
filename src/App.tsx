@@ -42,6 +42,7 @@ import { ExposureAnalysis } from './pages/portfolio/ExposureAnalysis';
 import { PerformanceAttribution } from './pages/portfolio/PerformanceAttribution';
 import { RiskRegimeFit } from './pages/portfolio/RiskRegimeFit';
 import { ScenarioStress } from './pages/portfolio/ScenarioStress';
+import { PortfolioAwareness } from './pages/portfolio/PortfolioAwareness';
 
 const LoadingScreen: React.FC = () => (
   <div className="ds-loading-screen" style={{
@@ -122,6 +123,7 @@ export default function App() {
             <Route path="/portfolio/attribution"  element={<ProtectedRoute><PerformanceAttribution /></ProtectedRoute>} />
             <Route path="/portfolio/risk"         element={<ProtectedRoute><RiskRegimeFit /></ProtectedRoute>} />
             <Route path="/portfolio/scenario"     element={<ProtectedRoute><ScenarioStress /></ProtectedRoute>} />
+            <Route path="/portfolio/:portfolioId/awareness" element={<ProtectedRoute><PortfolioAwareness /></ProtectedRoute>} />
             <Route path="/portfolio"              element={<Navigate to="/portfolio/overview" replace />} />
             <Route path="*"                       element={<Navigate to="/" replace />} />
           </Routes>

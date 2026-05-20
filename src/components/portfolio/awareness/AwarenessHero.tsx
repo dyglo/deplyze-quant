@@ -19,7 +19,8 @@ import {
 } from '../../../hooks/useAgentIntelligence';
 import { RegimeStatusChip, RiskLevelChip, SystemAnalyzingState } from '../../quant/SystemAnalyzingState';
 import { composeHeroHeadline, composeHeroSubNarrative } from '../../../lib/portfolio/awarenessNarration';
-import { AwarenessHeroChart, type AwarenessHeroChartPoint } from './AwarenessHeroChart';
+import { narrateHero } from '../../../lib/portfolio/sectionNarratives';
+import { SectionNarrative } from './SectionNarrative';
 import type { CompositeRegime, RiskEnvironment, AgentSeverity } from '../../../types/agents';
 
 interface AwarenessHeroProps {
@@ -35,9 +36,6 @@ interface AwarenessHeroProps {
     sharpe?: number;
     maxDrawdown?: number;
   };
-  /** Portfolio-vs-benchmark performance series for the hero sparkline.
-   *  Both legs are pre-rebased to 100 by `usePortfolioPerformance`. */
-  chartSeries?: AwarenessHeroChartPoint[];
 }
 
 function fmtPctSigned(v: number | undefined): string {
@@ -130,7 +128,6 @@ export const AwarenessHero: React.FC<AwarenessHeroProps> = ({
   holdingsCount,
   benchmarkId,
   metrics,
-  chartSeries,
 }) => {
   const { data: regimeOutput, regimeLabel, loading: regimeLoading } = useCompositeRegime();
   const { data: riskOutput, riskLevel, loading: riskLoading } = useRiskEnvironment();
@@ -195,12 +192,26 @@ export const AwarenessHero: React.FC<AwarenessHeroProps> = ({
           {subNarrative}
         </p>
 
-        {/* Single visual anchor — portfolio vs benchmark sparkline */}
-        {chartSeries && chartSeries.length >= 2 && (
-          <AwarenessHeroChart series={chartSeries} benchmarkId={benchmarkId} height={120} />
+        {/* Data-grounded narrative — the system speaks */}
+        {metrics && (
+          <div style={{ marginTop: 24 }}>
+            <SectionNarrative
+              lines={narrateHero({
+                portfolioName,
+                totalReturn: metrics.totalReturn ?? 0,
+                benchmarkTotalReturn: metrics.benchmarkTotalReturn,
+                benchmarkId,
+                sharpe: metrics.sharpe,
+                maxDrawdown: metrics.maxDrawdown,
+                observationCount,
+                regimeLabel,
+                riskLevel,
+              })}
+            />
+          </div>
         )}
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 22, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 18, flexWrap: 'wrap' }}>
           <RegimeStatusChip regime={regimeLabel} confidence={regime?.confidence ?? null} />
           <RiskLevelChip riskLevel={riskLevel} severity={risk?.severity ?? null} />
           {observationCount > 0 && (

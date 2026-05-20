@@ -30,6 +30,8 @@ import {
   type HoldingCurveInput,
 } from '../../../lib/portfolio/clientStress';
 import { SystemAnalyzingState } from '../../quant/SystemAnalyzingState';
+import { SectionNarrative } from './SectionNarrative';
+import { narrateRiskDecomposition } from '../../../lib/portfolio/sectionNarratives';
 
 interface RiskDecompositionProps {
   holdings: Holding[];
@@ -330,6 +332,18 @@ export const RiskDecomposition: React.FC<RiskDecompositionProps> = ({
             Where risk is concentrating.
           </h2>
         </header>
+
+        <SectionNarrative
+          lines={narrateRiskDecomposition({
+            annVol,
+            maxDrawdown,
+            hhi,
+            holdingsCount: holdings.length,
+            stressedCount: stressRows.filter(r => r.count >= 2).length,
+            topSectorRiskShare: sectorRiskRows[0] ? { sector: sectorRiskRows[0].sector, share: sectorRiskRows[0].contribPct } : undefined,
+            vulnerability,
+          })}
+        />
 
         {/* Risk KPI strip */}
         <div style={{

@@ -13,6 +13,8 @@ interface Props {
   focalId?: string | null;
   hoveredNodeId?: string | null;
   selectedNodeId?: string | null;
+  /** When this token changes the camera animates to center the node. */
+  cameraFocusToken?: { nodeId: string; n: number } | null;
   spotlight?: SpotlightMode;
   strengthThreshold?: number;
   onHoverNode?: (id: string | null) => void;
@@ -33,6 +35,7 @@ export const RelationsGraphCanvas: React.FC<Props> = ({
   focalId,
   hoveredNodeId,
   selectedNodeId,
+  cameraFocusToken,
   spotlight = 'none',
   strengthThreshold = 0,
   onHoverNode,
@@ -108,13 +111,15 @@ export const RelationsGraphCanvas: React.FC<Props> = ({
       const spotKinds = SPOTLIGHT_KINDS[spot];
       const inSpotlight = spotKinds.length === 0 || (kind && spotKinds.includes(kind as never));
       if (!inSpotlight) {
-        d.color = fade(String(data.color ?? '#8b8b8b'), 0.07);
+        d.color = fade(String(data.color ?? '#8b8b8b'), 0.18);
       }
 
       if (focusId) {
         const [s, t] = graph.extremities(id);
         if (focusId !== s && focusId !== t) {
-          d.color = fade(String(data.color ?? '#8b8b8b'), 0.06);
+          // Keep non-connected edges at 22% — visible enough in dark mode,
+          // still clearly de-emphasised vs the highlighted connections.
+          d.color = fade(String(data.color ?? '#8b8b8b'), 0.22);
         } else {
           d.size = (typeof data.size === 'number' ? data.size : 1) * 1.55;
         }
@@ -144,11 +149,31 @@ export const RelationsGraphCanvas: React.FC<Props> = ({
     sigmaRef.current?.refresh();
   }, [selectedNodeId]);
 
+  // Animate camera to center the requested node when the focus token changes.
+  const prevFocusTokenRef = useRef<typeof cameraFocusToken>(null);
+  useEffect(() => {
+    if (!cameraFocusToken) return;
+    if (prevFocusTokenRef.current?.n === cameraFocusToken.n) return;
+    prevFocusTokenRef.current = cameraFocusToken;
+    const sigma = sigmaRef.current;
+    if (!sigma || !graph.hasNode(cameraFocusToken.nodeId)) return;
+    const attrs = graph.getNodeAttributes(cameraFocusToken.nodeId) as { x: number; y: number };
+    // Pan to the node only — no ratio change so peripheral nodes
+    // don't fly off screen.
+    sigma.getCamera().animate(
+      { x: attrs.x, y: attrs.y },
+      { duration: 360, easing: (t: number) => t * (2 - t) },
+    );
+  }, [cameraFocusToken, graph]);
+
   // Map active spotlight onto the matching backdrop wedge id, if any.
   const highlightCategoryId = spotlightToCategory(spotlight);
 
   return (
-    <div style={{ position: 'relative', width: '100%', height: '100%', minHeight: 540 }}>
+    <div style={{
+      position: 'relative', width: '100%', height: '100%', minHeight: 540,
+      background: 'var(--background)',
+    }}>
       <ClusterBackdrop categories={categories} highlightCategoryId={highlightCategoryId} />
       <div
         ref={hostRef}
@@ -176,39 +201,9 @@ export const RelationsGraphCanvas: React.FC<Props> = ({
         onHover={(id) => onHoverNode?.(id)}
         onInspect={(id) => onInspectNode?.(id)}
       />
-      <CategoryOverlay categories={categories} />
     </div>
   );
 };
-
-const CategoryOverlay: React.FC<{ categories: RadialCategory[] }> = ({ categories }) => (
-  <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
-    {categories.map((c) => (
-      <span
-        key={c.id}
-        style={{
-          position: 'absolute',
-          left: '50%',
-          top: '50%',
-          transform: `translate(-50%, -50%) rotate(${c.angle}rad) translateX(46%) rotate(${-c.angle}rad)`,
-          fontSize: 10,
-          fontWeight: 700,
-          letterSpacing: '0.1em',
-          textTransform: 'uppercase',
-          color: 'var(--muted-foreground)',
-          background: 'color-mix(in srgb, var(--card) 88%, transparent)',
-          border: '1px solid var(--border)',
-          borderRadius: 6,
-          padding: '3px 9px',
-          whiteSpace: 'nowrap',
-          backdropFilter: 'blur(2px)',
-        }}
-      >
-        {c.label}
-      </span>
-    ))}
-  </div>
-);
 
 function addNode(g: Graph, n: RelationsNode) {
   if (g.hasNode(n.id)) return;

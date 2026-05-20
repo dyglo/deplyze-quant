@@ -138,7 +138,9 @@ const NodeCard: React.FC<CardProps> = ({
   const h = (isFocal ? 60 : 40) * zoom;
   const fontPrimary = (isFocal ? 13 : 11) * zoom;
   const fontMeta = 9 * zoom;
-  const opacity = dim ? 0.32 : 1;
+  // 0.55 keeps dimmed cards legible in dark mode; 0.32 made them
+  // effectively invisible against a dark --card background.
+  const opacity = dim ? 0.55 : 1;
 
   return (
     <button
@@ -154,17 +156,21 @@ const NodeCard: React.FC<CardProps> = ({
         width: w,
         height: h,
         padding: 0,
-        border: `1px solid ${isFocal ? 'var(--primary)' : 'var(--border)'}`,
+        border: `1px solid ${isFocal
+          ? 'var(--primary)'
+          : isFocus
+            ? 'color-mix(in srgb, var(--primary) 40%, var(--border))'
+            : 'color-mix(in srgb, var(--border) 90%, var(--foreground))'}`,
         background: isFocal
           ? 'color-mix(in srgb, var(--primary) 9%, var(--card))'
           : isFocus
             ? 'color-mix(in srgb, var(--primary) 5%, var(--card))'
             : 'var(--card)',
         boxShadow: isFocal
-          ? '0 6px 18px color-mix(in srgb, var(--primary) 18%, transparent)'
+          ? '0 6px 18px color-mix(in srgb, var(--primary) 22%, transparent), 0 1px 4px color-mix(in srgb, var(--foreground) 15%, transparent)'
           : isFocus
-            ? '0 2px 10px color-mix(in srgb, var(--foreground) 10%, transparent)'
-            : '0 1px 2px color-mix(in srgb, var(--foreground) 6%, transparent)',
+            ? '0 2px 10px color-mix(in srgb, var(--foreground) 16%, transparent)'
+            : '0 1px 4px color-mix(in srgb, var(--foreground) 12%, transparent)',
         borderRadius: 6 * zoom,
         cursor: 'pointer',
         pointerEvents: 'auto',

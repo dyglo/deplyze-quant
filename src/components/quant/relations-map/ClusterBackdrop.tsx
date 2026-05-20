@@ -48,16 +48,16 @@ export const ClusterBackdrop: React.FC<Props> = ({ categories, highlightCategory
           <g key={c.id} style={{ opacity: dim ? 0.18 : 1 }}>
             <path
               d={path}
-              fill="color-mix(in srgb, var(--muted) 28%, transparent)"
-              stroke="color-mix(in srgb, var(--border) 80%, transparent)"
+              fill="color-mix(in srgb, var(--muted-foreground) 6%, transparent)"
+              stroke="color-mix(in srgb, var(--border) 55%, transparent)"
               strokeWidth={1}
-              strokeDasharray="3 4"
+              strokeDasharray="3 5"
             />
           </g>
         );
       })}
       {/* Inner protected halo around the focal node. */}
-      <circle r={64} fill="color-mix(in srgb, var(--card) 70%, transparent)" stroke="var(--border)" strokeWidth={1} />
+      <circle r={64} fill="color-mix(in srgb, var(--background) 80%, transparent)" stroke="color-mix(in srgb, var(--border) 50%, transparent)" strokeWidth={1} />
     </svg>
   );
 };

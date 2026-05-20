@@ -12,7 +12,11 @@ import { Activity } from 'lucide-react';
 import { IntelligenceTerminal } from './pages/IntelligenceTerminal';
 import { MorningTerminal } from './pages/MorningTerminal';
 import { Investigations } from './pages/Investigations';
-import { InstrumentIntelligence } from './pages/InstrumentIntelligence';
+import { InstrumentIntelligenceHub } from './pages/instruments/InstrumentIntelligenceHub';
+import { MoversWorkspace } from './pages/instruments/MoversWorkspace';
+import { HeatmapWorkspace } from './pages/instruments/HeatmapWorkspace';
+import { NarrativeIntelligence } from './pages/instruments/NarrativeIntelligence';
+import { VolatilityDesk } from './pages/instruments/VolatilityDesk';
 import { InstrumentDetail } from './pages/InstrumentDetail';
 import { MacroRegimeDesk } from './pages/MacroRegimeDesk';
 import { RelationsMap } from './pages/RelationsMap';
@@ -81,8 +85,15 @@ export default function App() {
             <Route path="/"                     element={<ProtectedRoute><IntelligenceTerminal /></ProtectedRoute>} />
             <Route path="/morning"              element={<ProtectedRoute><MorningTerminal /></ProtectedRoute>} />
             <Route path="/investigations"       element={<ProtectedRoute><Investigations /></ProtectedRoute>} />
-            <Route path="/instruments"          element={<ProtectedRoute><InstrumentIntelligence /></ProtectedRoute>} />
-            <Route path="/instruments/:symbol"  element={<ProtectedRoute><InstrumentDetail /></ProtectedRoute>} />
+            {/* Instrument Intelligence — Level 2 workspaces (must precede :symbol) */}
+            <Route path="/instruments/movers"      element={<ProtectedRoute><MoversWorkspace /></ProtectedRoute>} />
+            <Route path="/instruments/heatmap"     element={<ProtectedRoute><HeatmapWorkspace /></ProtectedRoute>} />
+            <Route path="/instruments/narratives"  element={<ProtectedRoute><NarrativeIntelligence /></ProtectedRoute>} />
+            <Route path="/instruments/volatility"  element={<ProtectedRoute><VolatilityDesk /></ProtectedRoute>} />
+            {/* Level 1 Hub */}
+            <Route path="/instruments"             element={<ProtectedRoute><InstrumentIntelligenceHub /></ProtectedRoute>} />
+            {/* Single-asset research */}
+            <Route path="/instruments/:symbol"     element={<ProtectedRoute><InstrumentDetail /></ProtectedRoute>} />
             <Route path="/macro"                element={<ProtectedRoute><MacroRegimeDesk /></ProtectedRoute>} />
             <Route path="/relations-map"        element={<ProtectedRoute><RelationsMap /></ProtectedRoute>} />
             <Route path="/cross-asset"          element={<Navigate to="/relations-map" replace />} />

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { RefreshCw } from 'lucide-react';
-import { useHeatmapData } from '../../hooks/useScreener';
+import { useHeatmapData, useExtendedHeatmapData } from '../../hooks/useScreener';
 import type { HeatmapCell, HeatmapSector } from '../../services/screenerService';
 
 // ─── Color scale ──────────────────────────────────────────────────────────────
@@ -35,7 +35,8 @@ const HeatCell: React.FC<{
   cell: HeatmapCell;
   onSelect: (sym: string) => void;
   isSelected: boolean;
-}> = ({ cell, onSelect, isSelected }) => {
+  stretch?: boolean;
+}> = ({ cell, onSelect, isSelected, stretch = false }) => {
   const [hovered, setHovered] = useState(false);
   const c = heatColor(cell.changePercent);
   const h = HEIGHT[cell.weight];
@@ -51,7 +52,10 @@ const HeatCell: React.FC<{
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
-        flex: FLEX[cell.weight], height: h,
+        flex: stretch ? `${FLEX[cell.weight].split(' ')[0]} 1 ${FLEX[cell.weight].split(' ')[2]}` : FLEX[cell.weight],
+        height: stretch ? undefined : h,
+        minHeight: h,
+        alignSelf: stretch ? 'stretch' : undefined,
         background: c.bg,
         border: isSelected
           ? '2px solid var(--primary)'
@@ -103,25 +107,34 @@ const SectorRow: React.FC<{
   sector: HeatmapSector;
   onSelect: (sym: string) => void;
   selectedSymbol?: string;
-}> = ({ sector, onSelect, selectedSymbol }) => {
+  stretch?: boolean;
+}> = ({ sector, onSelect, selectedSymbol, stretch = false }) => {
   const pos = sector.avgChange > 0;
   const neg = sector.avgChange < 0;
   const clr = pos ? '#4E6040' : neg ? 'var(--primary)' : 'var(--muted-foreground)';
 
   return (
-    <div style={{ marginBottom: 12 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
-        <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted-foreground)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-          {sector.name}
-        </span>
-        <span style={{ fontSize: 10, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: clr }}>
-          {pos ? '+' : ''}{sector.avgChange.toFixed(2)}%
-        </span>
-        <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-      </div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+    <div style={stretch
+      ? { flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }
+      : { marginBottom: 12 }
+    }>
+      {!stretch && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5, flexShrink: 0 }}>
+          <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted-foreground)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+            {sector.name}
+          </span>
+          <span style={{ fontSize: 10, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: clr }}>
+            {pos ? '+' : ''}{sector.avgChange.toFixed(2)}%
+          </span>
+          <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+        </div>
+      )}
+      <div style={{
+        display: 'flex', flexWrap: 'wrap', gap: 3,
+        ...(stretch ? { flex: 1, alignContent: 'stretch' } : {}),
+      }}>
         {sector.cells.map((cell) => (
-          <HeatCell key={cell.symbol} cell={cell} onSelect={onSelect} isSelected={cell.symbol === selectedSymbol} />
+          <HeatCell key={cell.symbol} cell={cell} onSelect={onSelect} isSelected={cell.symbol === selectedSymbol} stretch={stretch} />
         ))}
       </div>
     </div>
@@ -133,12 +146,90 @@ const SectorRow: React.FC<{
 interface Props {
   onSelect: (sym: string) => void;
   selectedSymbol?: string;
+  alwaysExpanded?: boolean;
+  /** Strips the card chrome — renders only the sector grid as a raw canvas. */
+  bare?: boolean;
+  /** In bare mode, loads the full cross-asset universe (equity + FX + crypto + commodities + ETFs). */
+  extended?: boolean;
 }
 
-export const MarketHeatmap: React.FC<Props> = ({ onSelect, selectedSymbol }) => {
-  const { data, loading, error, refresh } = useHeatmapData();
-  const [expanded, setExpanded] = useState(false);
+export const MarketHeatmap: React.FC<Props> = ({
+  onSelect, selectedSymbol, alwaysExpanded = false, bare = false, extended = false,
+}) => {
+  const equity = useHeatmapData();
+  const full   = useExtendedHeatmapData();
+  const { data, loading, error, refresh } = extended ? full : equity;
+  const [expanded, setExpanded] = useState(alwaysExpanded);
 
+  // ── Bare mode: two-column canvas, no stretch, fills parent ──────────────
+  if (bare) {
+    // Only render sectors that actually returned data
+    const populated = data.filter((s) => s.cells.length > 0);
+    const mid = Math.ceil(populated.length / 2);
+    const col1 = populated.slice(0, mid);
+    const col2 = populated.slice(mid);
+
+    const renderSectorCells = (sector: HeatmapSector) => (
+      <div key={sector.name} style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+        {sector.cells.map((cell) => (
+          <HeatCell
+            key={cell.symbol}
+            cell={cell}
+            onSelect={onSelect}
+            isSelected={cell.symbol === selectedSymbol}
+          />
+        ))}
+      </div>
+    );
+
+    const renderColumn = (sectors: HeatmapSector[]) => (
+      <div style={{
+        flex: 1, display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0,
+      }}>
+        {sectors.map((sector, i) => (
+          <React.Fragment key={sector.name}>
+            {renderSectorCells(sector)}
+            {i < sectors.length - 1 && (
+              <div style={{ height: 1, background: 'var(--border)', opacity: 0.6 }} />
+            )}
+          </React.Fragment>
+        ))}
+      </div>
+    );
+
+    return (
+      <div style={{ flex: 1, display: 'flex', gap: 12 }}>
+        {loading && data.length === 0 ? (
+          <>
+            {[0, 1].map((col) => (
+              <div key={col} style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+                    {Array.from({ length: 10 }).map((_, j) => (
+                      <div key={j} style={{
+                        flex: j < 3 ? '2.2 0 80px' : j < 6 ? '1.6 0 64px' : '1.1 0 52px',
+                        height: j < 3 ? 60 : j < 6 ? 50 : 42,
+                        background: 'var(--muted)', borderRadius: 5,
+                        animation: 'hm-pulse 1.5s ease infinite',
+                      }} />
+                    ))}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </>
+        ) : (
+          <>
+            {col1.length > 0 && renderColumn(col1)}
+            {col2.length > 0 && renderColumn(col2)}
+          </>
+        )}
+        <style>{`@keyframes hm-pulse { 0%,100%{opacity:0.35} 50%{opacity:0.7} }`}</style>
+      </div>
+    );
+  }
+
+  // ── Standard card mode ────────────────────────────────────────────────────
   return (
     <div style={{ border: '1px solid var(--border)', borderRadius: 10, background: 'var(--card)', overflow: 'hidden' }}>
       {/* Header — plain div, not a button, to avoid nesting */}
@@ -152,9 +243,9 @@ export const MarketHeatmap: React.FC<Props> = ({ onSelect, selectedSymbol }) => 
         <div
           role="button"
           tabIndex={0}
-          onClick={() => setExpanded((e) => !e)}
-          onKeyDown={(e) => e.key === 'Enter' && setExpanded((x) => !x)}
-          style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, cursor: 'pointer', userSelect: 'none' }}
+          onClick={() => !alwaysExpanded && setExpanded((e) => !e)}
+          onKeyDown={(e) => e.key === 'Enter' && !alwaysExpanded && setExpanded((x) => !x)}
+          style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, cursor: alwaysExpanded ? 'default' : 'pointer', userSelect: 'none' }}
         >
           <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--foreground)', letterSpacing: '0.01em' }}>
             Market Heatmap
@@ -162,9 +253,11 @@ export const MarketHeatmap: React.FC<Props> = ({ onSelect, selectedSymbol }) => 
           <span style={{ fontSize: 9, color: 'var(--muted-foreground)', fontWeight: 500, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
             Equity · 6 Sectors · 60 Names
           </span>
-          <span style={{ fontSize: 10, color: 'var(--muted-foreground)', marginLeft: 2 }}>
-            {expanded ? '▲' : '▼'}
-          </span>
+          {!alwaysExpanded && (
+            <span style={{ fontSize: 10, color: 'var(--muted-foreground)', marginLeft: 2 }}>
+              {expanded ? '▲' : '▼'}
+            </span>
+          )}
         </div>
 
         {/* Refresh — separate from the title click target */}

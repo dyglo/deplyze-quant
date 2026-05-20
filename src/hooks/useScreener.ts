@@ -13,6 +13,7 @@ import {
   fetchScreenerRows,
   fetchMarketPulse,
   fetchHeatmapData,
+  fetchExtendedHeatmapData,
   getMarketStatus,
   type DiscoveryTab,
   type ScreenerRow,
@@ -165,6 +166,30 @@ export function useHeatmapData(): HeatmapState {
   }, []);
 
   // Heatmap refreshes slower — every 2x the normal interval
+  const refresh = usePolling(fetch, () => getPollingInterval() * 2, []);
+
+  return { data, loading, error, refresh };
+}
+
+// ─── useExtendedHeatmapData ───────────────────────────────────────────────────
+
+export function useExtendedHeatmapData(): HeatmapState {
+  const [data, setData] = useState<HeatmapSector[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  const fetch = useCallback(async () => {
+    try {
+      const result = await fetchExtendedHeatmapData();
+      setData(result);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e : new Error(String(e)));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   const refresh = usePolling(fetch, () => getPollingInterval() * 2, []);
 
   return { data, loading, error, refresh };

@@ -31,6 +31,7 @@ import { RiskDecomposition } from '../../components/portfolio/awareness/RiskDeco
 import { PositionActivity } from '../../components/portfolio/awareness/PositionActivity';
 import { PerformanceDistribution } from '../../components/portfolio/awareness/PerformanceDistribution';
 import { CorrelationProfile } from '../../components/portfolio/awareness/CorrelationProfile';
+import { MonitorNext } from '../../components/portfolio/awareness/MonitorNext';
 import { Disclaimer } from '../../components/quant/Disclaimer';
 import { logPageView, logOpen } from '../../lib/telemetry';
 
@@ -209,6 +210,16 @@ export const PortfolioAwareness: React.FC = () => {
         effectiveWeights={effectiveWeights}
         holdingCurves={holdingCurves}
         benchLogReturns={benchLogReturns}
+        benchmarkId={portfolio.benchmarkId}
+      />
+
+      <MonitorNext
+        holdings={portfolioHoldings}
+        effectiveWeights={effectiveWeights}
+        holdingCurves={holdingCurves}
+        benchLogReturns={benchLogReturns}
+        sectorBySymbol={sectorBySymbol}
+        vulnerability={vulnerability}
         benchmarkId={portfolio.benchmarkId}
       />
 

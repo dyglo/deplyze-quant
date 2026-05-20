@@ -52,7 +52,7 @@ export const PortfolioAwareness: React.FC = () => {
 
   const {
     holdingCurves, totalReturn, benchmarkTotalReturn,
-    annVol, sharpe, maxDrawdown,
+    annVol, sharpe, maxDrawdown, performanceSeries,
   } = usePortfolioPerformance(symbols, effectiveWeights, benchmarkId, 252);
 
   const { data: portfolioAgentOutputs } = usePortfolioAgentOutputs(portfolio?.id ?? null, { days: 7, limit: 50 });
@@ -159,6 +159,7 @@ export const PortfolioAwareness: React.FC = () => {
           sharpe,
           maxDrawdown,
         }}
+        chartSeries={performanceSeries}
       />
 
       <DriverDecomposition

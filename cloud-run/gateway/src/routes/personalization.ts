@@ -52,6 +52,63 @@ function getBQ(): BigQuery {
 const PROJECT = process.env.FIREBASE_PROJECT_ID ?? 'deplyze-quant';
 const RAW_APP_DS = process.env.BQ_DATASET_RAW_APP ?? 'raw_app';
 const FEATURES_DS = process.env.BQ_DATASET_FEATURES ?? 'features';
+const ARTIFACTS_DS = process.env.BQ_DATASET_ARTIFACTS ?? 'artifacts';
+const AWARENESS_TABLE = 'portfolio_awareness_synthesis';
+const SNAPSHOT_MAX_AGE_DAYS = 7;
+
+// ─── Awareness helpers ────────────────────────────────────────────────────────
+
+type AwarenessDepth = 'concise' | 'standard' | 'deep';
+type AwarenessPosture = 'defensive' | 'neutral' | 'aggressive';
+
+function deriveDepthFromProfile(preferred_depth: string | null | undefined): AwarenessDepth {
+  if (!preferred_depth) return 'standard';
+  const v = preferred_depth.toLowerCase();
+  if (v === 'summary' || v === 'brief' || v === 'concise') return 'concise';
+  if (v === 'deep' || v === 'detailed' || v === 'verbose') return 'deep';
+  return 'standard';
+}
+
+function derivePostureFromProfile(risk_posture: string | null | undefined): AwarenessPosture {
+  if (!risk_posture) return 'neutral';
+  const v = risk_posture.toLowerCase();
+  if (v === 'defensive' || v === 'conservative' || v === 'cautious') return 'defensive';
+  if (v === 'aggressive' || v === 'opportunistic' || v === 'growth') return 'aggressive';
+  return 'neutral';
+}
+
+function safeJson<T>(v: string | null | undefined): T | null {
+  if (!v) return null;
+  try { return JSON.parse(v) as T; } catch { return null; }
+}
+
+async function fetchAwarenessNarrative(
+  portfolioId: string,
+): Promise<Record<string, string[]> | null> {
+  try {
+    const bq = getBQ();
+    const query = `
+      SELECT TO_JSON_STRING(narrative_lines) AS narrative_lines, generated_at
+      FROM \`${PROJECT}.${ARTIFACTS_DS}.${AWARENESS_TABLE}\`
+      WHERE portfolio_id = @portfolio_id
+        AND snapshot_date >= DATE_SUB(CURRENT_DATE(), INTERVAL ${SNAPSHOT_MAX_AGE_DAYS} DAY)
+        AND is_test = FALSE
+      ORDER BY snapshot_date DESC, generated_at DESC
+      LIMIT 1
+    `;
+    const [rows] = await bq.query({
+      query,
+      params: { portfolio_id: portfolioId },
+      location: 'US',
+      maximumBytesBilled: String(10 * 1024 * 1024),
+    });
+    if (!rows || rows.length === 0) return null;
+    const raw = (rows[0] as { narrative_lines?: string | null }).narrative_lines;
+    return safeJson<Record<string, string[]>>(raw);
+  } catch {
+    return null;
+  }
+}
 
 // ─── Master flag gate ────────────────────────────────────────────────────────
 // Every route in this router is short-circuited when the flag is off.
@@ -405,8 +462,16 @@ router.get('/feed', async (req, res, next) => {
 });
 
 /**
- * GET /v1/personalization/copilot-context
- * Compact grounding payload for the Research Copilot (PR7 consumes it).
+ * GET /v1/personalization/copilot-context?portfolio_id=<pid>
+ *
+ * Compact grounding payload for the Research Copilot.
+ * Extends the engine response with two optional V5 awareness fields:
+ *   awareness_tone           — depth + posture derived from the user profile
+ *   latest_awareness_narrative — narrative_lines from the most recent snapshot
+ *                               (only when portfolio_id is provided and the
+ *                               snapshot is ≤ 7 days old)
+ *
+ * Degrades silently: missing profile → tone omitted; missing snapshot → narrative omitted.
  */
 router.get('/copilot-context', async (req, res, next) => {
   try {
@@ -416,10 +481,40 @@ router.get('/copilot-context', async (req, res, next) => {
       return;
     }
     const userIdHash = hashUserId(req.uid);
+    const portfolioId =
+      typeof req.query.portfolio_id === 'string' ? req.query.portfolio_id.trim() : null;
+
     const result = await callEngine('GET', '/personalization/copilot-context', {
       query: { user_id_hash: userIdHash },
     });
-    res.status(result.status).json(result.body);
+
+    if (result.status !== 200) {
+      res.status(result.status).json(result.body);
+      return;
+    }
+
+    const body = result.body as Record<string, unknown>;
+    const profileSummary = body.profile_summary as Record<string, unknown> | undefined;
+
+    // Derive tone from the profile fields returned by the engine.
+    const awareness_tone =
+      profileSummary
+        ? {
+            depth: deriveDepthFromProfile(profileSummary.preferred_depth as string | null),
+            posture: derivePostureFromProfile(profileSummary.risk_posture as string | null),
+          }
+        : null;
+
+    // Fetch narrative for the given portfolio (non-blocking, degrades to null).
+    const latest_awareness_narrative = portfolioId
+      ? await fetchAwarenessNarrative(portfolioId)
+      : null;
+
+    res.json({
+      ...body,
+      awareness_tone,
+      latest_awareness_narrative,
+    });
   } catch (err) {
     next(err);
   }

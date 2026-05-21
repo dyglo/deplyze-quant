@@ -54,6 +54,8 @@ export function useCopilotSession(
           ...(resolved?.context.artifactIds ?? []),
           ...(ctxFromChips?.artifactIds ?? []),
         ])),
+        // Forward awareness_tone from the resolved context when present.
+        awareness_tone: resolved?.context.awareness_tone ?? null,
       } : undefined;
 
       const dialogue = [...messages, userMsg].map(({ role, content }) => ({ role, content }));

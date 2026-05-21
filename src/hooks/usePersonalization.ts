@@ -97,11 +97,14 @@ export function usePersonalizedFeed(limit = 20): AsyncState<{ items: RankedItem[
   return useAsyncResource(async () => fetchFeed(limit), [limit]);
 }
 
-export function useCopilotContext(): AsyncState<CopilotContext> {
-  return useAsyncResource<CopilotContext>(async () => {
-    const c = await fetchCopilotContext();
-    return c as CopilotContext;
-  }, []);
+export function useCopilotContext(portfolioId?: string | null): AsyncState<CopilotContext> {
+  return useAsyncResource<CopilotContext>(
+    async () => {
+      const c = await fetchCopilotContext(portfolioId);
+      return c as CopilotContext;
+    },
+    [portfolioId ?? null],
+  );
 }
 
 export function useWatchlistIntel(): AsyncState<{ items: RankedItem[]; note?: string }> {

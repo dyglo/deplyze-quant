@@ -175,6 +175,7 @@ async def http_get_copilot_context(user_id_hash: str = Query(..., min_length=8))
         "profile_summary": {
             "regime_style": profile.regime_style,
             "preferred_depth": profile.preferred_depth,
+            "risk_posture": profile.risk_posture,
             "watchlist_symbols": profile.watchlist_symbols,
             "portfolio_symbols": profile.portfolio_symbols,
         },

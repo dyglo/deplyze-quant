@@ -20,7 +20,7 @@ import { VolatilityDesk } from './pages/instruments/VolatilityDesk';
 import { InstrumentDetail } from './pages/InstrumentDetail';
 import { MacroRegimeDesk } from './pages/MacroRegimeDesk';
 import { RelationsMap } from './pages/RelationsMap';
-import { PositioningSentiment } from './pages/PositioningSentiment';
+import { HistoricalResearch } from './pages/HistoricalResearch';
 import { ModelObservatory } from './pages/ModelObservatory';
 import { QuantLab } from './pages/QuantLab';
 import { ResearchCopilot } from './pages/ResearchCopilot';
@@ -98,7 +98,9 @@ export default function App() {
             <Route path="/macro"                element={<ProtectedRoute><MacroRegimeDesk /></ProtectedRoute>} />
             <Route path="/relations-map"        element={<ProtectedRoute><RelationsMap /></ProtectedRoute>} />
             <Route path="/cross-asset"          element={<Navigate to="/relations-map" replace />} />
-            <Route path="/positioning"          element={<ProtectedRoute><PositioningSentiment /></ProtectedRoute>} />
+            <Route path="/research"             element={<ProtectedRoute><HistoricalResearch /></ProtectedRoute>} />
+            <Route path="/research/i/:id"       element={<ProtectedRoute><HistoricalResearch /></ProtectedRoute>} />
+            <Route path="/positioning"          element={<Navigate to="/research" replace />} />
             <Route path="/models"               element={<ProtectedRoute><ModelObservatory /></ProtectedRoute>} />
             <Route path="/lab"                  element={<ProtectedRoute><QuantLab /></ProtectedRoute>} />
             <Route path="/copilot"              element={<ProtectedRoute><ResearchCopilot /></ProtectedRoute>} />

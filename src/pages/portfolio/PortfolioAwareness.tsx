@@ -24,8 +24,16 @@ import { usePortfolioVulnerability } from '../../hooks/useAgentReasoning';
 import { useSectorMetadata } from '../../hooks/useSectorMetadata';
 import { DEFAULT_BENCHMARK_ID } from '../../lib/portfolio/benchmarks';
 import { isAwarenessWorkspaceEnabled } from '../../lib/portfolio/awarenessFlag';
-import { logReturns } from '../../lib/portfolio/holdingAnalytics';
+import { logReturns, computePositionMetrics } from '../../lib/portfolio/holdingAnalytics';
+import {
+  contributionByHolding,
+  contributionBySector,
+} from '../../lib/portfolio/awarenessAttribution';
+import { computeClientStress } from '../../lib/portfolio/clientStress';
+import { buildSnapshotPayload } from '../../lib/portfolio/snapshotPayload';
+import { useAwarenessSnapshot } from '../../hooks/useAwarenessSnapshot';
 import { AwarenessHero } from '../../components/portfolio/awareness/AwarenessHero';
+import { AwarenessSnapshotControl } from '../../components/portfolio/awareness/AwarenessSnapshotControl';
 import { ReturnDecomposition } from '../../components/portfolio/awareness/ReturnDecomposition';
 import { RiskDecomposition } from '../../components/portfolio/awareness/RiskDecomposition';
 import { PositionActivity } from '../../components/portfolio/awareness/PositionActivity';
@@ -80,6 +88,93 @@ export const PortfolioAwareness: React.FC = () => {
   }, [performanceSeries]);
 
   const holdingsCount = portfolioHoldings.length;
+
+  // ── P3.5 backend synthesis snapshot ────────────────────────────────────────
+  // Aggregates lifted to page level so the snapshot payload mirrors what the
+  // user sees. Each useMemo reuses the same primitives the section components
+  // call internally — the duplication is intentional and cheap.
+
+  const positions = useMemo(
+    () => computePositionMetrics(symbols, effectiveWeights, holdingCurves, benchLogReturns),
+    [symbols, effectiveWeights, holdingCurves, benchLogReturns],
+  );
+
+  const contributors = useMemo(() => {
+    const rows = contributionByHolding(portfolioHoldings, effectiveWeights, holdingCurves);
+    const top = rows.filter(r => r.contribution > 0)
+      .sort((a, b) => b.contribution - a.contribution);
+    const bottom = rows.filter(r => r.contribution < 0)
+      .sort((a, b) => a.contribution - b.contribution);
+    return { top, bottom };
+  }, [portfolioHoldings, effectiveWeights, holdingCurves]);
+
+  const sectorRows = useMemo(() => {
+    const rows = contributionBySector(
+      portfolioHoldings.map(h => ({
+        ...h,
+        sector: h.sector || sectorBySymbol[h.symbol]?.sector || undefined,
+      })),
+      effectiveWeights,
+      holdingCurves,
+    );
+    return rows.map(r => ({
+      sector: r.label,
+      weight: r.weight,
+      contribution: r.contribution,
+      members: r.count,
+    }));
+  }, [portfolioHoldings, effectiveWeights, holdingCurves, sectorBySymbol]);
+
+  const clientStress = useMemo(
+    () => computeClientStress(portfolioHoldings, effectiveWeights, holdingCurves),
+    [portfolioHoldings, effectiveWeights, holdingCurves],
+  );
+
+  const hhi = useMemo(() => {
+    const ws = portfolioHoldings.map(h => effectiveWeights[h.symbol] ?? 0).filter(w => w > 0);
+    return ws.reduce((s, w) => s + w * w, 0);
+  }, [portfolioHoldings, effectiveWeights]);
+
+  const sectorRiskRows = useMemo(() => {
+    const total = sectorRows.reduce((s, r) => s + Math.abs(r.contribution ?? 0), 0);
+    return sectorRows
+      .map(r => ({
+        sector: r.sector,
+        weight: r.weight,
+        contribPct: total > 0 ? Math.abs(r.contribution ?? 0) / total : 0,
+      }))
+      .sort((a, b) => b.contribPct - a.contribPct);
+  }, [sectorRows]);
+
+  const { snapshot, loading: snapLoading, snapshotting, error: snapError, persist } =
+    useAwarenessSnapshot(portfolio?.id);
+
+  const onSnapshot = React.useCallback(() => {
+    if (!portfolio) return;
+    const payload = buildSnapshotPayload({
+      benchmarkId: portfolio.benchmarkId,
+      totalReturn,
+      benchmarkTotalReturn,
+      annVol,
+      sharpe,
+      maxDrawdown,
+      positions,
+      contributorsTop: contributors.top,
+      contributorsBottom: contributors.bottom,
+      sectorRows,
+      hhi,
+      stressedCount: clientStress.rows.filter(r => r.count >= 2).length,
+      holdingStress: clientStress.rows,
+      sectorRisk: sectorRiskRows,
+      clientStressDimensions: clientStress.dimensions,
+      monitorProbes: [],
+      narrativeLines: {},
+    });
+    void persist(payload);
+  }, [
+    portfolio, totalReturn, benchmarkTotalReturn, annVol, sharpe, maxDrawdown,
+    positions, contributors, sectorRows, hhi, clientStress, sectorRiskRows, persist,
+  ]);
 
   useEffect(() => {
     logPageView('portfolio_awareness', { portfolio_id: portfolioId });
@@ -142,13 +237,22 @@ export const PortfolioAwareness: React.FC = () => {
         >
           <ArrowLeft size={11} /> Portfolio Overview
         </button>
-        <span style={{
-          display: 'inline-flex', alignItems: 'center', gap: 6,
-          fontSize: 9, fontWeight: 700, letterSpacing: '0.12em',
-          textTransform: 'uppercase', color: 'var(--muted-foreground)', opacity: 0.7,
-        }}>
-          <Sparkles size={10} /> Awareness Workspace
-        </span>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 14 }}>
+          <AwarenessSnapshotControl
+            snapshot={snapshot}
+            loading={snapLoading}
+            snapshotting={snapshotting}
+            error={snapError}
+            onSnapshot={onSnapshot}
+          />
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            fontSize: 9, fontWeight: 700, letterSpacing: '0.12em',
+            textTransform: 'uppercase', color: 'var(--muted-foreground)', opacity: 0.7,
+          }}>
+            <Sparkles size={10} /> Awareness Workspace
+          </span>
+        </div>
       </div>
 
       <AwarenessHero

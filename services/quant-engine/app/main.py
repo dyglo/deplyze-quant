@@ -42,6 +42,7 @@ from app.api.pipelines import router as pipelines_router
 from app.api.warehouse import router as warehouse_router
 from app.api.agents import router as agents_router
 from app.api.personalization import router as personalization_router
+from app.api.portfolio_awareness import router as portfolio_awareness_router
 
 # ─── Logging ────────────────────────────────────────────────────────────────
 
@@ -109,6 +110,7 @@ app.include_router(pipelines_router, prefix="/pipelines", tags=["Pipelines"])
 app.include_router(warehouse_router, prefix="/warehouse", tags=["Warehouse"])
 app.include_router(agents_router, prefix="/agents", tags=["Agents"])
 app.include_router(personalization_router, prefix="/personalization", tags=["Personalization"])
+app.include_router(portfolio_awareness_router, prefix="/portfolio-awareness", tags=["PortfolioAwareness"])
 # PATCH is needed for /investigation/{id}; CORS allow_methods updated below
 # would otherwise drop it. Allow_methods is set on the middleware above.
 

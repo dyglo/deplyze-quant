@@ -78,6 +78,7 @@ import intelligenceRouter from './routes/intelligence';
 import v3p2Router from './routes/v3p2';
 import agentsRouter from './routes/agents';
 import personalizationRouter from './routes/personalization';
+import portfolioAwarenessRouter from './routes/portfolioAwareness';
 
 // ─── Firebase Admin init (idempotent) ──────────────────────────────────────
 
@@ -150,6 +151,7 @@ router.use('/edgar', edgarRouter);
 router.use('/intelligence', intelligenceRouter);
 router.use('/agents', agentsRouter);
 router.use('/personalization', personalizationRouter);
+router.use('/portfolio-awareness', portfolioAwarenessRouter);
 // V3 Phase 2 routes — multi-prefix (/macro/regimes, /filings/*, /narratives/*,
 // /research/macro-observations, /relations/context, /briefings/latest).
 // Mounted last so the established /macro and /briefings routers handle their

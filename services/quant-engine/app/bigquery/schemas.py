@@ -656,3 +656,36 @@ AGENT_OUTPUTS = [
     S("lineage_id", "STRING", "NULLABLE"),
     S("is_test", "BOOL", "NULLABLE"),
 ]
+
+# ─── Portfolio Awareness Synthesis (V5 P3 backend) ────────────────────────────
+
+# One row per (portfolio_id, snapshot_date). Idempotent on lineage_id
+# = f"awareness:{portfolio_id}:{snapshot_date}". Re-snapshots within the
+# same day overwrite via the writer's MERGE semantics.
+#
+# Payload sections are stored as JSON to allow the synthesis schema to
+# evolve without BQ migrations. Each section mirrors the frontend types.
+
+PORTFOLIO_AWARENESS_SYNTHESIS = [
+    S("artifact_id", "STRING", "REQUIRED"),
+    S("portfolio_id", "STRING", "REQUIRED"),
+    S("snapshot_date", "DATE", "REQUIRED"),
+    S("generated_at", "TIMESTAMP", "REQUIRED"),
+    S("benchmark_id", "STRING", "NULLABLE"),
+    S("uid", "STRING", "NULLABLE"),
+    S("workspace_id", "STRING", "NULLABLE"),
+
+    # Synthesis payload sections. Each is a JSON object whose schema is
+    # documented in src/lib/portfolio/* on the frontend side.
+    S("kpis", "JSON", "NULLABLE"),                  # total_return, vol, sharpe, mdd, etc.
+    S("contributors", "JSON", "NULLABLE"),          # top/bottom contributor rows
+    S("sector_breakdown", "JSON", "NULLABLE"),
+    S("risk_decomposition", "JSON", "NULLABLE"),
+    S("monitor_probes", "JSON", "NULLABLE"),
+    S("narrative_lines", "JSON", "NULLABLE"),       # per-section narrative copy
+
+    S("holding_symbols", "STRING", "REPEATED"),     # for cluster filtering / lookup
+    S("source_tables", "STRING", "REPEATED"),
+    S("lineage_id", "STRING", "REQUIRED"),
+    S("is_test", "BOOL", "NULLABLE"),
+]

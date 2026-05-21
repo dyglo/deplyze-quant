@@ -15,6 +15,8 @@
 
 import React from 'react';
 import { assertAwarenessSafe } from '../../../lib/portfolio/awarenessNarration';
+import { applyTone } from '../../../lib/portfolio/awarenessTone';
+import { useAwarenessTone } from './AwarenessToneContext';
 
 interface Line {
   /** Optional emphasis: the line renders in foreground colour instead of muted. */
@@ -30,9 +32,9 @@ interface Props {
 }
 
 export const SectionNarrative: React.FC<Props> = ({ lines, prefix = 'Deplyze ▸' }) => {
-  const normalised: Line[] = lines.map(l =>
-    typeof l === 'string' ? { text: l } : l,
-  );
+  const tone = useAwarenessTone();
+  const toned = applyTone(lines, tone);
+  const normalised: Line[] = toned.map(l => ({ ...l }));
   const safe = normalised
     .map(l => {
       try {

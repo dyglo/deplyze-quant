@@ -22,18 +22,35 @@ import { usePortfolioWorkspace } from '../../hooks/usePortfolioWorkspace';
 import { usePortfolioPerformance } from '../../hooks/usePortfolioPerformance';
 import { usePortfolioVulnerability } from '../../hooks/useAgentReasoning';
 import { useSectorMetadata } from '../../hooks/useSectorMetadata';
+import { useUserProfile } from '../../hooks/usePersonalization';
 import { DEFAULT_BENCHMARK_ID } from '../../lib/portfolio/benchmarks';
 import { isAwarenessWorkspaceEnabled } from '../../lib/portfolio/awarenessFlag';
-import { logReturns, computePositionMetrics } from '../../lib/portfolio/holdingAnalytics';
+import { logReturns, computePositionMetrics, correlation } from '../../lib/portfolio/holdingAnalytics';
 import {
   contributionByHolding,
   contributionBySector,
 } from '../../lib/portfolio/awarenessAttribution';
 import { computeClientStress } from '../../lib/portfolio/clientStress';
+import { buildMonitorProbes } from '../../lib/portfolio/monitorNext';
+import {
+  narrateHero,
+  narrateReturnDecomposition,
+  narrateRiskDecomposition,
+  narratePositionActivity,
+  narrateCorrelationProfile,
+} from '../../lib/portfolio/sectionNarratives';
+import {
+  deriveTone,
+  applyTone,
+  type AwarenessDepth,
+  type AwarenessTone,
+} from '../../lib/portfolio/awarenessTone';
 import { buildSnapshotPayload } from '../../lib/portfolio/snapshotPayload';
 import { useAwarenessSnapshot } from '../../hooks/useAwarenessSnapshot';
 import { AwarenessHero } from '../../components/portfolio/awareness/AwarenessHero';
 import { AwarenessSnapshotControl } from '../../components/portfolio/awareness/AwarenessSnapshotControl';
+import { AwarenessToneProvider } from '../../components/portfolio/awareness/AwarenessToneContext';
+import { AwarenessToneControl } from '../../components/portfolio/awareness/AwarenessToneControl';
 import { ReturnDecomposition } from '../../components/portfolio/awareness/ReturnDecomposition';
 import { RiskDecomposition } from '../../components/portfolio/awareness/RiskDecomposition';
 import { PositionActivity } from '../../components/portfolio/awareness/PositionActivity';
@@ -146,6 +163,102 @@ export const PortfolioAwareness: React.FC = () => {
       .sort((a, b) => b.contribPct - a.contribPct);
   }, [sectorRows]);
 
+  // ── Personalization tone (P4) ──────────────────────────────────────────────
+  const { data: profile } = useUserProfile();
+  const initialTone = useMemo<AwarenessTone>(() => deriveTone(profile), [profile]);
+  const [depth, setDepth] = React.useState<AwarenessDepth>(initialTone.depth);
+  React.useEffect(() => { setDepth(initialTone.depth); }, [initialTone.depth]);
+  const tone: AwarenessTone = useMemo(
+    () => ({ depth, posture: initialTone.posture }),
+    [depth, initialTone.posture],
+  );
+  const onDepthChange = React.useCallback((d: AwarenessDepth) => {
+    setDepth(d);
+    try { window.localStorage.setItem('deplyze.awareness.depth', d); } catch { /* ignore */ }
+  }, []);
+
+  // ── Monitor probes at page level (for snapshot + future surfacing) ────────
+  const sectorWeights = useMemo(
+    () => sectorRows.map(r => ({ sector: r.sector, weight: r.weight, memberCount: r.members ?? 0 })),
+    [sectorRows],
+  );
+  const meanIntraCorr = useMemo(() => {
+    const ps = positions.filter(p => p.logRets.length > 10);
+    if (ps.length < 2) return 0;
+    let acc = 0, n = 0;
+    for (let i = 0; i < ps.length; i++) {
+      for (let j = i + 1; j < ps.length; j++) {
+        const c = correlation(ps[i].logRets, ps[j].logRets);
+        if (isFinite(c)) { acc += c; n += 1; }
+      }
+    }
+    return n > 0 ? acc / n : 0;
+  }, [positions]);
+
+  const monitorProbes = useMemo(
+    () => buildMonitorProbes({
+      positions,
+      sectorBySymbol,
+      sectorWeights,
+      vulnerability,
+      meanIntraCorr,
+      benchmarkId: portfolio?.benchmarkId,
+    }),
+    [positions, sectorBySymbol, sectorWeights, vulnerability, meanIntraCorr, portfolio?.benchmarkId],
+  );
+
+  // ── Narrative lines for snapshot payload ──────────────────────────────────
+  const narrativeLines = useMemo<Record<string, string[]>>(() => {
+    const heroLines = narrateHero({
+      portfolioName: portfolio?.name,
+      totalReturn,
+      benchmarkTotalReturn,
+      benchmarkId: portfolio?.benchmarkId,
+      sharpe,
+      maxDrawdown,
+      observationCount: 0,
+      regimeLabel: null,
+      riskLevel: null,
+    });
+    const retLines = narrateReturnDecomposition({
+      totalReturn,
+      benchmarkTotalReturn,
+      benchmarkId: portfolio?.benchmarkId,
+      holdingRows: [...contributors.top, ...contributors.bottom],
+      sectorRows: sectorRows.map(r => ({
+        key: r.sector, label: r.sector,
+        weight: r.weight, contribution: r.contribution ?? 0, count: r.members ?? 0,
+      })),
+    });
+    const riskLines = narrateRiskDecomposition({
+      annVol,
+      maxDrawdown,
+      hhi,
+      holdingsCount: portfolioHoldings.length,
+      stressedCount: clientStress.rows.filter(r => r.count >= 2).length,
+      topSectorRiskShare: sectorRiskRows[0]
+        ? { sector: sectorRiskRows[0].sector, share: sectorRiskRows[0].contribPct }
+        : undefined,
+      vulnerability,
+    });
+    const posLines = narratePositionActivity({ positions, benchmarkId: portfolio?.benchmarkId });
+    const corrLines = narrateCorrelationProfile({
+      positions, benchmarkId: portfolio?.benchmarkId, meanIntraCorr,
+    });
+    const toLines = (xs: Array<{ text: string }>) => applyTone(xs, tone).map(l => l.text);
+    return {
+      hero: toLines(heroLines),
+      return_decomposition: toLines(retLines),
+      risk_decomposition: toLines(riskLines),
+      position_activity: toLines(posLines),
+      correlation_profile: toLines(corrLines),
+    };
+  }, [
+    portfolio?.name, portfolio?.benchmarkId, totalReturn, benchmarkTotalReturn,
+    sharpe, maxDrawdown, contributors, sectorRows, annVol, hhi, portfolioHoldings.length,
+    clientStress, sectorRiskRows, vulnerability, positions, meanIntraCorr, tone,
+  ]);
+
   const { snapshot, loading: snapLoading, snapshotting, error: snapError, persist } =
     useAwarenessSnapshot(portfolio?.id);
 
@@ -153,6 +266,7 @@ export const PortfolioAwareness: React.FC = () => {
     if (!portfolio) return;
     const payload = buildSnapshotPayload({
       benchmarkId: portfolio.benchmarkId,
+      uid: profile ? undefined : undefined,
       totalReturn,
       benchmarkTotalReturn,
       annVol,
@@ -167,13 +281,14 @@ export const PortfolioAwareness: React.FC = () => {
       holdingStress: clientStress.rows,
       sectorRisk: sectorRiskRows,
       clientStressDimensions: clientStress.dimensions,
-      monitorProbes: [],
-      narrativeLines: {},
+      monitorProbes,
+      narrativeLines,
     });
     void persist(payload);
   }, [
-    portfolio, totalReturn, benchmarkTotalReturn, annVol, sharpe, maxDrawdown,
-    positions, contributors, sectorRows, hhi, clientStress, sectorRiskRows, persist,
+    portfolio, profile, totalReturn, benchmarkTotalReturn, annVol, sharpe, maxDrawdown,
+    positions, contributors, sectorRows, hhi, clientStress, sectorRiskRows,
+    monitorProbes, narrativeLines, persist,
   ]);
 
   useEffect(() => {
@@ -238,6 +353,7 @@ export const PortfolioAwareness: React.FC = () => {
           <ArrowLeft size={11} /> Portfolio Overview
         </button>
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 14 }}>
+          <AwarenessToneControl depth={tone.depth} onChange={onDepthChange} />
           <AwarenessSnapshotControl
             snapshot={snapshot}
             loading={snapLoading}
@@ -255,6 +371,7 @@ export const PortfolioAwareness: React.FC = () => {
         </div>
       </div>
 
+      <AwarenessToneProvider tone={tone}>
       <AwarenessHero
         portfolioId={portfolio.id}
         portfolioName={portfolio.name}
@@ -330,6 +447,7 @@ export const PortfolioAwareness: React.FC = () => {
       <div style={{ maxWidth: 1180, margin: '40px auto 0', padding: '0 32px' }}>
         <Disclaimer />
       </div>
+      </AwarenessToneProvider>
     </div>
   );
 };

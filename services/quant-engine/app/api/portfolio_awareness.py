@@ -10,8 +10,14 @@ FastAPI routes for Portfolio Awareness Synthesis.
   GET  /portfolio-awareness/{portfolio_id}/latest
       Returns the most recent snapshot within the last 7 days, or 404.
 
-Authentication: handled by the upstream gateway. This service trusts the
-caller; do not expose it directly to the public internet.
+  POST /portfolio-awareness/recompute
+      Server-side recompute for stale portfolios. Called by Cloud Scheduler
+      (daily at 04:00 UTC) and available for ad-hoc triggering.
+      Body: {max_age_hours?, limit?, portfolio_ids?}
+      Returns: {scanned, recomputed, skipped, errors[]}
+
+Authentication: handled by the upstream Cloud Run IAM invoker binding.
+This service trusts the caller; do not expose it directly to the public internet.
 """
 
 from __future__ import annotations
@@ -30,6 +36,14 @@ from app.portfolio_awareness.writer import (
 
 router = APIRouter()
 log = structlog.get_logger("quant_engine.api.portfolio_awareness")
+
+
+# ─── Recompute request model ──────────────────────────────────────────────────
+
+class RecomputeRequest(BaseModel):
+    max_age_hours: int = Field(default=18, ge=1, le=168)
+    limit: int = Field(default=50, ge=1, le=200)
+    portfolio_ids: Optional[List[str]] = None
 
 
 class SynthesisPayloadIn(BaseModel):
@@ -74,6 +88,32 @@ async def snapshot_portfolio_awareness(
         log.error("awareness_snapshot.write_failed", portfolio_id=portfolio_id, error=str(exc))
         raise HTTPException(status_code=500, detail="Failed to persist awareness snapshot")
     return {"ok": True, **result}
+
+
+@router.post("/recompute")
+async def recompute_awareness(req: RecomputeRequest) -> Dict[str, Any]:
+    """
+    Server-side portfolio awareness recompute.
+
+    Finds portfolios not snapshotted within max_age_hours, reads holdings from
+    Firestore, computes analytics, and persists via write_snapshot(). The
+    operation is synchronous (not backgrounded) so Cloud Scheduler receives a
+    definitive result. Typical run time: < 30 s for limit=50 portfolios.
+    Returns 503 when BigQuery or Firestore is unavailable.
+    """
+    from app.portfolio_awareness.recompute import recompute_stale_portfolios
+
+    try:
+        report = recompute_stale_portfolios(
+            max_age_hours=req.max_age_hours,
+            limit=req.limit,
+            portfolio_ids=req.portfolio_ids,
+        )
+    except Exception as exc:  # noqa: BLE001
+        log.error("awareness_recompute.failed", error=str(exc))
+        raise HTTPException(status_code=503, detail=f"Recompute failed: {exc}")
+
+    return report.to_dict()
 
 
 @router.get("/{portfolio_id}/latest")

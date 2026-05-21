@@ -109,6 +109,7 @@ export interface CopilotContext {
   profile_summary: {
     regime_style?: string | null;
     preferred_depth?: string | null;
+    risk_posture?: string | null;
     watchlist_symbols?: string[];
     portfolio_symbols?: string[];
   };
@@ -120,6 +121,17 @@ export interface CopilotContext {
     unresolved_questions: string[];
   }>;
   top_evidence: RankedItem[];
+  /** Resolved awareness tone for this user (depth + posture). Optional — absent
+   *  when the personalization profile has not yet been built. */
+  awareness_tone?: {
+    depth: 'concise' | 'standard' | 'deep';
+    posture: 'defensive' | 'neutral' | 'aggressive';
+  } | null;
+  /** Narrative lines from the most recent portfolio awareness snapshot
+   *  (keyed by section: hero, returnDecomposition, riskDecomposition, …).
+   *  Optional — absent when no snapshot is available or portfolio_id was not
+   *  provided. Not injected verbatim; Copilot uses this for context only. */
+  latest_awareness_narrative?: Record<string, string[]> | null;
 }
 
 // ─── Internal — JSON parse for engine-stringified payloads ───────────────────
@@ -210,9 +222,10 @@ export async function fetchFeed(limit = 20): Promise<{ items: RankedItem[]; rank
   }
 }
 
-export async function fetchCopilotContext(): Promise<CopilotContext | null> {
+export async function fetchCopilotContext(portfolioId?: string | null): Promise<CopilotContext | null> {
   try {
-    return await gatewayGet<CopilotContext>('/personalization/copilot-context', undefined, 2 * 60_000);
+    const params = portfolioId ? { portfolio_id: portfolioId } : undefined;
+    return await gatewayGet<CopilotContext>('/personalization/copilot-context', params, 2 * 60_000);
   } catch (err: unknown) {
     const e = err as { status?: number };
     if (e?.status === 404 || e?.status === 503) return null;

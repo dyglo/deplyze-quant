@@ -354,11 +354,92 @@ export function useHistoricalResearch() {
         return rows;
       });
 
+      // ── Performance rows (CAGR, Sharpe, Sortino, Calmar, vol, skew, kurtosis)
+      const perfObs: ResearchObservation[] = analytics.performance.flatMap((p) => [
+        { label: `${p.symbol} CAGR`,          value: pct(p.cagr),          period },
+        { label: `${p.symbol} ann. vol`,       value: pct(p.annVol),        period },
+        { label: `${p.symbol} Sharpe`,         value: p.sharpe.toFixed(2),  period },
+        { label: `${p.symbol} Sortino`,        value: p.sortino.toFixed(2), period },
+        { label: `${p.symbol} Calmar`,         value: p.calmar.toFixed(2),  period },
+        { label: `${p.symbol} skewness`,       value: p.skew.toFixed(2),    period },
+        { label: `${p.symbol} excess kurtosis`, value: p.kurtosis.toFixed(2), period },
+        { label: `${p.symbol} data window`,    value: `${isoDate(p.startTs)} → ${isoDate(p.endTs)}`, period },
+        { label: `${p.symbol} bar count`,      value: p.bars,               period },
+      ]);
+
+      // ── Drawdown details — magnitude + dates + duration for every asset
+      const drawdownObs: ResearchObservation[] = analytics.drawdowns.flatMap((d) => {
+        const rows: ResearchObservation[] = [
+          { label: `${d.symbol} max drawdown`,          value: pct(d.deepest.dd),       period },
+          { label: `${d.symbol} drawdown peak date`,    value: isoDate(d.deepest.peakTs),  period },
+          { label: `${d.symbol} drawdown trough date`,  value: isoDate(d.deepest.troughTs), period },
+          { label: `${d.symbol} drawdown duration`,     value: `${d.deepest.durationDays} days`, period },
+          { label: `${d.symbol} drawdown days peak→trough`, value: `${d.deepest.drawdownDays} days`, period },
+          { label: `${d.symbol} current drawdown`,      value: pct(d.current),          period },
+        ];
+        if (d.deepest.recoveredTs != null) {
+          rows.push({ label: `${d.symbol} drawdown recovery date`, value: isoDate(d.deepest.recoveredTs), period });
+        } else {
+          rows.push({ label: `${d.symbol} drawdown recovery`, value: 'not yet recovered', period });
+        }
+        return rows;
+      });
+
+      // ── Annual returns — one row per year × symbol
+      const annualObs: ResearchObservation[] = analytics.annualReturns.flatMap((row) =>
+        Object.entries(row.perAsset)
+          .filter(([, v]) => v != null)
+          .map(([sym, v]) => ({ label: `${sym} ${row.year} annual return`, value: pct(v as number), period: String(row.year) })),
+      );
+
+      // ── Return distribution — mean, std, min, max daily return
+      const distObs: ResearchObservation[] = analytics.distributions.flatMap((d) => [
+        { label: `${d.symbol} mean daily return`, value: pct(d.mean),  period },
+        { label: `${d.symbol} daily return std`,  value: pct(d.std),   period },
+        { label: `${d.symbol} best daily return`, value: pct(d.max),   period },
+        { label: `${d.symbol} worst daily return`, value: pct(d.min),  period },
+      ]);
+
+      // ── Rolling vol — current, min, max
+      const volObs: ResearchObservation[] = analytics.rollingVols.flatMap((rv) => {
+        if (rv.series.length === 0) return [];
+        const vols = rv.series.map((p) => p.vol);
+        const minV = Math.min(...vols);
+        const maxV = Math.max(...vols);
+        const curV = vols[vols.length - 1];
+        return [
+          { label: `${rv.symbol} current rolling vol`, value: pct(curV), period },
+          { label: `${rv.symbol} rolling vol range`,   value: `${pct(minV)} → ${pct(maxV)}`, period },
+        ];
+      });
+
+      // ── Correlation matrix
+      const corrMatrixObs: ResearchObservation[] = (() => {
+        const cm = analytics.corrMatrix;
+        if (!cm) return [];
+        const rows: ResearchObservation[] = [];
+        for (let i = 0; i < cm.symbols.length; i++) {
+          for (let j = i + 1; j < cm.symbols.length; j++) {
+            rows.push({
+              label: `${cm.symbols[i]}/${cm.symbols[j]} full-period correlation`,
+              value: cm.matrix[i][j].toFixed(2),
+              period,
+            });
+          }
+        }
+        return rows;
+      })();
+
       const observations: ResearchObservation[] = [
         ...dataWindowObs,
         ...regimeObs,
+        ...perfObs,
+        ...drawdownObs,
+        ...annualObs,
+        ...distObs,
+        ...volObs,
+        ...corrMatrixObs,
         ...totals.map((t) => ({ label: `${t.symbol} total return`, value: pct(t.totalReturn), period })),
-        ...drawdowns.map((d) => ({ label: `${d.symbol} max drawdown`, value: pct(d.maxDrawdown), period })),
         ...rollingCorrelations.map((rc) => ({
           label: `${rc.a}/${rc.b} ${rc.window}-bar correlation (full window)`,
           value: rc.overall.toFixed(2),

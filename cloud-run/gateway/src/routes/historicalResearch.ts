@@ -115,7 +115,7 @@ const ReasonBody = z.object({
     label: z.string(),
     value: z.union([z.string(), z.number()]),
     period: z.string().optional(),
-  })).max(40),
+  })).max(300),
 });
 
 const REASON_SYSTEM = `
@@ -176,7 +176,8 @@ const FollowupAskBody = z.object({
     label: z.string(),
     value: z.union([z.string(), z.number()]),
     period: z.string().optional(),
-  })).max(80),
+  })).max(300),
+  narrative: z.string().max(8000).optional(),
   priorTurns: z.array(z.object({
     question: z.string(),
     answer: z.string(),
@@ -184,18 +185,15 @@ const FollowupAskBody = z.object({
 });
 
 const FOLLOWUP_ASK_SYSTEM = `
-You answer follow-up questions about a completed historical-research investigation.
+You are an institutional research analyst answering follow-up questions about a completed quantitative investigation.
 
-Hard rules:
-- 1 to 4 sentences. No headings, no bullets, no markdown.
-- You may ONLY cite numbers, tickers, dates and labels that appear in the
-  observations array. If the answer requires data that isn't there, say so
-  plainly: "The current investigation doesn't include <thing> — re-run with
-  <suggested change> to answer that."
-- Tone: institutional, evidence-oriented, probabilistic. No buy/sell language.
-- If the user asks "why" about a regime-conditioned result, reference the
-  macro channel the evidence is consistent with (rates, credit, dollar,
-  liquidity) but never invent specifics not present in the observations.
+Rules:
+- Answer in 2 to 5 sentences. No headings, no bullets, no markdown formatting.
+- Use the observations and prior analysis as your primary evidence. Cite specific numbers, dates, and tickers that appear in them.
+- If the question touches something not directly in the data, reason from what IS available — magnitude, timing, asset class behavior, macro context — and clearly flag it as an inference ("this is consistent with…", "the data suggests…").
+- Never refuse to answer. Always give the most useful response possible given the evidence at hand.
+- Tone: institutional, evidence-oriented, probabilistic. No buy/sell recommendations.
+- For "why" questions, reason from macro channels consistent with the evidence (rates, credit, dollar, liquidity, risk sentiment) without inventing facts.
 `.trim();
 
 router.post('/followup-ask', async (req, res, next) => {
@@ -209,21 +207,20 @@ router.post('/followup-ask', async (req, res, next) => {
       .join('\n\n');
 
     const prompt = [
-      `Original question: ${body.query}`,
-      `Plan: ${JSON.stringify(body.plan)}`,
-      'Observations:',
+      `Original research question: ${body.query}`,
+      `Research plan: ${JSON.stringify(body.plan)}`,
+      body.narrative ? `Prior analysis:\n${body.narrative}` : '',
+      'Observations (metrics computed for this investigation):',
       evidenceLines || '(none)',
-      turns ? `\nPrior follow-ups:\n${turns}` : '',
-      '',
+      turns ? `Prior follow-ups:\n${turns}` : '',
       `New follow-up question: ${body.question}`,
-      '',
-      'Answer now, using only the observations above.',
-    ].filter(Boolean).join('\n');
+      'Answer directly and substantively, grounded in the observations and prior analysis above.',
+    ].filter(Boolean).join('\n\n');
 
     const answer = await geminiGenerate({
       systemInstruction: FOLLOWUP_ASK_SYSTEM,
       prompt,
-      temperature: 0.2,
+      temperature: 0.3,
     });
     res.json({ answer });
   } catch (err) { next(err); }

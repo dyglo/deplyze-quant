@@ -84,9 +84,14 @@ export interface ResearchResult {
   followups?: { id: string; question: string; answer: string; ts: number }[];
 }
 
-const ROLL_WINDOW = 60;
-const DEFAULT_BARS_PER_YEAR = 252;
 const PROVIDER_MAX_BARS = 5000;
+// Switch to weekly bars when the range exceeds this many years so we stay
+// within the gateway's 5 000-bar cap (5000 ÷ 252 ≈ 19.8 years daily).
+const WEEKLY_THRESHOLD_YEARS = 15;
+const BARS_PER_YEAR_DAILY  = 252;
+const BARS_PER_YEAR_WEEKLY =  52;
+const ROLL_WINDOW_DAILY    =  60;   // ~3 months of trading days
+const ROLL_WINDOW_WEEKLY   =  26;   // ~6 months of weeks
 
 const INITIAL_STEPS: ProgressStep[] = [
   { id: 'plan',     label: 'Resolving intent',          state: 'pending', log: [] },
@@ -188,23 +193,32 @@ export function useHistoricalResearch() {
       // ── 2. Retrieve ────────────────────────────────────────────────────
       const symbols = dedupe([...plan.assets, ...(plan.benchmark ? [plan.benchmark] : [])]);
       const requestedYears = effectiveYears(plan.timeframe);
+
+      // Long ranges (> 15 Y) switch to weekly bars so we stay within the
+      // gateway's 5 000-bar hard cap (5 000 daily ≈ 19.8 Y; 5 000 weekly ≈ 96 Y).
+      const useWeekly  = requestedYears > WEEKLY_THRESHOLD_YEARS;
+      const interval   = useWeekly ? '1week' : '1day' as const;
+      const barsPerYear = useWeekly ? BARS_PER_YEAR_WEEKLY : BARS_PER_YEAR_DAILY;
+      const rollWindow  = useWeekly ? ROLL_WINDOW_WEEKLY   : ROLL_WINDOW_DAILY;
       const outputsize = Math.min(
         PROVIDER_MAX_BARS,
-        Math.max(60, requestedYears * DEFAULT_BARS_PER_YEAR),
+        Math.max(60, Math.ceil(requestedYears * barsPerYear)),
       );
 
       start('retrieve');
       appendLog('retrieve', { type: 'narrative', text: `Let me fetch OHLCV price history for ${symbols.join(', ')}.` });
 
+      const barLabel = useWeekly ? 'weekly' : 'daily';
+
       // Pre-emit all "→ requesting" entries before any fetch starts (sync).
       for (const sym of symbols) {
-        appendLog('retrieve', { type: 'action', prefix: '→', text: `${sym}: requesting ${requestedYears}Y daily bars` });
+        appendLog('retrieve', { type: 'action', prefix: '→', text: `${sym}: requesting ${requestedYears}Y ${barLabel} bars` });
       }
 
       let fetchedCount = 0;
       const bars = await Promise.all(symbols.map(async (sym) => {
         try {
-          const r = await fetchOHLCV(sym, '1day', outputsize);
+          const r = await fetchOHLCV(sym, interval, outputsize);
           fetchedCount++;
           appendLog('retrieve', { type: 'action', prefix: '✓', text: `${sym}: ${r.bars.length.toLocaleString()} bars received` });
           if (fetchedCount < symbols.length) {
@@ -257,16 +271,16 @@ export function useHistoricalResearch() {
           const retA = pctReturns(aligned.a);
           const retB = pctReturns(aligned.b);
           const ts = aligned.ts;
-          const r = rollingPearson(retA, retB, ROLL_WINDOW);
+          const r = rollingPearson(retA, retB, rollWindow);
           const series = r.map((v, i) => ({
-            ts: ts[i + ROLL_WINDOW] ?? ts[ts.length - 1],
+            ts: ts[i + rollWindow] ?? ts[ts.length - 1],
             r: v,
           })).filter((p) => Number.isFinite(p.r));
           const overall = pearson(retA, retB);
           rollingCorrelations.push({
             a: primary.symbol,
             b: right.symbol,
-            window: ROLL_WINDOW,
+            window: rollWindow,
             series,
             overall,
           });
@@ -367,7 +381,7 @@ export function useHistoricalResearch() {
       }
       appendLog('compute', { type: 'narrative', text: `Compiled ${observations.length} observation${observations.length === 1 ? '' : 's'}. Handing off to reasoning.` });
 
-      const computeDetail = computeSummary({ assetSeries, rollingCorrelations, observations });
+      const computeDetail = computeSummary({ assetSeries, rollingCorrelations, observations, rollWindow });
       finish('compute', { detail: computeDetail });
 
       // ── 4. Reason ──────────────────────────────────────────────────────
@@ -520,12 +534,13 @@ function computeSummary(input: {
   assetSeries: AssetSeries[];
   rollingCorrelations: RollingCorrelation[];
   observations: ResearchObservation[];
+  rollWindow: number;
 }): string {
   const parts: string[] = [];
   if (input.assetSeries.length) parts.push(`${input.assetSeries.length} series · perf, DD, dist, vol`);
   if (input.rollingCorrelations.length) {
     const overlaps = input.rollingCorrelations.map((rc) => rc.series.length).filter((n) => n > 0);
-    if (overlaps.length) parts.push(`rolling ${ROLL_WINDOW}-bar corr · ${Math.min(...overlaps).toLocaleString()} bars`);
+    if (overlaps.length) parts.push(`rolling ${input.rollWindow}-bar corr · ${Math.min(...overlaps).toLocaleString()} bars`);
   }
   parts.push(`${input.observations.length} observations`);
   return parts.join(' · ');

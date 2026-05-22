@@ -39,16 +39,25 @@ export interface SavedInvestigationMeta {
   followupCount: number;
 }
 
+/**
+ * Firestore does not allow nested arrays inside a document field
+ * (e.g. `number[][]` like a correlation matrix). We sidestep the limit by
+ * storing the full ResearchResult as a JSON string. Top-level meta fields
+ * are kept loose so the list query can sort + filter without rehydrating.
+ */
 interface SavedDoc {
   query: string;
-  result: ResearchResult;
+  resultJson: string;          // serialized ResearchResult
   completedAt: number;
   savedAt: Timestamp | number;
   intent: string;
   assets: string[];
   lookbackYears: number;
   followupCount: number;
+  schemaVersion: number;
 }
+
+const SCHEMA_VERSION = 1;
 
 function colRef(uid: string) {
   return collection(db, 'users', uid, COLLECTION);
@@ -65,13 +74,14 @@ export async function saveInvestigation(
 ): Promise<void> {
   const payload: SavedDoc = {
     query: result.query,
-    result,
+    resultJson: JSON.stringify(result),
     completedAt: result.completedAt,
     savedAt: serverTimestamp() as unknown as Timestamp,
     intent: result.plan.intent,
     assets: result.plan.assets,
     lookbackYears: result.plan.timeframe.lookbackYears,
     followupCount: result.followups?.length ?? 0,
+    schemaVersion: SCHEMA_VERSION,
   };
   await setDoc(docRef(uid, id), payload, { merge: true });
 }
@@ -82,7 +92,11 @@ export async function loadInvestigation(
 ): Promise<ResearchResult | null> {
   const snap = await getDoc(docRef(uid, id));
   if (!snap.exists()) return null;
-  const d = snap.data() as SavedDoc;
+  const d = snap.data() as Partial<SavedDoc> & { result?: ResearchResult };
+  if (d.resultJson) {
+    try { return JSON.parse(d.resultJson) as ResearchResult; } catch { return null; }
+  }
+  // Back-compat: pre-schemaVersion docs stored the result as a nested object.
   return d.result ?? null;
 }
 
@@ -97,11 +111,11 @@ export async function listSavedInvestigations(
   const q = query(colRef(uid), orderBy('completedAt', 'desc'), limit(max));
   const snap = await getDocs(q);
   return snap.docs.map((s) => {
-    const d = s.data() as SavedDoc;
+    const d = s.data() as Partial<SavedDoc> & { result?: ResearchResult };
     const savedAtMs =
       typeof d.savedAt === 'number'
         ? d.savedAt
-        : (d.savedAt as Timestamp)?.toMillis?.() ?? Date.now();
+        : (d.savedAt as Timestamp | undefined)?.toMillis?.() ?? Date.now();
     return {
       id: s.id,
       query: d.query ?? d.result?.query ?? '(untitled)',

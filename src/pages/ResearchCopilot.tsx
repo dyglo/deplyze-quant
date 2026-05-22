@@ -178,9 +178,13 @@ export const ResearchCopilot: React.FC = () => {
     context: {
       instruments: pulse.data?.filter((r) => r.ok).map((r) => r.symbol) ?? [],
       timeframe: '1d',
+      // awareness_tone is derived server-side from the user's profile and
+      // returned with the V5 copilot-context bundle. Pass it through so the
+      // gateway can append the depth/posture instruction to the system prompt.
+      awareness_tone: v5Ctx.data?.awareness_tone ?? null,
     },
     snapshot: buildSnapshot(),
-  }), [pulse.data, buildSnapshot]);
+  }), [pulse.data, buildSnapshot, v5Ctx.data]);
 
   const { messages, sending, error, send } = useCopilotSession([], contextResolver);
 

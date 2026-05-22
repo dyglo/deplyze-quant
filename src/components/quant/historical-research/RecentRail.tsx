@@ -14,7 +14,6 @@ import React, { useEffect, useState } from 'react';
 import { Clock, ArrowRight, Bookmark } from 'lucide-react';
 import type { ResearchResult } from '../../../hooks/useHistoricalResearch';
 import { useAuth } from '../../AuthProvider';
-import { useWorkspace } from '../../WorkspaceContext';
 import { listSavedInvestigations, type SavedInvestigationMeta } from '../../../services/savedHistoricalResearchService';
 
 const STORAGE_PREFIX = 'hr:';
@@ -65,7 +64,6 @@ interface Props {
 
 export const RecentRail: React.FC<Props> = ({ onOpen, refreshKey }) => {
   const { user } = useAuth();
-  const { currentWorkspace } = useWorkspace();
   const [tab, setTab] = useState<Tab>('recent');
   const [savedItems, setSavedItems] = useState<SavedInvestigationMeta[]>([]);
   const [loadingSaved, setLoadingSaved] = useState(false);
@@ -74,15 +72,15 @@ export const RecentRail: React.FC<Props> = ({ onOpen, refreshKey }) => {
 
   useEffect(() => {
     if (tab !== 'saved') return;
-    if (!user?.uid || !currentWorkspace?.id) { setSavedItems([]); return; }
+    if (!user?.uid) { setSavedItems([]); return; }
     let cancelled = false;
     setLoadingSaved(true);
-    listSavedInvestigations(user.uid, currentWorkspace.id, 12)
+    listSavedInvestigations(user.uid, 12)
       .then((items) => { if (!cancelled) setSavedItems(items); })
       .catch(() => { if (!cancelled) setSavedItems([]); })
       .finally(() => { if (!cancelled) setLoadingSaved(false); });
     return () => { cancelled = true; };
-  }, [tab, user?.uid, currentWorkspace?.id, refreshKey]);
+  }, [tab, user?.uid, refreshKey]);
 
   const recentEntries: RecentEntry[] = recent;
   const savedEntries: RecentEntry[] = savedItems.map((s) => ({

@@ -38,18 +38,26 @@ import { DistributionChart } from '../components/quant/historical-research/Distr
 import { RollingVolChart } from '../components/quant/historical-research/RollingVolChart';
 import { CorrelationMatrixWidget } from '../components/quant/historical-research/CorrelationMatrixWidget';
 import { RiskReturnScatter } from '../components/quant/historical-research/RiskReturnScatter';
+import { RegimeTable } from '../components/quant/historical-research/RegimeTable';
+import { FollowUpThread, type FollowupTurn } from '../components/quant/historical-research/FollowUpThread';
+import { FollowUpInput } from '../components/quant/historical-research/FollowUpInput';
 import { seriesColor } from '../components/quant/historical-research/palette';
 import { useHistoricalResearch, type ResearchResult, type RollingCorrelation, type AssetSeries } from '../hooks/useHistoricalResearch';
 import type { ResearchPlan } from '../services/historicalResearchService';
+import { askFollowup } from '../services/historicalResearchService';
+import { saveInvestigation, loadInvestigation } from '../services/savedHistoricalResearchService';
+import { useAuth } from '../components/AuthProvider';
+import { useWorkspace } from '../components/WorkspaceContext';
 
 const STORAGE_PREFIX = 'hr:';
 
 type WidgetId =
-  | 'normalized' | 'drawdown' | 'rolling' | 'rollingvol'
+  | 'regimes' | 'normalized' | 'drawdown' | 'rolling' | 'rollingvol'
   | 'annual' | 'distribution' | 'correlation' | 'scatter'
-  | 'performance' | 'reasoning' | 'observations';
+  | 'performance' | 'reasoning' | 'observations' | 'followups';
 
 const ALL_WIDGETS: { id: WidgetId; label: string }[] = [
+  { id: 'regimes',      label: 'Regime comparison' },
   { id: 'performance',  label: 'Performance summary' },
   { id: 'normalized',   label: 'Normalized history' },
   { id: 'drawdown',     label: 'Drawdown' },
@@ -61,6 +69,7 @@ const ALL_WIDGETS: { id: WidgetId; label: string }[] = [
   { id: 'scatter',      label: 'Risk vs return' },
   { id: 'reasoning',    label: 'Reasoning' },
   { id: 'observations', label: 'Observations' },
+  { id: 'followups',    label: 'Follow-ups' },
 ];
 
 function newInvestigationId(): string {
@@ -84,6 +93,10 @@ export const HistoricalResearch: React.FC = () => {
   const params = useParams<{ id?: string }>();
   const routeId = params.id ?? null;
 
+  const { user } = useAuth();
+  const { currentWorkspace } = useWorkspace();
+  const wid = currentWorkspace?.id ?? null;
+
   const { steps, busy, result, error, run, reset, hydrate } = useHistoricalResearch();
 
   const initialQuery = (location.state as { prefillQuery?: string } | null)?.prefillQuery ?? '';
@@ -95,6 +108,11 @@ export const HistoricalResearch: React.FC = () => {
   const [hidden, setHidden] = useState<Set<WidgetId>>(new Set());
   const [inputMode, setInputMode] = useState<InputMode>('nl');
 
+  // Save + follow-up state
+  const [followups, setFollowups] = useState<FollowupTurn[]>([]);
+  const [followupBusy, setFollowupBusy] = useState(false);
+  const [savedState, setSavedState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+
   // ── Sync URL → state ───────────────────────────────────────────────────
   useEffect(() => {
     if (!routeId) { setMissing(false); return; }
@@ -102,13 +120,37 @@ export const HistoricalResearch: React.FC = () => {
     const stored = readInvestigation(routeId);
     if (stored) {
       hydrate(stored);
+      setFollowups(stored.followups ?? []);
       setMissing(false);
+      return;
+    }
+    // Not in sessionStorage — try Firestore (saved investigations).
+    if (user?.uid && wid) {
+      let cancelled = false;
+      loadInvestigation(user.uid, wid, routeId)
+        .then((r) => {
+          if (cancelled) return;
+          if (r) {
+            hydrate(r);
+            setFollowups(r.followups ?? []);
+            writeInvestigation(routeId, r); // warm sessionStorage cache
+            setSavedState('saved');
+            setMissing(false);
+          } else if (!busy) {
+            const stillIdle = steps.every((s) => s.state === 'pending');
+            if (stillIdle) setMissing(true);
+          }
+        })
+        .catch(() => {
+          if (!cancelled && !busy) setMissing(true);
+        });
+      return () => { cancelled = true; };
     } else if (!busy) {
       const stillIdle = steps.every((s) => s.state === 'pending');
       if (stillIdle) setMissing(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [routeId]);
+  }, [routeId, user?.uid, wid]);
 
   // ── Persist + bump recent rail ────────────────────────────────────────
   useEffect(() => {
@@ -122,7 +164,19 @@ export const HistoricalResearch: React.FC = () => {
   useEffect(() => {
     setRefineOpen(false);
     setHidden(new Set());
+    setFollowups([]);
+    setSavedState('idle');
   }, [routeId]);
+
+  // When the hook produces a fresh result, take its followups (empty array
+  // for a fresh run, populated array when we hydrated from a saved doc).
+  useEffect(() => {
+    if (!result) return;
+    if (result.followups && followups.length === 0) {
+      setFollowups(result.followups);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [result?.completedAt]);
 
   // ── Actions ────────────────────────────────────────────────────────────
   const submit = useCallback((q: string) => {
@@ -172,11 +226,62 @@ export const HistoricalResearch: React.FC = () => {
     navigate(`/research/i/${id}`);
   }, [navigate]);
 
+  // ── Save to Firestore ─────────────────────────────────────────────────
+  const handleSave = useCallback(async () => {
+    if (!routeId || !result || !user?.uid || !wid) return;
+    setSavedState('saving');
+    try {
+      const enriched: ResearchResult = { ...result, followups };
+      await saveInvestigation(user.uid, wid, routeId, enriched);
+      setSavedState('saved');
+      setRecentTick((t) => t + 1);
+    } catch {
+      setSavedState('error');
+    }
+  }, [routeId, result, user?.uid, wid, followups]);
+
+  // ── Follow-up Q&A ─────────────────────────────────────────────────────
+  const handleAskFollowup = useCallback(async (question: string) => {
+    if (!result) return;
+    const userTurn: FollowupTurn = {
+      id: `f_${Date.now().toString(36)}`,
+      question,
+      answer: '',
+      ts: Date.now(),
+    };
+    setFollowupBusy(true);
+    try {
+      const answer = await askFollowup({
+        question,
+        query: result.query,
+        plan: result.plan,
+        observations: result.observations,
+        priorTurns: followups.map((t) => ({ question: t.question, answer: t.answer })),
+      });
+      const next = [...followups, { ...userTurn, answer }];
+      setFollowups(next);
+      // Persist back to sessionStorage and Firestore (if previously saved)
+      if (routeId) {
+        const enriched: ResearchResult = { ...result, followups: next };
+        writeInvestigation(routeId, enriched);
+        if (savedState === 'saved' && user?.uid && wid) {
+          saveInvestigation(user.uid, wid, routeId, enriched).catch(() => {});
+        }
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Follow-up failed';
+      setFollowups([...followups, { ...userTurn, answer: `(could not answer: ${msg})` }]);
+    } finally {
+      setFollowupBusy(false);
+    }
+  }, [result, followups, routeId, savedState, user?.uid, wid]);
+
   // ── Widget visibility ─────────────────────────────────────────────────
   // Only surface widgets that have data on this run.
   const availableWidgets = useMemo((): WidgetId[] => {
     if (!result) return [];
     const out: WidgetId[] = [];
+    if ((result.regimeMetrics ?? []).length > 0) out.push('regimes');
     if (result.analytics.performance.length) out.push('performance');
     if (result.assets.length > 0) out.push('normalized');
     if (result.analytics.drawdowns.length) out.push('drawdown');
@@ -188,6 +293,7 @@ export const HistoricalResearch: React.FC = () => {
     if (result.analytics.performance.length >= 1) out.push('scatter');
     out.push('reasoning');
     out.push('observations');
+    out.push('followups');
     return out;
   }, [result]);
 
@@ -226,8 +332,9 @@ export const HistoricalResearch: React.FC = () => {
       onBack={back}
       onEditQuery={edit}
       onNew={newInvestigation}
-      onSave={() => { /* enabled in Slice C */ }}
-      saveDisabled
+      onSave={handleSave}
+      saveDisabled={!user?.uid || !wid || savedState === 'saving'}
+      saveState={savedState}
     />
   ) : null;
 
@@ -287,6 +394,22 @@ export const HistoricalResearch: React.FC = () => {
                   onOpenChange={setRefineOpen}
                   onApply={applyRefinedPlan}
                 />
+
+                {isVisible('regimes') && (result.regimeMetrics ?? []).length > 0 && (
+                  <Widget
+                    title="Regime comparison"
+                    info="Per-regime slice of the analysis. The planner extracted these windows from your question — each row shows how each asset behaved during that exact period, plus the in-window correlation."
+                    caption={`${(result.regimeMetrics ?? []).length} regime${(result.regimeMetrics ?? []).length === 1 ? '' : 's'} · ${result.assets.length} asset${result.assets.length === 1 ? '' : 's'}`}
+                    menuItems={[
+                      { id: 'hide', label: 'Hide widget', icon: <EyeOff size={12} />, onSelect: () => toggleWidget('regimes') },
+                    ]}
+                  >
+                    <RegimeTable
+                      regimes={result.regimeMetrics ?? []}
+                      symbols={result.assets.map((a) => a.symbol)}
+                    />
+                  </Widget>
+                )}
 
                 {isVisible('performance') && (
                   <Widget
@@ -456,6 +579,27 @@ export const HistoricalResearch: React.FC = () => {
                     </Widget>
                   )}
                 </div>
+
+                {isVisible('followups') && (
+                  <Widget
+                    title="Follow-ups"
+                    info="Ask grounded follow-up questions about this investigation. The model can only cite numbers that appear in the Observations panel above."
+                    caption={`${followups.length} turn${followups.length === 1 ? '' : 's'}`}
+                    menuItems={[
+                      { id: 'hide', label: 'Hide widget', icon: <EyeOff size={12} />, onSelect: () => toggleWidget('followups') },
+                    ]}
+                  >
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      <FollowUpThread turns={followups} busy={followupBusy} />
+                      <FollowUpInput
+                        busy={followupBusy}
+                        onAsk={handleAskFollowup}
+                        starters={followups.length === 0 ? followupStarters(result) : undefined}
+                      />
+                    </div>
+                  </Widget>
+                )}
+
               </>
             )}
           </>
@@ -466,6 +610,20 @@ export const HistoricalResearch: React.FC = () => {
     </div>
   );
 };
+
+function followupStarters(r: ResearchResult): string[] {
+  const out: string[] = [];
+  const a0 = r.assets[0]?.symbol;
+  const a1 = r.assets[1]?.symbol;
+  if ((r.regimeMetrics ?? []).length >= 2 && a0) {
+    out.push(`Which regime was worst for ${a0}?`);
+  } else if (a0) {
+    out.push(`What drove ${a0}'s deepest drawdown?`);
+  }
+  if (a0 && a1) out.push(`When did ${a0} and ${a1} decouple most?`);
+  if (r.rollingCorrelations.length > 0) out.push('What did the correlation do during crisis windows?');
+  return out.slice(0, 3);
+}
 
 // ─── kpi helpers ─────────────────────────────────────────────────────────
 

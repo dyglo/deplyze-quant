@@ -75,16 +75,24 @@ interface ResultToolbarProps {
   onNew: () => void;
   onSave?: () => void;
   saveDisabled?: boolean;
+  /** 'idle' | 'saving' | 'saved' | 'error' — surfaces a pill state for the Save action. */
+  saveState?: 'idle' | 'saving' | 'saved' | 'error';
 }
 
 export const ResultToolbar: React.FC<ResultToolbarProps> = ({
   lookbackYears, onLookbackChange, onRefine, refineDirty,
   editWidgetsSlot, onBack, onEditQuery, onNew, onSave, saveDisabled = true,
+  saveState = 'idle',
 }) => {
+  const saveLabel =
+    saveState === 'saving' ? 'Saving…' :
+    saveState === 'saved'  ? 'Saved' :
+    saveState === 'error'  ? 'Save failed' :
+                              'Save';
+
   const menu: MenuItem[] = [
     { id: 'back',  label: 'Back to landing', icon: <ArrowLeft size={12} />, onSelect: onBack },
     { id: 'edit',  label: 'Edit query',      icon: <Pencil size={12} />,    onSelect: onEditQuery },
-    { id: 'save',  label: saveDisabled ? 'Save (soon)' : 'Save investigation', icon: <Bookmark size={12} />, onSelect: () => { if (!saveDisabled) onSave?.(); } },
     { id: 'new',   label: 'New investigation', icon: <Plus size={12} />,    onSelect: onNew },
   ];
 
@@ -97,6 +105,16 @@ export const ResultToolbar: React.FC<ResultToolbarProps> = ({
         {refineDirty && <span style={dirtyDot} />}
       </button>
       {editWidgetsSlot}
+      <button
+        type="button"
+        onClick={() => { if (!saveDisabled) onSave?.(); }}
+        disabled={saveDisabled}
+        style={{ ...pillStyle(saveState === 'saved'), opacity: saveDisabled ? 0.55 : 1 }}
+        title={saveDisabled && saveState === 'idle' ? 'Sign in to save' : saveLabel}
+      >
+        <Bookmark size={12} />
+        <span>{saveLabel}</span>
+      </button>
       <OptionsMenu items={menu} ariaLabel="Investigation actions" />
     </div>
   );

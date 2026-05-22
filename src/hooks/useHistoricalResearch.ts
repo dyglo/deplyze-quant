@@ -18,7 +18,7 @@ import {
 import type { OHLCVBar } from '../types';
 import { closes, rebase100 } from '../lib/quant/returns';
 import { rollingPearson, alignClosesByTs, pearson } from '../lib/quant/correlation';
-import { computeRichAnalytics, type RichAnalytics } from '../lib/historicalResearchAnalytics';
+import { computeRichAnalytics, computeRegimeMetrics, type RichAnalytics, type RegimeMetrics } from '../lib/historicalResearchAnalytics';
 
 // ─── Public types ─────────────────────────────────────────────────────────
 
@@ -79,6 +79,9 @@ export interface ResearchResult {
   totalElapsedMs: number;
   completedAt: number;
   analytics: RichAnalytics;
+  regimeMetrics: RegimeMetrics[];
+  /** Mutable follow-up Q&A thread (populated by the page). */
+  followups?: { id: string; question: string; answer: string; ts: number }[];
 }
 
 const ROLL_WINDOW = 60;
@@ -278,6 +281,12 @@ export function useHistoricalResearch() {
         usable.map((u) => ({ symbol: u.symbol, bars: u.bars })),
       );
 
+      // Regime metrics — sliced per named window the planner extracted.
+      const regimeMetrics = computeRegimeMetrics(
+        usable.map((u) => ({ symbol: u.symbol, bars: u.bars })),
+        plan.regimes ?? [],
+      );
+
       const drawdowns = analytics.drawdowns.map((d) => ({
         symbol: d.symbol,
         maxDrawdown: d.deepest.dd,
@@ -307,8 +316,34 @@ export function useHistoricalResearch() {
         value: `requested ~${requestedYears}y, actual ${actualYears.toFixed(1)}y (${dataWindow.actualStart} → ${dataWindow.actualEnd})`,
       }] : [];
 
+      // Regime-conditioned observations come FIRST so the reasoning model
+      // anchors on them. Each row's `period` carries the regime label so the
+      // narrative can address each window by name.
+      const regimeObs: ResearchObservation[] = regimeMetrics.flatMap((rm) => {
+        if (rm.insufficient) {
+          return [{
+            label: `${rm.spec.label} · data coverage`,
+            value: 'insufficient bars in window',
+            period: `${rm.spec.start} → ${rm.spec.end}`,
+          }];
+        }
+        const winLabel = `${rm.spec.label}`;
+        const rows: ResearchObservation[] = [];
+        for (const a of rm.perAsset) {
+          if (a.bars < 5) continue;
+          rows.push({ label: `[${winLabel}] ${a.symbol} total return`, value: pct(a.totalReturn), period: `${rm.spec.start} → ${rm.spec.end}` });
+          rows.push({ label: `[${winLabel}] ${a.symbol} max drawdown`,  value: pct(a.maxDrawdown), period: `${rm.spec.start} → ${rm.spec.end}` });
+          rows.push({ label: `[${winLabel}] ${a.symbol} ann. vol`,       value: pct(a.annVol),       period: `${rm.spec.start} → ${rm.spec.end}` });
+        }
+        for (const p of rm.pairwiseCorrelations) {
+          rows.push({ label: `[${winLabel}] ${p.a}/${p.b} correlation`, value: p.r.toFixed(2), period: `${rm.spec.start} → ${rm.spec.end}` });
+        }
+        return rows;
+      });
+
       const observations: ResearchObservation[] = [
         ...dataWindowObs,
+        ...regimeObs,
         ...totals.map((t) => ({ label: `${t.symbol} total return`, value: pct(t.totalReturn), period })),
         ...drawdowns.map((d) => ({ label: `${d.symbol} max drawdown`, value: pct(d.maxDrawdown), period })),
         ...rollingCorrelations.map((rc) => ({
@@ -364,6 +399,8 @@ export function useHistoricalResearch() {
           totalElapsedMs,
           completedAt: Date.now(),
           analytics,
+          regimeMetrics,
+          followups: [],
         });
         return prev;
       });

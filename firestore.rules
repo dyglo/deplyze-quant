@@ -32,9 +32,9 @@ service cloud.firestore {
       allow create, update: if isSignedIn() && request.auth.uid == userId;
 
       // Saved Historical Research investigations — owner-scoped under each
-      // user, scoped further by workspace. Only the signed-in owner may read,
-      // write, or delete their own documents.
-      match /workspaces/{wid}/historical_research/{investigationId} {
+      // user. Only the signed-in owner may read, write, or delete their own
+      // documents. Personal, not workspace-shared.
+      match /historical_research/{investigationId} {
         allow read, write, delete: if isSignedIn() && request.auth.uid == userId;
       }
     }

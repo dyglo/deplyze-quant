@@ -46,8 +46,8 @@ import { useHistoricalResearch, type ResearchResult, type RollingCorrelation, ty
 import type { ResearchPlan } from '../services/historicalResearchService';
 import { askFollowup } from '../services/historicalResearchService';
 import { saveInvestigation, loadInvestigation } from '../services/savedHistoricalResearchService';
+import { exportPdf, exportMarkdown, exportJson, exportPrint } from '../lib/historicalResearchExport';
 import { useAuth } from '../components/AuthProvider';
-import { useWorkspace } from '../components/WorkspaceContext';
 
 const STORAGE_PREFIX = 'hr:';
 
@@ -94,8 +94,6 @@ export const HistoricalResearch: React.FC = () => {
   const routeId = params.id ?? null;
 
   const { user } = useAuth();
-  const { currentWorkspace } = useWorkspace();
-  const wid = currentWorkspace?.id ?? null;
 
   const { steps, busy, result, error, run, reset, hydrate } = useHistoricalResearch();
 
@@ -125,9 +123,9 @@ export const HistoricalResearch: React.FC = () => {
       return;
     }
     // Not in sessionStorage — try Firestore (saved investigations).
-    if (user?.uid && wid) {
+    if (user?.uid) {
       let cancelled = false;
-      loadInvestigation(user.uid, wid, routeId)
+      loadInvestigation(user.uid, routeId)
         .then((r) => {
           if (cancelled) return;
           if (r) {
@@ -150,7 +148,7 @@ export const HistoricalResearch: React.FC = () => {
       if (stillIdle) setMissing(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [routeId, user?.uid, wid]);
+  }, [routeId, user?.uid]);
 
   // ── Persist + bump recent rail ────────────────────────────────────────
   useEffect(() => {
@@ -228,17 +226,18 @@ export const HistoricalResearch: React.FC = () => {
 
   // ── Save to Firestore ─────────────────────────────────────────────────
   const handleSave = useCallback(async () => {
-    if (!routeId || !result || !user?.uid || !wid) return;
+    if (!routeId || !result || !user?.uid) return;
     setSavedState('saving');
     try {
       const enriched: ResearchResult = { ...result, followups };
-      await saveInvestigation(user.uid, wid, routeId, enriched);
+      await saveInvestigation(user.uid, routeId, enriched);
       setSavedState('saved');
       setRecentTick((t) => t + 1);
-    } catch {
+    } catch (e) {
+      console.error('[historical-research] save failed', e);
       setSavedState('error');
     }
-  }, [routeId, result, user?.uid, wid, followups]);
+  }, [routeId, result, user?.uid, followups]);
 
   // ── Follow-up Q&A ─────────────────────────────────────────────────────
   const handleAskFollowup = useCallback(async (question: string) => {
@@ -264,8 +263,8 @@ export const HistoricalResearch: React.FC = () => {
       if (routeId) {
         const enriched: ResearchResult = { ...result, followups: next };
         writeInvestigation(routeId, enriched);
-        if (savedState === 'saved' && user?.uid && wid) {
-          saveInvestigation(user.uid, wid, routeId, enriched).catch(() => {});
+        if (savedState === 'saved' && user?.uid) {
+          saveInvestigation(user.uid, routeId, enriched).catch(() => {});
         }
       }
     } catch (e) {
@@ -274,7 +273,7 @@ export const HistoricalResearch: React.FC = () => {
     } finally {
       setFollowupBusy(false);
     }
-  }, [result, followups, routeId, savedState, user?.uid, wid]);
+  }, [result, followups, routeId, savedState, user?.uid]);
 
   // ── Widget visibility ─────────────────────────────────────────────────
   // Only surface widgets that have data on this run.
@@ -333,8 +332,12 @@ export const HistoricalResearch: React.FC = () => {
       onEditQuery={edit}
       onNew={newInvestigation}
       onSave={handleSave}
-      saveDisabled={!user?.uid || !wid || savedState === 'saving'}
+      saveDisabled={!user?.uid || savedState === 'saving'}
       saveState={savedState}
+      onExportPdf={() => result && exportPdf({ ...result, followups })}
+      onExportMarkdown={() => result && exportMarkdown({ ...result, followups })}
+      onExportJson={() => result && exportJson({ ...result, followups })}
+      onPrint={exportPrint}
     />
   ) : null;
 

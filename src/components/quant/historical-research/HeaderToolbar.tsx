@@ -11,7 +11,7 @@
  */
 
 import React, { useState } from 'react';
-import { ChevronDown, SlidersHorizontal, ArrowLeft, Plus, Bookmark, Pencil } from 'lucide-react';
+import { ChevronDown, SlidersHorizontal, ArrowLeft, Plus, Bookmark, Pencil, Download, FileText, FileJson, Printer, FileType2 } from 'lucide-react';
 import { OptionsMenu, type MenuItem } from './OptionsMenu';
 
 interface LookbackPillProps {
@@ -77,13 +77,20 @@ interface ResultToolbarProps {
   saveDisabled?: boolean;
   /** 'idle' | 'saving' | 'saved' | 'error' — surfaces a pill state for the Save action. */
   saveState?: 'idle' | 'saving' | 'saved' | 'error';
+  /** Export actions — only shown when the investigation is saved. */
+  onExportPdf?: () => void;
+  onExportMarkdown?: () => void;
+  onExportJson?: () => void;
+  onPrint?: () => void;
 }
 
 export const ResultToolbar: React.FC<ResultToolbarProps> = ({
   lookbackYears, onLookbackChange, onRefine, refineDirty,
   editWidgetsSlot, onBack, onEditQuery, onNew, onSave, saveDisabled = true,
   saveState = 'idle',
+  onExportPdf, onExportMarkdown, onExportJson, onPrint,
 }) => {
+  const exportAvailable = saveState === 'saved';
   const saveLabel =
     saveState === 'saving' ? 'Saving…' :
     saveState === 'saved'  ? 'Saved' :
@@ -115,9 +122,90 @@ export const ResultToolbar: React.FC<ResultToolbarProps> = ({
         <Bookmark size={12} />
         <span>{saveLabel}</span>
       </button>
+      {exportAvailable && (
+        <ExportPill
+          onPdf={onExportPdf}
+          onMarkdown={onExportMarkdown}
+          onJson={onExportJson}
+          onPrint={onPrint}
+        />
+      )}
       <OptionsMenu items={menu} ariaLabel="Investigation actions" />
     </div>
   );
+};
+
+// ─── Export pill ─────────────────────────────────────────────────────────
+
+interface ExportPillProps {
+  onPdf?: () => void;
+  onMarkdown?: () => void;
+  onJson?: () => void;
+  onPrint?: () => void;
+}
+
+const ExportPill: React.FC<ExportPillProps> = ({ onPdf, onMarkdown, onJson, onPrint }) => {
+  const [open, setOpen] = useState(false);
+  const items: { id: string; label: string; icon: React.ReactNode; onSelect?: () => void }[] = [
+    { id: 'pdf',      label: 'Download PDF',      icon: <FileType2 size={12} />, onSelect: onPdf },
+    { id: 'md',       label: 'Download Markdown', icon: <FileText size={12} />,  onSelect: onMarkdown },
+    { id: 'json',     label: 'Download JSON',     icon: <FileJson size={12} />,  onSelect: onJson },
+    { id: 'print',    label: 'Print…',            icon: <Printer size={12} />,   onSelect: onPrint },
+  ];
+  return (
+    <span style={{ position: 'relative' }}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        style={pillStyle(false)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+      >
+        <Download size={12} />
+        <span>Export</span>
+        <ChevronDown size={12} />
+      </button>
+      {open && (
+        <div role="menu" style={exportPopover} onMouseLeave={() => setOpen(false)}>
+          {items.map((it) => (
+            <button
+              key={it.id}
+              role="menuitem"
+              type="button"
+              onClick={() => { setOpen(false); it.onSelect?.(); }}
+              style={exportItem}
+            >
+              <span style={{ display: 'inline-flex', width: 14, justifyContent: 'center' }}>{it.icon}</span>
+              <span>{it.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </span>
+  );
+};
+
+const exportPopover: React.CSSProperties = {
+  position: 'absolute', top: '100%', right: 0,
+  marginTop: 4,
+  minWidth: 180,
+  border: '1px solid var(--border)',
+  background: 'var(--popover, var(--card))',
+  borderRadius: 8,
+  padding: 4,
+  boxShadow: '0 6px 16px rgba(0,0,0,0.08)',
+  zIndex: 20,
+};
+
+const exportItem: React.CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: 8,
+  width: '100%', textAlign: 'left',
+  padding: '6px 10px',
+  border: 'none', background: 'transparent',
+  color: 'var(--foreground)',
+  fontSize: 12,
+  borderRadius: 4,
+  cursor: 'pointer',
 };
 
 // ─── Landing toolbar ─────────────────────────────────────────────────────

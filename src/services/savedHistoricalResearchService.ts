@@ -50,17 +50,16 @@ interface SavedDoc {
   followupCount: number;
 }
 
-function colRef(uid: string, wid: string) {
-  return collection(db, 'users', uid, 'workspaces', wid, COLLECTION);
+function colRef(uid: string) {
+  return collection(db, 'users', uid, COLLECTION);
 }
 
-function docRef(uid: string, wid: string, id: string) {
-  return doc(db, 'users', uid, 'workspaces', wid, COLLECTION, id);
+function docRef(uid: string, id: string) {
+  return doc(db, 'users', uid, COLLECTION, id);
 }
 
 export async function saveInvestigation(
   uid: string,
-  wid: string,
   id: string,
   result: ResearchResult,
 ): Promise<void> {
@@ -74,30 +73,28 @@ export async function saveInvestigation(
     lookbackYears: result.plan.timeframe.lookbackYears,
     followupCount: result.followups?.length ?? 0,
   };
-  await setDoc(docRef(uid, wid, id), payload, { merge: true });
+  await setDoc(docRef(uid, id), payload, { merge: true });
 }
 
 export async function loadInvestigation(
   uid: string,
-  wid: string,
   id: string,
 ): Promise<ResearchResult | null> {
-  const snap = await getDoc(docRef(uid, wid, id));
+  const snap = await getDoc(docRef(uid, id));
   if (!snap.exists()) return null;
   const d = snap.data() as SavedDoc;
   return d.result ?? null;
 }
 
-export async function deleteInvestigation(uid: string, wid: string, id: string): Promise<void> {
-  await deleteDoc(docRef(uid, wid, id));
+export async function deleteInvestigation(uid: string, id: string): Promise<void> {
+  await deleteDoc(docRef(uid, id));
 }
 
 export async function listSavedInvestigations(
   uid: string,
-  wid: string,
   max = 20,
 ): Promise<SavedInvestigationMeta[]> {
-  const q = query(colRef(uid, wid), orderBy('completedAt', 'desc'), limit(max));
+  const q = query(colRef(uid), orderBy('completedAt', 'desc'), limit(max));
   const snap = await getDocs(q);
   return snap.docs.map((s) => {
     const d = s.data() as SavedDoc;

@@ -85,6 +85,113 @@ export interface RichAnalytics {
   corrMatrix: CorrelationMatrixResult | null;
 }
 
+// ─── Regime metrics ───────────────────────────────────────────────────────
+
+export interface RegimeSpec {
+  label: string;
+  start: string;        // YYYY-MM-DD
+  end: string;          // YYYY-MM-DD
+  hypothesis?: string;
+}
+
+export interface RegimeAssetMetric {
+  symbol: string;
+  totalReturn: number;        // null when too few bars
+  cagr: number;
+  annVol: number;
+  sharpe: number;
+  maxDrawdown: number;
+  bars: number;
+}
+
+export interface RegimeMetrics {
+  spec: RegimeSpec;
+  startTs: number;
+  endTs: number;
+  bars: number;
+  perAsset: RegimeAssetMetric[];
+  pairwiseCorrelations: { a: string; b: string; r: number }[];   // daily-return Pearson
+  /** True when the regime window had insufficient overlap with available data. */
+  insufficient: boolean;
+}
+
+export function computeRegimeMetrics(
+  series: { symbol: string; bars: OHLCVBar[] }[],
+  regimes: RegimeSpec[],
+): RegimeMetrics[] {
+  if (!regimes.length || !series.length) return [];
+  return regimes.map((spec) => computeOneRegime(series, spec));
+}
+
+function computeOneRegime(
+  series: { symbol: string; bars: OHLCVBar[] }[],
+  spec: RegimeSpec,
+): RegimeMetrics {
+  const startTs = Date.parse(spec.start + 'T00:00:00Z');
+  const endTs   = Date.parse(spec.end   + 'T23:59:59Z');
+
+  const slices = series.map((s) => ({
+    symbol: s.symbol,
+    bars: s.bars.filter((b) => b.ts >= startTs && b.ts <= endTs),
+  }));
+
+  const perAsset: RegimeAssetMetric[] = slices.map((s) => {
+    if (s.bars.length < 5) {
+      return {
+        symbol: s.symbol, totalReturn: 0, cagr: 0, annVol: 0, sharpe: 0,
+        maxDrawdown: 0, bars: s.bars.length,
+      };
+    }
+    const closes = s.bars.map((b) => b.close);
+    const returns = simpleReturns(closes);
+    const total = closes[closes.length - 1] / closes[0] - 1;
+    const years = s.bars.length / PERIODS_PER_YEAR;
+    const cagr = years > 0 ? Math.pow(1 + total, 1 / years) - 1 : 0;
+    const annVol = stddev(returns) * Math.sqrt(PERIODS_PER_YEAR);
+    const annMean = mean(returns) * PERIODS_PER_YEAR;
+    const sharpe = annVol > 0 ? annMean / annVol : 0;
+    let peak = -Infinity, mdd = 0;
+    for (const c of closes) {
+      if (c > peak) peak = c;
+      const dd = peak > 0 ? c / peak - 1 : 0;
+      if (dd < mdd) mdd = dd;
+    }
+    return {
+      symbol: s.symbol,
+      totalReturn: total, cagr, annVol, sharpe,
+      maxDrawdown: mdd, bars: s.bars.length,
+    };
+  });
+
+  // Pairwise correlations (daily returns, aligned on common ts).
+  const pairs: { a: string; b: string; r: number }[] = [];
+  for (let i = 0; i < slices.length; i++) {
+    for (let j = i + 1; j < slices.length; j++) {
+      const a = slices[i], b = slices[j];
+      if (a.bars.length < 5 || b.bars.length < 5) continue;
+      const tsB = new Set(b.bars.map((x) => x.ts));
+      const aligned = a.bars.filter((x) => tsB.has(x.ts));
+      const bMap = new Map(b.bars.map((x) => [x.ts, x.close]));
+      const bAligned = aligned.map((x) => bMap.get(x.ts) as number);
+      const retA = simpleReturns(aligned.map((x) => x.close));
+      const retB = simpleReturns(bAligned);
+      if (retA.length < 5) continue;
+      pairs.push({ a: a.symbol, b: b.symbol, r: pearson(retA, retB) });
+    }
+  }
+
+  const totalBars = slices.reduce((s, x) => s + x.bars.length, 0);
+  const insufficient = totalBars === 0 || slices.every((s) => s.bars.length < 5);
+
+  return {
+    spec,
+    startTs, endTs,
+    bars: totalBars,
+    perAsset, pairwiseCorrelations: pairs,
+    insufficient,
+  };
+}
+
 // ─── Entry point ──────────────────────────────────────────────────────────
 
 const ROLL_VOL_WINDOW = 60;

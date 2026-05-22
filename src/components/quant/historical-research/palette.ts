@@ -9,15 +9,19 @@
  * (buttons, KPI deltas, recession bands); never used as a series color.
  */
 
+// Muted institutional palette. Each tone sits in the mid-lightness band so no
+// series visually dominates when 4+ are overlaid, and the colours echo the
+// design-system accents already used in the rest of the workspace (slate-blue,
+// olive, tan, plum) rather than competing with them.
 export const SERIES_PALETTE: readonly string[] = [
-  '#2563EB', // Blue
-  '#DC2626', // Red
-  '#16A34A', // Green
-  '#F59E0B', // Amber
-  '#EA580C', // Orange
-  '#8B5CF6', // Violet
-  '#0D9488', // Teal
-  '#DB2777', // Pink
+  '#5B6B8E', // Slate blue
+  '#A04848', // Brick
+  '#4E6040', // Olive
+  '#A87C4F', // Tan
+  '#A05A2E', // Rust
+  '#7A5D9E', // Heather violet
+  '#3F7570', // Pine teal
+  '#8E5B7E', // Plum
 ] as const;
 
 /** Pick a stable color by series index. Wraps if there are more series than colors. */

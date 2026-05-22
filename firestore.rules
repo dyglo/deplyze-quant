@@ -30,6 +30,13 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if isSignedIn();
       allow create, update: if isSignedIn() && request.auth.uid == userId;
+
+      // Saved Historical Research investigations — owner-scoped under each
+      // user, scoped further by workspace. Only the signed-in owner may read,
+      // write, or delete their own documents.
+      match /workspaces/{wid}/historical_research/{investigationId} {
+        allow read, write, delete: if isSignedIn() && request.auth.uid == userId;
+      }
     }
 
     // ─── Memberships ──────────────────────────────────────────────────────

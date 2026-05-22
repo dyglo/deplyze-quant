@@ -2,9 +2,8 @@
  * useHistoricalResearch — agentic state machine for the Historical Research workspace.
  *
  * Exposes a four-step trace (plan → retrieve → compute → reason) with per-step
- * timing, substeps (per-asset retrieval), and micro-narration detail strings.
- * The UI renders the trace verbatim; this hook owns timing and observation
- * generation. Numbers are computed here; the LLM only writes prose at /reason.
+ * timing and a streaming log of action + narrative entries that drives the
+ * reasoning trace UI.
  */
 
 import { useCallback, useRef, useState } from 'react';
@@ -25,11 +24,13 @@ import { computeRichAnalytics, computeRegimeMetrics, type RichAnalytics, type Re
 export type StepId = 'plan' | 'retrieve' | 'compute' | 'reason';
 export type StepState = 'pending' | 'active' | 'done' | 'failed';
 
-export interface ProgressSubstep {
-  key: string;
-  label: string;
-  done: boolean;
-  failed?: boolean;
+/** A single entry in a step's live reasoning log. */
+export interface LogEntry {
+  /** action = structured log line with a prefix glyph; narrative = inner monologue prose. */
+  type: 'action' | 'narrative';
+  text: string;
+  /** Only for type='action'. */
+  prefix?: '→' | '✓' | '✗';
 }
 
 export interface ProgressStep {
@@ -39,7 +40,7 @@ export interface ProgressStep {
   startedAt?: number;
   endedAt?: number;
   detail?: string;
-  substeps?: ProgressSubstep[];
+  log?: LogEntry[];
   error?: string;
 }
 
@@ -75,12 +76,11 @@ export interface ResearchResult {
     actualYears: number;
     shortfall: boolean;
   };
-  steps: ProgressStep[];          // immortalized trace
+  steps: ProgressStep[];
   totalElapsedMs: number;
   completedAt: number;
   analytics: RichAnalytics;
   regimeMetrics: RegimeMetrics[];
-  /** Mutable follow-up Q&A thread (populated by the page). */
   followups?: { id: string; question: string; answer: string; ts: number }[];
 }
 
@@ -89,10 +89,10 @@ const DEFAULT_BARS_PER_YEAR = 252;
 const PROVIDER_MAX_BARS = 5000;
 
 const INITIAL_STEPS: ProgressStep[] = [
-  { id: 'plan',     label: 'Resolving intent',          state: 'pending' },
-  { id: 'retrieve', label: 'Fetching price history',    state: 'pending' },
-  { id: 'compute',  label: 'Computing relationships',   state: 'pending' },
-  { id: 'reason',   label: 'Reasoning over evidence',   state: 'pending' },
+  { id: 'plan',     label: 'Resolving intent',          state: 'pending', log: [] },
+  { id: 'retrieve', label: 'Fetching price history',    state: 'pending', log: [] },
+  { id: 'compute',  label: 'Computing relationships',   state: 'pending', log: [] },
+  { id: 'reason',   label: 'Reasoning over evidence',   state: 'pending', log: [] },
 ];
 
 // ─── Hook ─────────────────────────────────────────────────────────────────
@@ -128,19 +128,23 @@ export function useHistoricalResearch() {
     ));
   }, []);
 
+  const appendLog = useCallback((id: StepId, entry: LogEntry) => {
+    setSteps((prev) => prev.map((s) =>
+      s.id === id ? { ...s, log: [...(s.log ?? []), entry] } : s,
+    ));
+  }, []);
+
   const run = useCallback(async (query: string, opts?: { plan?: ResearchPlan }) => {
     const my = ++seq.current;
     setError(null);
     setResult(null);
     setBusy(true);
-    setSteps(INITIAL_STEPS.map((s) => ({ ...s }))); // fresh copies
+    setSteps(INITIAL_STEPS.map((s) => ({ ...s, log: [] })));
 
     try {
       // ── 1. Plan ────────────────────────────────────────────────────────
       let plan: ResearchPlan;
       if (opts?.plan) {
-        // User-supplied plan from the Refine panel — skip the LLM call but
-        // still annotate the trace so the user sees how the run began.
         if (opts.plan.assets.length === 0) {
           const now = performance.now();
           setSteps((prev) => prev.map((s) =>
@@ -154,14 +158,17 @@ export function useHistoricalResearch() {
           ...opts.plan,
           comparisons: ensureComparisons(opts.plan.comparisons, opts.plan.assets.length),
         };
+        const win = planWindow(plan);
         const now = performance.now();
         setSteps((prev) => prev.map((s) =>
           s.id === 'plan'
             ? { ...s, state: 'done', startedAt: now, endedAt: now, detail: `${planSummary(plan)} · user-refined` }
             : s,
         ));
+        appendLog('plan', { type: 'action', prefix: '✓', text: `${plan.assets.join(', ')} · ${prettyIntent(plan.intent)} · ${win} · user-defined` });
       } else {
         start('plan');
+        appendLog('plan', { type: 'narrative', text: 'Parsing your query to identify assets and intent…' });
         const rawPlan = await planResearch(query);
         if (my !== seq.current) return;
         if (rawPlan.assets.length === 0) {
@@ -175,6 +182,7 @@ export function useHistoricalResearch() {
           comparisons: ensureComparisons(rawPlan.comparisons, rawPlan.assets.length),
         };
         finish('plan', { detail: planSummary(plan) });
+        appendLog('plan', { type: 'narrative', text: `Resolved ${plan.assets.join(', ')} — ${prettyIntent(plan.intent)} over ${planWindow(plan)}.` });
       }
 
       // ── 2. Retrieve ────────────────────────────────────────────────────
@@ -185,42 +193,29 @@ export function useHistoricalResearch() {
         Math.max(60, requestedYears * DEFAULT_BARS_PER_YEAR),
       );
 
-      setSteps((prev) => prev.map((s) =>
-        s.id === 'retrieve'
-          ? {
-              ...s,
-              state: 'active',
-              startedAt: performance.now(),
-              substeps: symbols.map((sym) => ({ key: sym, label: sym, done: false })),
-            }
-          : s,
-      ));
+      start('retrieve');
+      appendLog('retrieve', { type: 'narrative', text: `Let me fetch OHLCV price history for ${symbols.join(', ')}.` });
 
+      // Pre-emit all "→ requesting" entries before any fetch starts (sync).
+      for (const sym of symbols) {
+        appendLog('retrieve', { type: 'action', prefix: '→', text: `${sym}: requesting ${requestedYears}Y daily bars` });
+      }
+
+      let fetchedCount = 0;
       const bars = await Promise.all(symbols.map(async (sym) => {
         try {
           const r = await fetchOHLCV(sym, '1day', outputsize);
-          setSteps((prev) => prev.map((s) =>
-            s.id === 'retrieve' && s.substeps
-              ? {
-                  ...s,
-                  substeps: s.substeps.map((ss) =>
-                    ss.key === sym ? { ...ss, done: true, label: `${sym} · ${r.bars.length.toLocaleString()} bars` } : ss,
-                  ),
-                }
-              : s,
-          ));
+          fetchedCount++;
+          appendLog('retrieve', { type: 'action', prefix: '✓', text: `${sym}: ${r.bars.length.toLocaleString()} bars received` });
+          if (fetchedCount < symbols.length) {
+            const remaining = symbols.length - fetchedCount;
+            appendLog('retrieve', { type: 'narrative', text: `${sym} complete — ${remaining} more ${remaining === 1 ? 'asset' : 'assets'} to go…` });
+          } else {
+            appendLog('retrieve', { type: 'narrative', text: `All ${symbols.length} assets retrieved. Moving to analytics.` });
+          }
           return { symbol: sym, bars: r.bars };
         } catch {
-          setSteps((prev) => prev.map((s) =>
-            s.id === 'retrieve' && s.substeps
-              ? {
-                  ...s,
-                  substeps: s.substeps.map((ss) =>
-                    ss.key === sym ? { ...ss, done: true, failed: true, label: `${sym} · unavailable` } : ss,
-                  ),
-                }
-              : s,
-          ));
+          appendLog('retrieve', { type: 'action', prefix: '✗', text: `${sym}: unavailable — skipping` });
           return { symbol: sym, bars: [] as OHLCVBar[] };
         }
       }));
@@ -239,6 +234,7 @@ export function useHistoricalResearch() {
 
       // ── 3. Compute ─────────────────────────────────────────────────────
       start('compute');
+      appendLog('compute', { type: 'narrative', text: `Running analytics on ${usable.length} asset${usable.length === 1 ? '' : 's'}…` });
 
       const assetSeries: AssetSeries[] = usable.map(({ symbol, bars }) => {
         const c = closes(bars);
@@ -249,6 +245,7 @@ export function useHistoricalResearch() {
           normalized: bars.map((b, i) => ({ ts: b.ts, v: norm[i] })),
         };
       });
+      appendLog('compute', { type: 'action', prefix: '✓', text: `normalized price series · ${assetSeries.length} asset${assetSeries.length === 1 ? '' : 's'}` });
 
       const rollingCorrelations: RollingCorrelation[] = [];
       if (plan.comparisons.includes('rolling_correlation') && plan.assets.length >= 2) {
@@ -265,27 +262,32 @@ export function useHistoricalResearch() {
             ts: ts[i + ROLL_WINDOW] ?? ts[ts.length - 1],
             r: v,
           })).filter((p) => Number.isFinite(p.r));
+          const overall = pearson(retA, retB);
           rollingCorrelations.push({
             a: primary.symbol,
             b: right.symbol,
             window: ROLL_WINDOW,
             series,
-            overall: pearson(retA, retB),
+            overall,
           });
+          appendLog('compute', { type: 'action', prefix: '✓', text: `${primary.symbol}/${right.symbol} rolling correlation · r=${overall.toFixed(2)}` });
+          const corrDesc = overall > 0.6 ? 'strong positive' : overall > 0.3 ? 'moderate positive' : overall < -0.3 ? 'negative' : 'low';
+          appendLog('compute', { type: 'narrative', text: `${primary.symbol} and ${right.symbol} show ${corrDesc} correlation (${overall.toFixed(2)}) over the full window.` });
         }
       }
 
-      // Rich analytics: performance summary, drawdown series, annual returns,
-      // distributions, rolling vol, and correlation matrix (when ≥3 assets).
       const analytics = computeRichAnalytics(
         usable.map((u) => ({ symbol: u.symbol, bars: u.bars })),
       );
+      appendLog('compute', { type: 'action', prefix: '✓', text: `performance metrics · drawdowns · annual returns · distributions` });
 
-      // Regime metrics — sliced per named window the planner extracted.
       const regimeMetrics = computeRegimeMetrics(
         usable.map((u) => ({ symbol: u.symbol, bars: u.bars })),
         plan.regimes ?? [],
       );
+      if (regimeMetrics.length > 0) {
+        appendLog('compute', { type: 'action', prefix: '✓', text: `${regimeMetrics.length} regime window${regimeMetrics.length === 1 ? '' : 's'} analyzed` });
+      }
 
       const drawdowns = analytics.drawdowns.map((d) => ({
         symbol: d.symbol,
@@ -316,9 +318,6 @@ export function useHistoricalResearch() {
         value: `requested ~${requestedYears}y, actual ${actualYears.toFixed(1)}y (${dataWindow.actualStart} → ${dataWindow.actualEnd})`,
       }] : [];
 
-      // Regime-conditioned observations come FIRST so the reasoning model
-      // anchors on them. Each row's `period` carries the regime label so the
-      // narrative can address each window by name.
       const regimeObs: ResearchObservation[] = regimeMetrics.flatMap((rm) => {
         if (rm.insufficient) {
           return [{
@@ -363,18 +362,26 @@ export function useHistoricalResearch() {
         }),
       ];
 
-      const computeDetail = computeSummary({
-        assetSeries, rollingCorrelations, observations,
-      });
+      if (shortfall) {
+        appendLog('compute', { type: 'narrative', text: `Note: only ${actualYears.toFixed(1)}Y of data available — ${requestedYears}Y was requested.` });
+      }
+      appendLog('compute', { type: 'narrative', text: `Compiled ${observations.length} observation${observations.length === 1 ? '' : 's'}. Handing off to reasoning.` });
+
+      const computeDetail = computeSummary({ assetSeries, rollingCorrelations, observations });
       finish('compute', { detail: computeDetail });
 
       // ── 4. Reason ──────────────────────────────────────────────────────
       start('reason');
+      appendLog('reason', { type: 'narrative', text: `Reviewing ${observations.length} observation${observations.length === 1 ? '' : 's'} to write a grounded narrative…` });
+
       let narrative = '';
       try {
         narrative = await reasonOverObservations({ query, plan, observations });
         if (my !== seq.current) return;
-        finish('reason', { detail: `${observations.length} observations · ${narrative.split(/\s+/).length} words` });
+        const wordCount = narrative.split(/\s+/).filter(Boolean).length;
+        finish('reason', { detail: `${observations.length} observations · ${wordCount} words` });
+        appendLog('reason', { type: 'action', prefix: '✓', text: `${observations.length} observations synthesized · ${wordCount} words written` });
+        appendLog('reason', { type: 'narrative', text: 'Investigation complete.' });
       } catch (e) {
         if (my !== seq.current) return;
         fail('reason', e instanceof Error ? e.message : String(e));
@@ -382,7 +389,6 @@ export function useHistoricalResearch() {
       }
 
       // ── Done ────────────────────────────────────────────────────────────
-      // Grab the final steps snapshot so the result freezes the trace.
       setSteps((prev) => {
         const totalElapsedMs = totalElapsed(prev);
         setResult({
@@ -408,7 +414,6 @@ export function useHistoricalResearch() {
     } catch (e) {
       if (my !== seq.current) return;
       setError(e instanceof Error ? e.message : String(e));
-      // Mark the currently-active step as failed for the trace.
       setSteps((prev) => prev.map((s) =>
         s.state === 'active'
           ? { ...s, state: 'failed', endedAt: performance.now(), error: e instanceof Error ? e.message : String(e) }
@@ -416,11 +421,11 @@ export function useHistoricalResearch() {
       ));
       setBusy(false);
     }
-  }, [start, finish, fail]);
+  }, [start, finish, fail, appendLog]);
 
   const reset = useCallback(() => {
     seq.current++;
-    setSteps(INITIAL_STEPS.map((s) => ({ ...s })));
+    setSteps(INITIAL_STEPS.map((s) => ({ ...s, log: [] })));
     setResult(null);
     setError(null);
     setBusy(false);
@@ -430,7 +435,7 @@ export function useHistoricalResearch() {
     seq.current++;
     setBusy(false);
     setError(null);
-    setSteps(r.steps.map((s) => ({ ...s })));
+    setSteps(r.steps.length > 0 ? r.steps.map((s) => ({ ...s })) : INITIAL_STEPS.map((s) => ({ ...s, log: [] })));
     setResult(r);
   }, []);
 
@@ -491,10 +496,13 @@ function effectiveYears(tf: ResearchPlan['timeframe']): number {
 }
 
 function planSummary(p: ResearchPlan): string {
-  const win = p.timeframe.start && p.timeframe.end
+  return `${prettyIntent(p.intent)} · ${p.assets.join(' ')} · ${planWindow(p)}`;
+}
+
+function planWindow(p: ResearchPlan): string {
+  return p.timeframe.start && p.timeframe.end
     ? `${p.timeframe.start} → ${p.timeframe.end}`
     : `${p.timeframe.lookbackYears}Y`;
-  return `${prettyIntent(p.intent)} · ${p.assets.join(' ')} · ${win}`;
 }
 
 function prettyIntent(i: ResearchPlan['intent']): string {
@@ -516,13 +524,8 @@ function computeSummary(input: {
   const parts: string[] = [];
   if (input.assetSeries.length) parts.push(`${input.assetSeries.length} series · perf, DD, dist, vol`);
   if (input.rollingCorrelations.length) {
-    const overlaps = input.rollingCorrelations
-      .map((rc) => rc.series.length)
-      .filter((n) => n > 0);
-    if (overlaps.length) {
-      const min = Math.min(...overlaps);
-      parts.push(`rolling ${ROLL_WINDOW}-bar corr · ${min.toLocaleString()} bars`);
-    }
+    const overlaps = input.rollingCorrelations.map((rc) => rc.series.length).filter((n) => n > 0);
+    if (overlaps.length) parts.push(`rolling ${ROLL_WINDOW}-bar corr · ${Math.min(...overlaps).toLocaleString()} bars`);
   }
   parts.push(`${input.observations.length} observations`);
   return parts.join(' · ');

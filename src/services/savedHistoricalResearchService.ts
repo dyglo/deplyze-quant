@@ -2,12 +2,11 @@
  * savedHistoricalResearchService — Firestore CRUD for "saved" Historical
  * Research investigations.
  *
- * Path: users/{uid}/workspaces/{wid}/historical_research/{id}
+ * Path: users/{uid}/historical_research/{id}
  *
- * The document stores the full ResearchResult shape (the same JSON the page
- * already keeps in sessionStorage for the RecentRail). That makes hydration
- * trivial — loading a saved investigation is identical to reading one from
- * sessionStorage. Follow-up Q&A turns live inside the same document.
+ * Only lightweight metadata is persisted — raw timeseries arrays are stripped
+ * before writing so the document stays well under Firestore's 1 MiB limit.
+ * Follow-up Q&A turns live inside the same document.
  */
 
 import {
@@ -27,6 +26,8 @@ import { db } from '../lib/firebase';
 import type { ResearchResult } from '../hooks/useHistoricalResearch';
 
 const COLLECTION = 'historical_research';
+// Firestore hard limit is 1 048 487 bytes; guard at 800 KB to stay safe.
+const FIRESTORE_SAFE_BYTES = 800_000;
 
 export interface SavedInvestigationMeta {
   id: string;
@@ -39,15 +40,9 @@ export interface SavedInvestigationMeta {
   followupCount: number;
 }
 
-/**
- * Firestore does not allow nested arrays inside a document field
- * (e.g. `number[][]` like a correlation matrix). We sidestep the limit by
- * storing the full ResearchResult as a JSON string. Top-level meta fields
- * are kept loose so the list query can sort + filter without rehydrating.
- */
 interface SavedDoc {
   query: string;
-  resultJson: string;          // serialized ResearchResult
+  resultJson: string;          // slim ResearchResult — no raw timeseries
   completedAt: number;
   savedAt: Timestamp | number;
   intent: string;
@@ -57,7 +52,75 @@ interface SavedDoc {
   schemaVersion: number;
 }
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
+
+/**
+ * Strip every large timeseries array from a ResearchResult so the serialized
+ * payload fits within Firestore's document size limit.
+ *
+ * Kept (scalars / small arrays):
+ *   query, plan, drawdowns, totals, observations, narrative, dataWindow,
+ *   totalElapsedMs, completedAt, followups,
+ *   analytics.performance, analytics.annualReturns, analytics.distributions,
+ *   analytics.corrMatrix, analytics.drawdowns[].deepest / .current,
+ *   regimeMetrics (no series — only scalar metrics per regime/asset)
+ *
+ * Stripped (raw timeseries):
+ *   assets[].bars, assets[].normalized,
+ *   rollingCorrelations[].series,
+ *   analytics.drawdowns[].series,
+ *   analytics.rollingVols[].series,
+ *   steps (progress trace)
+ */
+function slimForFirestore(result: ResearchResult): Partial<ResearchResult> {
+  return {
+    query: result.query,
+    plan: result.plan,
+    drawdowns: result.drawdowns,
+    totals: result.totals,
+    observations: result.observations,
+    narrative: result.narrative,
+    dataWindow: result.dataWindow,
+    totalElapsedMs: result.totalElapsedMs,
+    completedAt: result.completedAt,
+    followups: result.followups,
+    // Keep symbol list; drop raw OHLCV bars and normalized series.
+    assets: result.assets?.map(({ symbol }) => ({
+      symbol,
+      bars: [],
+      normalized: [],
+    })),
+    // Keep overall correlation scalar; drop per-day rolling series.
+    rollingCorrelations: result.rollingCorrelations?.map(
+      ({ a, b, window, overall }) => ({ a, b, window, overall, series: [] }),
+    ),
+    // Keep scalar analytics; drop per-day drawdown / vol series.
+    analytics: result.analytics
+      ? {
+          performance: result.analytics.performance,
+          annualReturns: result.analytics.annualReturns,
+          distributions: result.analytics.distributions,
+          corrMatrix: result.analytics.corrMatrix,
+          drawdowns: result.analytics.drawdowns?.map(
+            ({ symbol, deepest, current }) => ({
+              symbol,
+              deepest,
+              current,
+              series: [],
+            }),
+          ),
+          rollingVols: result.analytics.rollingVols?.map(({ symbol }) => ({
+            symbol,
+            series: [],
+          })),
+        }
+      : undefined,
+    // regimeMetrics has no series — keep as-is.
+    regimeMetrics: result.regimeMetrics,
+    // steps is a progress trace only useful during the live run — drop it.
+    steps: [],
+  };
+}
 
 function colRef(uid: string) {
   return collection(db, 'users', uid, COLLECTION);
@@ -72,9 +135,19 @@ export async function saveInvestigation(
   id: string,
   result: ResearchResult,
 ): Promise<void> {
+  const slim = slimForFirestore(result);
+  const resultJson = JSON.stringify(slim);
+
+  if (resultJson.length > FIRESTORE_SAFE_BYTES) {
+    throw new Error(
+      `Research record is too large to save (${resultJson.length} bytes). ` +
+        'Try a shorter timeframe or fewer assets.',
+    );
+  }
+
   const payload: SavedDoc = {
     query: result.query,
-    resultJson: JSON.stringify(result),
+    resultJson,
     completedAt: result.completedAt,
     savedAt: serverTimestamp() as unknown as Timestamp,
     intent: result.plan.intent,

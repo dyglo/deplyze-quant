@@ -55,7 +55,11 @@ export const QuickBuild: React.FC<Props> = ({ busy, onSubmit }) => {
     setComparisons((cs) => cs.includes(c) ? cs.filter((x) => x !== c) : [...cs, c]);
 
   const customValid = customStart && customEnd && Date.parse(customStart) < Date.parse(customEnd);
-  const canSubmit = assets.length > 0 && !busy && (windowMode === 'lookback' || customValid);
+  const pendingTicker = assetInput.trim().toUpperCase();
+  const effectiveAssets = pendingTicker && !assets.includes(pendingTicker)
+    ? [...assets, pendingTicker]
+    : assets;
+  const canSubmit = effectiveAssets.length > 0 && !busy && (windowMode === 'lookback' || customValid);
   const intent: ResearchIntent =
     assets.length === 1 ? 'single_asset_history'
     : comparisons.includes('rolling_correlation') && !comparisons.includes('normalized')
@@ -64,12 +68,20 @@ export const QuickBuild: React.FC<Props> = ({ busy, onSubmit }) => {
 
   const submit = () => {
     if (!canSubmit) return;
+    const pendingTicker = assetInput.trim().toUpperCase();
+    const effectiveAssets = pendingTicker && !assets.includes(pendingTicker)
+      ? [...assets, pendingTicker]
+      : assets;
+    if (pendingTicker && !assets.includes(pendingTicker)) {
+      setAssets(effectiveAssets);
+      setAssetInput('');
+    }
     const timeframe = windowMode === 'lookback'
       ? { start: null, end: null, lookbackYears }
       : { start: customStart, end: customEnd, lookbackYears };
     const plan: ResearchPlan = {
       intent,
-      assets,
+      assets: effectiveAssets,
       benchmark: benchmark.trim().toUpperCase() || null,
       timeframe,
       comparisons,
@@ -78,7 +90,7 @@ export const QuickBuild: React.FC<Props> = ({ busy, onSubmit }) => {
       regimes: [],
     };
     const query = synthesizeQuery({
-      assets, comparisons,
+      assets: effectiveAssets, comparisons,
       windowLabel: windowMode === 'lookback' ? `${lookbackYears} years` : `${customStart} to ${customEnd}`,
     });
     onSubmit(plan, query);
@@ -225,9 +237,9 @@ export const QuickBuild: React.FC<Props> = ({ busy, onSubmit }) => {
         borderTop: '1px dashed var(--border)',
       }}>
         <div style={{ fontSize: 11, color: 'var(--muted-foreground)' }}>
-          {assets.length === 0
+          {effectiveAssets.length === 0
             ? 'Add at least one asset to investigate.'
-            : `${assets.length} asset${assets.length === 1 ? '' : 's'} · ${
+            : `${effectiveAssets.length} asset${effectiveAssets.length === 1 ? '' : 's'} · ${
                 windowMode === 'lookback' ? `${lookbackYears}Y window` : (customValid ? `${customStart} → ${customEnd}` : 'invalid window')
               } · ${comparisons.length} comparison${comparisons.length === 1 ? '' : 's'}`}
         </div>

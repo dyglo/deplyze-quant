@@ -75,6 +75,7 @@ export const QuickBuild: React.FC<Props> = ({ busy, onSubmit }) => {
       comparisons,
       overlays: [],
       reasoning_focus: '',
+      regimes: [],
     };
     const query = synthesizeQuery({
       assets, comparisons,

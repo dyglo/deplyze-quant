@@ -255,6 +255,7 @@ export const HistoricalResearch: React.FC = () => {
         query: result.query,
         plan: result.plan,
         observations: result.observations,
+        narrative: result.narrative,
         priorTurns: followups.map((t) => ({ question: t.question, answer: t.answer })),
       });
       const next = [...followups, { ...userTurn, answer }];

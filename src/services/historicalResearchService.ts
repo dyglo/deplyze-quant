@@ -77,15 +77,16 @@ export async function reasonOverObservations(opts: {
 }
 
 /**
- * Ask a follow-up question against an existing investigation. The frontend
- * sends the question plus the grounded observation list; the gateway prompts
- * the LLM to answer ONLY using those facts (same grounding contract as /reason).
+ * Ask a follow-up question against an existing investigation. Sends the full
+ * observation set plus the prior narrative so the model can answer any question
+ * grounded in the completed analysis.
  */
 export async function askFollowup(opts: {
   question: string;
   query: string;
   plan: ResearchPlan;
   observations: ResearchObservation[];
+  narrative?: string;
   priorTurns?: { question: string; answer: string }[];
 }): Promise<string> {
   const r = await gatewayPost<{ answer: string }>('/historical-research/followup-ask', opts);

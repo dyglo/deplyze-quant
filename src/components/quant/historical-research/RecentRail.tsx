@@ -10,11 +10,12 @@
  * from Firestore on route mount.
  */
 
-import React, { useEffect, useState } from 'react';
-import { Clock, ArrowRight, Bookmark } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Clock, ArrowRight, Bookmark, MoreVertical, FileType2, FileText, FileJson } from 'lucide-react';
 import type { ResearchResult } from '../../../hooks/useHistoricalResearch';
 import { useAuth } from '../../AuthProvider';
-import { listSavedInvestigations, type SavedInvestigationMeta } from '../../../services/savedHistoricalResearchService';
+import { listSavedInvestigations, loadInvestigation, type SavedInvestigationMeta } from '../../../services/savedHistoricalResearchService';
+import { exportPdf, exportMarkdown, exportJson } from '../../../lib/historicalResearchExport';
 
 const STORAGE_PREFIX = 'hr:';
 const MAX = 6;
@@ -119,7 +120,7 @@ export const RecentRail: React.FC<Props> = ({ onOpen, refreshKey }) => {
         </div>
       ) : (
         <div style={grid}>
-          {entries.map((e) => <Card key={e.id} entry={e} onOpen={onOpen} />)}
+          {entries.map((e) => <Card key={e.id} entry={e} onOpen={onOpen} uid={user?.uid} />)}
         </div>
       )}
     </section>
@@ -142,54 +143,119 @@ const TabBtn: React.FC<{ active: boolean; onClick: () => void; children: React.R
   >{children}</button>
 );
 
-const Card: React.FC<{ entry: RecentEntry; onOpen: (id: string, opts?: { saved?: boolean }) => void }> = ({ entry, onOpen }) => {
+const Card: React.FC<{
+  entry: RecentEntry;
+  onOpen: (id: string, opts?: { saved?: boolean }) => void;
+  uid?: string;
+}> = ({ entry, onOpen, uid }) => {
   const win = `${entry.lookbackYears}Y`;
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [menuOpen]);
+
+  const runExport = async (fn: (r: ResearchResult) => void) => {
+    if (!uid) return;
+    setMenuOpen(false);
+    setExporting(true);
+    try {
+      const r = await loadInvestigation(uid, entry.id);
+      if (r) fn(r);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
-    <button
-      type="button"
-      onClick={() => onOpen(entry.id, { saved: entry.saved })}
-      style={card}
-      onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--muted)'; }}
-      onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--card)'; }}
-    >
-      <div style={cardTopRow}>
-        <span style={{
-          fontSize: 10, letterSpacing: 0.6, textTransform: 'uppercase',
-          color: 'var(--muted-foreground)',
-          display: 'inline-flex', alignItems: 'center', gap: 4,
+    <div style={{ position: 'relative' }}>
+      {/* clickable card body */}
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => onOpen(entry.id, { saved: entry.saved })}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onOpen(entry.id, { saved: entry.saved }); }}
+        style={{ ...card, opacity: exporting ? 0.6 : 1 }}
+        onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'var(--muted)'; }}
+        onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'var(--card)'; }}
+      >
+        <div style={cardTopRow}>
+          <span style={{
+            fontSize: 10, letterSpacing: 0.6, textTransform: 'uppercase',
+            color: 'var(--muted-foreground)',
+            display: 'inline-flex', alignItems: 'center', gap: 4,
+          }}>
+            {entry.saved && <Bookmark size={10} />}
+            {prettyIntent(entry.intent)}
+          </span>
+          <ArrowRight size={12} style={{ color: 'var(--muted-foreground)' }} />
+        </div>
+
+        <div style={{
+          fontSize: 13, fontWeight: 500, color: 'var(--foreground)',
+          lineHeight: 1.35, marginBottom: 6,
+          display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+          overflow: 'hidden',
         }}>
-          {entry.saved && <Bookmark size={10} />}
-          {prettyIntent(entry.intent)}
-        </span>
-        <ArrowRight size={12} style={{ color: 'var(--muted-foreground)' }} />
+          {entry.query}
+        </div>
+
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
+          {entry.assets.slice(0, 4).map((a) => (
+            <span key={a} style={tickerChip}>{a}</span>
+          ))}
+          {entry.assets.length > 4 && (
+            <span style={{ ...tickerChip, color: 'var(--muted-foreground)' }}>+{entry.assets.length - 4}</span>
+          )}
+        </div>
+
+        <div style={cardBottomRow}>
+          <Mono>{win}</Mono>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <Clock size={10} />
+            <Mono>{relativeTime(entry.completedAt)}</Mono>
+          </span>
+        </div>
       </div>
 
-      <div style={{
-        fontSize: 13, fontWeight: 500, color: 'var(--foreground)',
-        lineHeight: 1.35, marginBottom: 6,
-        display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
-        overflow: 'hidden',
-      }}>
-        {entry.query}
-      </div>
-
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
-        {entry.assets.slice(0, 4).map((a) => (
-          <span key={a} style={tickerChip}>{a}</span>
-        ))}
-        {entry.assets.length > 4 && (
-          <span style={{ ...tickerChip, color: 'var(--muted-foreground)' }}>+{entry.assets.length - 4}</span>
-        )}
-      </div>
-
-      <div style={cardBottomRow}>
-        <Mono>{win}</Mono>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-          <Clock size={10} />
-          <Mono>{relativeTime(entry.completedAt)}</Mono>
-        </span>
-      </div>
-    </button>
+      {/* ⋮ export menu — saved cards only */}
+      {entry.saved && uid && (
+        <div ref={menuRef} style={{ position: 'absolute', top: 8, right: 8 }}>
+          <button
+            type="button"
+            title={exporting ? 'Exporting…' : 'Export options'}
+            disabled={exporting}
+            onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v); }}
+            style={dotMenuBtn}
+          >
+            <MoreVertical size={13} />
+          </button>
+          {menuOpen && (
+            <div role="menu" style={exportMenu}>
+              <button role="menuitem" type="button" style={exportMenuItem}
+                onClick={() => runExport(exportPdf)}>
+                <FileType2 size={12} /><span>Download PDF</span>
+              </button>
+              <button role="menuitem" type="button" style={exportMenuItem}
+                onClick={() => runExport(exportMarkdown)}>
+                <FileText size={12} /><span>Download Markdown</span>
+              </button>
+              <button role="menuitem" type="button" style={exportMenuItem}
+                onClick={() => runExport(exportJson)}>
+                <FileJson size={12} /><span>Download JSON</span>
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 };
 
@@ -268,4 +334,38 @@ const emptyStyle: React.CSSProperties = {
   color: 'var(--muted-foreground)',
   fontSize: 12,
   background: 'var(--card)',
+};
+
+const dotMenuBtn: React.CSSProperties = {
+  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+  width: 22, height: 22,
+  border: 'none',
+  borderRadius: 6,
+  background: 'var(--muted)',
+  color: 'var(--muted-foreground)',
+  cursor: 'pointer',
+  padding: 0,
+};
+
+const exportMenu: React.CSSProperties = {
+  position: 'absolute', top: '100%', right: 0,
+  marginTop: 4,
+  minWidth: 170,
+  background: 'var(--popover, var(--card))',
+  border: '1px solid var(--border)',
+  borderRadius: 8,
+  boxShadow: '0 6px 16px rgba(0,0,0,0.10)',
+  padding: 4,
+  zIndex: 30,
+};
+
+const exportMenuItem: React.CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: 8,
+  width: '100%', textAlign: 'left',
+  padding: '6px 10px',
+  border: 'none', background: 'transparent',
+  color: 'var(--foreground)',
+  fontSize: 12,
+  borderRadius: 4,
+  cursor: 'pointer',
 };

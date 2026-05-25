@@ -236,13 +236,13 @@ export async function runBacktest(spec: StrategySpec): Promise<BacktestResults> 
 export const REGIME_LABELS = ['Risk-On', 'Transitional', 'Risk-Off'] as const;
 
 export function regimeColor(state: number): string {
-  // 0 risk-on (gain/olive), 1 transitional (amber), 2 risk-off (loss/brick).
+  // 0 risk-on (gain/olive), 1 transitional (design gold), 2 risk-off (loss/brick).
   switch (state) {
     case 0:
       return 'var(--ds-gain)';
     case 2:
       return 'var(--ds-loss)';
     default:
-      return '#C79A3C';
+      return '#C9A227';
   }
 }

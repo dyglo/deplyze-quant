@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from './AuthProvider';
-import { Activity, AlertCircle, Eye, EyeOff, Loader2, BarChart3, Network, Telescope } from 'lucide-react';
+import { Activity, AlertCircle, Eye, EyeOff, Loader2, BarChart3, Network, FlaskConical } from 'lucide-react';
 
 type AuthMode = 'login' | 'register';
 
@@ -8,7 +8,7 @@ const PROOF_POINTS = [
   { icon: Activity,   text: 'Continuous market intelligence' },
   { icon: BarChart3,  text: 'Quant analysis on autopilot' },
   { icon: Network,    text: 'Cross-asset macro context' },
-  { icon: Telescope,  text: 'Model observatory & briefings' },
+  { icon: FlaskConical, text: 'Regime-aware backtesting & briefings' },
 ];
 
 export const Login: React.FC = () => {

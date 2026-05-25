@@ -57,6 +57,9 @@ class ProfileBuildRequest(BaseModel):
     user_id_hash: Optional[str] = Field(
         None, description="If provided, build only for this user; otherwise all eligible."
     )
+    raw_uid: Optional[str] = Field(
+        None, description="Raw Firebase UID for Firestore symbol lookup. Never stored in BQ."
+    )
 
 
 class BriefingRequest(BaseModel):
@@ -109,7 +112,11 @@ async def http_sessionize(req: SessionizeRequest):
 async def http_profile_build(req: ProfileBuildRequest):
     _require_enabled()
     td = date.fromisoformat(req.target_date) if req.target_date else None
-    return profile_builder.build_profiles(target_date=td, user_id_hash=req.user_id_hash)
+    return profile_builder.build_profiles(
+        target_date=td,
+        user_id_hash=req.user_id_hash,
+        raw_uid=req.raw_uid,
+    )
 
 
 @router.post("/briefing/materialize")
@@ -153,12 +160,49 @@ async def http_briefing_materialize(req: MaterializeRequest):
 # ─── Read endpoints (gateway-proxied) ────────────────────────────────────────
 
 @router.get("/briefing")
-async def http_get_briefing(user_id_hash: str = Query(..., min_length=8)):
+async def http_get_briefing(
+    user_id_hash: str = Query(..., min_length=8),
+    portfolio_id: Optional[str] = Query(None),
+    portfolio_symbols: Optional[str] = Query(None),
+    watchlist_symbols: Optional[str] = Query(None),
+):
+    """
+    Returns the latest personalized briefing.
+
+    The gateway enriches this call with the user's actual Firestore data:
+      portfolio_id       — primary active portfolio Firestore document ID
+      portfolio_symbols  — comma-separated holding symbols, e.g. "AAPL,NVDA,MSFT"
+      watchlist_symbols  — comma-separated watchlist symbols
+
+    These override the (historically always-empty) BQ user_profile_daily
+    values so personalization is immediate regardless of nightly sync state.
+    """
     _require_enabled()
+
+    # Parse comma-separated symbol lists sent by the gateway
+    p_syms = [s.strip().upper() for s in portfolio_symbols.split(",") if s.strip()] \
+        if portfolio_symbols else None
+    w_syms = [s.strip().upper() for s in watchlist_symbols.split(",") if s.strip()] \
+        if watchlist_symbols else None
+
     b = briefing_builder.latest_briefing(user_id_hash)
-    if not b:
-        # No persisted briefing yet — synthesize on demand (no persist).
-        b = briefing_builder.build_briefing(user_id_hash=user_id_hash, persist=False)
+    needs_rebuild = (
+        b is None
+        or (
+            # Rebuild if the stored brief is cold but the gateway says the user has data
+            not b.get("is_personalized")
+            and bool((p_syms or []) or (w_syms or []))
+        )
+    )
+
+    if needs_rebuild:
+        b = briefing_builder.build_briefing(
+            user_id_hash=user_id_hash,
+            persist=False,
+            portfolio_id=portfolio_id or None,
+            injected_portfolio_symbols=p_syms,
+            injected_watchlist_symbols=w_syms,
+        )
     return {"briefing": b}
 
 

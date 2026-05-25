@@ -26,12 +26,78 @@ from datetime import date, datetime, timezone
 from typing import Optional
 
 import structlog
-from google.cloud import bigquery
+from google.cloud import bigquery, firestore
 
 from app.bigquery.client import get_bigquery_client, fully_qualified
 from app.core.config import settings
 
 log = structlog.get_logger("quant_engine.personalization.profile_builder")
+
+# ─── Firestore helpers ────────────────────────────────────────────────────────
+
+_fs_client: firestore.Client | None = None
+
+
+def _get_firestore() -> firestore.Client:
+    global _fs_client
+    if _fs_client is None:
+        _fs_client = firestore.Client(project=settings.GCP_PROJECT_ID)
+    return _fs_client
+
+
+def fetch_user_symbols_from_firestore(uid: str) -> tuple[list[str], list[str]]:
+    """
+    Returns (portfolio_symbols, watchlist_symbols) for the given Firebase UID
+    by reading directly from Firestore.
+
+    Collections:
+      portfolios/{portfolioId}           — uid, status=='active', isWatchlist==false
+      portfolios/{portfolioId}/holdings  — symbol field
+      intelligenceWatchlists/{id}        — uid, symbols[] field
+    """
+    fs = _get_firestore()
+    portfolio_symbols: list[str] = []
+    watchlist_symbols: list[str] = []
+
+    try:
+        # Active non-watchlist portfolios for this uid
+        portfolio_docs = list(
+            fs.collection("portfolios")
+            .where("uid", "==", uid)
+            .where("status", "==", "active")
+            .stream()
+        )
+
+        symbol_set: set[str] = set()
+        for pdoc in portfolio_docs:
+            if pdoc.to_dict().get("isWatchlist"):
+                continue
+            holdings = list(pdoc.reference.collection("holdings").stream())
+            for h in holdings:
+                sym = h.to_dict().get("symbol", "")
+                if sym:
+                    symbol_set.add(sym.upper())
+        portfolio_symbols = list(symbol_set)
+    except Exception as e:
+        log.warning("profile_builder.firestore_portfolio_fetch_failed", error=str(e))
+
+    try:
+        watchlist_docs = list(
+            fs.collection("intelligenceWatchlists")
+            .where("uid", "==", uid)
+            .stream()
+        )
+        w_set: set[str] = set()
+        for wdoc in watchlist_docs:
+            syms = wdoc.to_dict().get("symbols") or []
+            for s in syms:
+                if s:
+                    w_set.add(s.upper())
+        watchlist_symbols = list(w_set)
+    except Exception as e:
+        log.warning("profile_builder.firestore_watchlist_fetch_failed", error=str(e))
+
+    return portfolio_symbols, watchlist_symbols
 
 SHORT_HALFLIFE_DAYS = 10
 LONG_HALFLIFE_DAYS = 75
@@ -44,7 +110,11 @@ def _decay(days_old: float, halflife: float) -> float:
     return math.pow(0.5, days_old / halflife)
 
 
-def build_profiles(target_date: Optional[date] = None, user_id_hash: Optional[str] = None) -> dict:
+def build_profiles(
+    target_date: Optional[date] = None,
+    user_id_hash: Optional[str] = None,
+    raw_uid: Optional[str] = None,
+) -> dict:
     """
     Build profile snapshots for `target_date` (default: today UTC).
     When `user_id_hash` is provided, builds only that user's snapshot;
@@ -123,6 +193,21 @@ def build_profiles(target_date: Optional[date] = None, user_id_hash: Optional[st
     # intentionally simple in Phase 1 — the structure is what downstream
     # ranking and Copilot grounding consume; precision arrives in Phase 2
     # with the supervised value model.
+    # When raw_uid is available (single-user build triggered by gateway), fetch
+    # portfolio/watchlist symbols from Firestore to populate the profile. For
+    # population builds raw_uid is unavailable; those get symbols via gateway
+    # injection at briefing time instead.
+    fs_portfolio_symbols: list[str] = []
+    fs_watchlist_symbols: list[str] = []
+    if raw_uid:
+        fs_portfolio_symbols, fs_watchlist_symbols = fetch_user_symbols_from_firestore(raw_uid)
+        log.info(
+            "profile_builder.firestore_symbols_loaded",
+            raw_uid_prefix=raw_uid[:6],
+            portfolio_count=len(fs_portfolio_symbols),
+            watchlist_count=len(fs_watchlist_symbols),
+        )
+
     snapshots = []
     now = datetime.now(timezone.utc)
     for row in rows:
@@ -150,13 +235,13 @@ def build_profiles(target_date: Optional[date] = None, user_id_hash: Optional[st
                 "recent_value_events_14d": int(row.get("recent_value_events") or 0),
             }),
             "active_investigation_ids": [],
-            "watchlist_symbols": [],
-            "portfolio_symbols": [],
+            "watchlist_symbols": fs_watchlist_symbols if raw_uid else [],
+            "portfolio_symbols": fs_portfolio_symbols if raw_uid else [],
             "short_decay_features": json.dumps({"halflife_days": SHORT_HALFLIFE_DAYS}),
             "long_decay_features": json.dumps({"halflife_days": LONG_HALFLIFE_DAYS}),
             "fatigue_signals": None,
             "profile_version": settings.PERSONALIZATION_PROFILE_VERSION,
-            "builder_version": "v1.0",
+            "builder_version": "v1.1",
             "source_events_window_days": LOOKBACK_DAYS,
             "generated_at": now.isoformat(),
         })

@@ -1,9 +1,6 @@
 name: Deploy
 
 # ─── Trigger strategy ──────────────────────────────────────────────────────
-# Deploys only on push to main (after PR merge) or manual workflow_dispatch.
-# Each service job is gated on whether its source paths actually changed,
-# so an unrelated frontend commit does not rebuild and redeploy the gateway.
 on:
   push:
     branches: [main]
@@ -27,7 +24,6 @@ on:
         default: false
 
 # ─── Concurrency ───────────────────────────────────────────────────────────
-# Never cancel a live production deployment.
 concurrency:
   group: deploy-production
   cancel-in-progress: false
@@ -42,9 +38,6 @@ env:
 
 jobs:
   # ─── 0. Path detection ─────────────────────────────────────────────────
-  # Determines which service paths changed so downstream jobs can be skipped
-  # when their source did not change. Manual workflow_dispatch always runs all
-  # jobs unless the corresponding skip_* input is set.
   detect-changes:
     name: Detect changed paths
     runs-on: ubuntu-latest
@@ -83,7 +76,6 @@ jobs:
     name: Deploy · Gateway (Cloud Run)
     runs-on: ubuntu-latest
     needs: detect-changes
-    # Run when gateway source changed, or when manually triggered without skip.
     if: |
       (needs.detect-changes.outputs.gateway == 'true' || github.event_name == 'workflow_dispatch') &&
       github.event.inputs.skip_gateway != 'true'
@@ -145,6 +137,8 @@ jobs:
             --min-instances 0 \
             --max-instances 5 \
             --timeout 60 \
+            --vpc-connector ${{ secrets.VPC_CONNECTOR_NAME }} \
+            --vpc-egress all-traffic \
             --set-env-vars "\
           FIREBASE_PROJECT_ID=${{ env.FIREBASE_PROJECT_ID }},\
           GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }},\
@@ -156,7 +150,12 @@ jobs:
           POLYGON_API_KEY=${{ secrets.POLYGON_API_KEY }},\
           FMP_API_KEY=${{ secrets.FMP_API_KEY }},\
           EODHD_API_KEY=${{ secrets.EODHD_API_KEY }},\
-          SEC_EDGAR_USER_AGENT=${{ secrets.SEC_EDGAR_USER_AGENT }}"
+          SEC_EDGAR_USER_AGENT=${{ secrets.SEC_EDGAR_USER_AGENT }},\
+          REDIS_HOST=${{ secrets.REDIS_HOST }},\
+          REDIS_PORT=${{ secrets.REDIS_PORT }},\
+          QUANT_ENGINE_URL=${{ secrets.QUANT_ENGINE_URL }},\
+          PERSONALIZATION_ENABLED=true,\
+          PERSONALIZATION_USER_ID_SALT=${{ secrets.PERSONALIZATION_USER_ID_SALT }}"
 
       - name: Verify gateway health
         run: |
@@ -177,7 +176,6 @@ jobs:
     name: Deploy · Firestore
     runs-on: ubuntu-latest
     needs: detect-changes
-    # Run when Firestore config changed, or when manually triggered without skip.
     if: |
       (needs.detect-changes.outputs.firestore == 'true' || github.event_name == 'workflow_dispatch') &&
       github.event.inputs.skip_firestore != 'true'
@@ -210,8 +208,6 @@ jobs:
     name: Deploy · Hosting (Firebase)
     runs-on: ubuntu-latest
     needs: [detect-changes, deploy-gateway]
-    # Run when frontend source changed, or when manually triggered without skip.
-    # Always condition ensures we check deploy-gateway outcome even when skipped.
     if: |
       always() &&
       (needs.deploy-gateway.result == 'success' || needs.deploy-gateway.result == 'skipped') &&
@@ -279,7 +275,6 @@ jobs:
     name: Deploy · Quant Engine (Cloud Run)
     runs-on: ubuntu-latest
     needs: detect-changes
-    # Run when quant engine source changed, or when manually triggered without skip.
     if: |
       (needs.detect-changes.outputs.quant == 'true' || github.event_name == 'workflow_dispatch') &&
       github.event.inputs.skip_quant_engine != 'true'
@@ -344,6 +339,8 @@ jobs:
             --max-instances 3 \
             --no-cpu-throttling \
             --timeout 300 \
+            --vpc-connector ${{ secrets.VPC_CONNECTOR_NAME }} \
+            --vpc-egress all-traffic \
             --set-env-vars "\
           GCP_PROJECT_ID=${{ env.GCP_PROJECT_ID }},\
           BIGQUERY_LOCATION=US,\
@@ -358,7 +355,11 @@ jobs:
           TAVILY_API_KEY=${{ secrets.TAVILY_API_KEY }},\
           SERPER_API_KEY=${{ secrets.SERPER_API_KEY }},\
           EDGAR_USER_AGENT=${{ secrets.SEC_EDGAR_USER_AGENT }},\
-          FRED_API_KEY=${{ secrets.FRED_API_KEY }}"
+          FRED_API_KEY=${{ secrets.FRED_API_KEY }},\
+          REDIS_HOST=${{ secrets.REDIS_HOST }},\
+          REDIS_PORT=${{ secrets.REDIS_PORT }},\
+          PERSONALIZATION_ENABLED=true,\
+          PERSONALIZATION_USER_ID_SALT=${{ secrets.PERSONALIZATION_USER_ID_SALT }}"
 
       - name: Verify quant engine health
         run: |

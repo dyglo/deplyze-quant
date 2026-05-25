@@ -33,6 +33,7 @@ import {
   EVENT_CATEGORIES,
   type EventType,
 } from '../lib/personalization';
+import { redisCacheGet, redisCacheSet } from '../services/redisCache';
 
 const router = Router();
 
@@ -417,6 +418,7 @@ async function callEngine(
 /**
  * GET /v1/personalization/briefing
  * Returns the latest personalized briefing for the authenticated user.
+ * Checks Redis first (key: briefing:{uid}:{date}); caches until 23:59 UTC.
  */
 router.get('/briefing', async (req, res, next) => {
   try {
@@ -426,10 +428,40 @@ router.get('/briefing', async (req, res, next) => {
       return;
     }
     const userIdHash = hashUserId(req.uid);
+    const today = new Date().toISOString().slice(0, 10);
+    const cacheKey = `briefing:${req.uid}:${today}`;
+
+    // Check Redis cache
+    const cached = await redisCacheGet(cacheKey);
+    if (cached !== null) {
+      res.json({ ...(cached as Record<string, unknown>), cache_hit: true });
+      return;
+    }
+
+    // Call quant-engine
     const result = await callEngine('GET', '/personalization/briefing', {
       query: { user_id_hash: userIdHash },
     });
-    res.status(result.status).json(result.body);
+
+    if (result.status === 200 && result.body) {
+      // Cache until 23:59:59 UTC today
+      const now = new Date();
+      const midnight = new Date(Date.UTC(
+        now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(),
+        23, 59, 59,
+      ));
+      const ttlOverride = process.env.MORNING_BRIEFING_TTL_SECONDS;
+      const ttlSeconds = ttlOverride
+        ? parseInt(ttlOverride, 10)
+        : Math.max(60, Math.floor((midnight.getTime() - now.getTime()) / 1000));
+      await redisCacheSet(cacheKey, result.body, ttlSeconds);
+    }
+
+    res.status(result.status).json(
+      result.status === 200
+        ? { ...(result.body as Record<string, unknown>), cache_hit: false }
+        : result.body,
+    );
   } catch (err) {
     next(err);
   }

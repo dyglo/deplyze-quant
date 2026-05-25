@@ -68,19 +68,15 @@ create_or_update \
   "/personalization/profile/build" \
   '{}'
 
-# 3. Pre-market personalized briefing materialization — invoked per-user
-#    by the gateway when users first hit the morning terminal. The
-#    scheduled run here is a placeholder that exercises the path daily;
-#    per-user materialization will be added in PR4 once the gateway can
-#    enumerate active users from Firestore.
-#    Scheduler invokes a no-op /personalization/briefing/materialize with
-#    a sentinel user, only to keep the path warm and surface failures
-#    early via Cloud Run alerting.
-# (Disabled by default — uncomment after seeding a sentinel user.)
-# create_or_update \
-#   "v5-personalization-briefing-warm" \
-#   "15 8 * * 1-5" \
-#   "/personalization/briefing/materialize" \
-#   '{"user_id_hash":"sentinel"}'
+# 3. Pre-market personalized briefing materialization — runs at 01:00 ET
+#    (~05:00-06:00 UTC) weekdays so the Morning Terminal cache is populated
+#    before US market open. Fires a sentinel warm-path build; per-user
+#    materialization is triggered on first Morning Terminal load via the gateway.
+#    user_id_hash "sentinel" is a no-op in the engine (returns early if no profile).
+create_or_update \
+  "deplyze-morning-materializer" \
+  "0 1 * * 1-5" \
+  "/personalization/briefing/materialize" \
+  '{"user_id_hash":"sentinel","briefing_window":"premarket","persist":false}'
 
 echo "V5 schedulers ensured."

@@ -8,9 +8,8 @@ import { Settings } from './components/Settings';
 import { Toaster } from './components/ui/sonner';
 import { DrawerProvider } from './components/quant/DataDrawer';
 import { Activity } from 'lucide-react';
-
 import { IntelligenceTerminal } from './pages/IntelligenceTerminal';
-import { MorningTerminal } from './pages/MorningTerminal';
+import { MorningRoutines } from './pages/MorningTerminal';
 import { Investigations } from './pages/Investigations';
 import { InstrumentIntelligenceHub } from './pages/instruments/InstrumentIntelligenceHub';
 import { MoversWorkspace } from './pages/instruments/MoversWorkspace';
@@ -84,7 +83,7 @@ export default function App() {
           <Routes>
             <Route path="/login"                element={<Login />} />
             <Route path="/"                     element={<ProtectedRoute><IntelligenceTerminal /></ProtectedRoute>} />
-            <Route path="/morning"              element={<ProtectedRoute><MorningTerminal /></ProtectedRoute>} />
+            <Route path="/morning"              element={<ProtectedRoute><MorningRoutines /></ProtectedRoute>} />
             <Route path="/investigations"       element={<ProtectedRoute><Investigations /></ProtectedRoute>} />
             {/* Instrument Intelligence — Level 2 workspaces (must precede :symbol) */}
             <Route path="/instruments/movers"      element={<ProtectedRoute><MoversWorkspace /></ProtectedRoute>} />

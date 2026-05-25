@@ -20,6 +20,7 @@ import {
   fetchCopilotContext,
   fetchFeed,
   fetchProfile,
+  fetchStructuredBriefing,
   fetchWatchlistIntelligence,
   listInvestigations,
   createInvestigation,
@@ -28,6 +29,7 @@ import {
   type Investigation,
   type PersonalizedBriefing,
   type RankedItem,
+  type StructuredBriefing,
   type UserProfile,
 } from '../services/personalizationService';
 
@@ -90,6 +92,13 @@ export function useMorningBriefing(): AsyncState<PersonalizedBriefing> {
   return useAsyncResource<PersonalizedBriefing>(async () => {
     const b = await fetchBriefing();
     return b as PersonalizedBriefing;
+  }, []);
+}
+
+export function useStructuredBriefing(): AsyncState<StructuredBriefing> {
+  return useAsyncResource<StructuredBriefing>(async () => {
+    const b = await fetchStructuredBriefing();
+    return b as StructuredBriefing;
   }, []);
 }
 

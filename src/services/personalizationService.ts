@@ -134,6 +134,57 @@ export interface CopilotContext {
   latest_awareness_narrative?: Record<string, string[]> | null;
 }
 
+// ─── Structured briefing (Morning Terminal V2 shape) ─────────────────────────
+
+export interface StructuredBriefing {
+  briefing_id: string;
+  generated_at: string;
+  valid_until: string;
+  cache_hit: boolean;
+  is_personalized: boolean;
+  regime: {
+    label: string;
+    confidence: number;
+    episode_day: number;
+    summary: string;
+    historical_analog: string | null;
+    shifted_recently: boolean;
+  };
+  portfolio_pulse: {
+    pnl_delta_pct: number;
+    regime_compatibility: number;
+    flag_count: number;
+    flags: Array<{ symbol: string; reason: string; severity: 'low' | 'medium' | 'high' }>;
+  } | null;
+  watchlist_overnight: {
+    movers: Array<{
+      symbol: string;
+      change_pct: number;
+      narrative_shift: boolean;
+      catalyst_this_week: string | null;
+    }>;
+  } | null;
+  ranked_feed: Array<{
+    id: string;
+    title: string;
+    reason_tag: string;
+    confidence: number;
+    explanation: string;
+    cta_label: string;
+    cta_route: string;
+  }>;
+  research_queue: Array<{
+    id: string;
+    title: string;
+    has_new_evidence: boolean;
+    symbols: string[];
+  }> | null;
+  ranker_version?: string;
+  lineage_id?: string;
+  candidate_set_size?: number;
+  materialized_at?: string | null;
+}
+
 // ─── Internal — JSON parse for engine-stringified payloads ───────────────────
 
 function parseMaybeJson<T>(v: T | string | undefined | null): T | undefined {
@@ -203,6 +254,22 @@ export async function fetchBriefingMeta(): Promise<FetchResult<PersonalizedBrief
     if (e?.status === 404 || e?.status === 503) {
       return { data: null, meta: { fetchedAt: Date.now(), status: 'error', source: 'network' } };
     }
+    throw err;
+  }
+}
+
+export async function fetchStructuredBriefing(): Promise<StructuredBriefing | null> {
+  try {
+    // The engine returns the structured dict directly (not wrapped in {"briefing":...})
+    const res = await gatewayGet<StructuredBriefing>(
+      '/personalization/briefing',
+      undefined,
+      60_000,
+    );
+    return res ?? null;
+  } catch (err: unknown) {
+    const e = err as { status?: number };
+    if (e?.status === 404 || e?.status === 503) return null;
     throw err;
   }
 }

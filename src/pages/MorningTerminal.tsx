@@ -1,47 +1,42 @@
 /**
- * MorningTerminal — V5 Phase 1 personalized institutional homepage surface.
+ * MorningTerminal — V5 Phase 2 personalized institutional homepage.
  *
- * Answers the five briefing questions in calm, evidence-backed language:
- *   1. What changed overnight?
- *   2. What changed in my portfolio?
- *   3. What changed in my watchlists?
- *   4. Which narratives strengthened or weakened?
- *   5. What deserves attention first?
+ * Six sections rendered in order:
+ *   A. RegimeBanner          — always shown
+ *   B. PortfolioPulse        — if portfolio data available
+ *   C. WatchlistOvernight    — if watchlist movers exist
+ *   D. RankedFeed            — always shown (max 8 items)
+ *   E. ResearchQueue         — if active investigations exist
+ *   F. CopilotEntry          — always shown last
  *
- * Design constraints (deep-research-report §"Personalized Morning Terminal"):
- *   - No hype, no emojis, no retail urgency, no buy/sell language.
- *   - Every observation exposes a "why was this shown" affordance.
- *   - Dismiss / "less like this" controls per item; mute by category.
- *   - Empty state is calm — "no observations cross today's threshold" beats
- *     fake activity.
+ * Cold state: no portfolio/watchlist → shows global brief +
+ * "Add holdings" prompt between RegimeBanner and RankedFeed.
  *
- * Rollout: ships at /morning. Homepage (/) continues to point at the
- * Intelligence Terminal. When the team is comfortable, the / route can be
- * flipped to MorningTerminal as the default authenticated landing — that
- * is a one-line change in App.tsx.
+ * Design constraints: no emojis, no buy/sell language, no hype.
+ * Every element must be explainable. Sections either show data or are omitted.
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, Info, EyeOff, Volume2 } from 'lucide-react';
+import React, { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { TrendingUp, TrendingDown, ExternalLink, AlertTriangle, BookOpen, MessageSquare } from 'lucide-react';
 
-import { useMorningBriefing, useUserProfile } from '../hooks/usePersonalization';
-import type { BriefingSection, RankedItem } from '../services/personalizationService';
-import { logDismiss, logEvent, logFeedback, logPageView, logValueAction } from '../lib/telemetry';
+import { useStructuredBriefing } from '../hooks/usePersonalization';
+import type { StructuredBriefing } from '../services/personalizationService';
+import { logPageView, logEvent } from '../lib/telemetry';
 
 const PAGE_PLACEMENT = 'MorningTerminal';
 
 // ─── Shell ────────────────────────────────────────────────────────────────────
 
-export const MorningTerminal: React.FC = () => {
-  const briefing = useMorningBriefing();
-  const profile = useUserProfile();
+export const MorningRoutines: React.FC = () => {
+  const briefing = useStructuredBriefing();
 
   useEffect(() => {
     logPageView(PAGE_PLACEMENT, { surface: 'morning_terminal' });
   }, []);
 
   useEffect(() => {
-    if (briefing.data) {
+    if (briefing.data?.briefing_id) {
       logEvent({
         event_type: 'briefing_open',
         event_category: 'briefing',
@@ -51,443 +46,500 @@ export const MorningTerminal: React.FC = () => {
     }
   }, [briefing.data?.briefing_id]);
 
-  const sections = useMemo<BriefingSection[]>(() => {
-    if (!briefing.data) return [];
-    const raw = briefing.data.sections;
-    return Array.isArray(raw) ? raw : [];
-  }, [briefing.data]);
+  if (briefing.loading) return <Shell><LoadingState /></Shell>;
+  if (briefing.error)  return <Shell><ErrorState message={briefing.error.message} onRetry={briefing.refetch} /></Shell>;
+  if (!briefing.data)  return <Shell><DisabledState /></Shell>;
 
-  if (briefing.loading) {
-    return <Shell><LoadingState /></Shell>;
-  }
-  if (briefing.error) {
-    return <Shell><ErrorState message={briefing.error.message} onRetry={briefing.refetch} /></Shell>;
-  }
-  if (!briefing.data) {
-    return <Shell><DisabledState /></Shell>;
-  }
-
-  const itemCount = sections.reduce((n, s) => n + (s.items?.length ?? 0), 0);
-  const updated = briefing.data.materialized_at ?? briefing.data.generated_at;
+  const d = briefing.data;
+  const isCold = !d.is_personalized;
 
   return (
     <Shell>
-      <Header
-        title={briefing.data.title ?? 'Personalized Morning Terminal'}
-        summary={briefing.data.summary}
-        updatedAt={updated}
-        rankerVersion={briefing.data.ranker_version}
-        regimeStyle={profile.data?.regime_style ?? undefined}
-      />
-      {itemCount === 0 ? (
-        <EmptySections />
-      ) : (
-        <div style={styles.sectionList}>
-          {sections.map((s) => (
-            <Section key={s.key} briefingId={briefing.data!.briefing_id} section={s} />
-          ))}
-        </div>
-      )}
-      <Footer briefing={briefing.data} />
+      <PageHeader briefing={d} />
+
+      {/* A — Regime Banner */}
+      <RegimeBanner regime={d.regime} />
+
+      {/* Cold state prompt sits between regime and feed */}
+      {isCold && <ColdStatePrompt />}
+
+      {/* B — Portfolio Pulse */}
+      {d.portfolio_pulse && <PortfolioPulse pulse={d.portfolio_pulse} />}
+
+      {/* C — Watchlist Overnight */}
+      {d.watchlist_overnight?.movers?.length ? (
+        <WatchlistOvernight overnight={d.watchlist_overnight} />
+      ) : null}
+
+      {/* D — Ranked Feed */}
+      <RankedFeed items={d.ranked_feed} isCold={isCold} />
+
+      {/* E — Research Queue */}
+      {d.research_queue?.length ? (
+        <ResearchQueue queue={d.research_queue} />
+      ) : null}
+
+      {/* F — Copilot Entry */}
+      <CopilotEntry />
+
+      <PageFooter briefing={d} />
     </Shell>
   );
 };
 
-// ─── Layout ──────────────────────────────────────────────────────────────────
+// ─── Page chrome ─────────────────────────────────────────────────────────────
 
 const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div style={styles.shell}>
-    <div style={styles.content}>{children}</div>
+  <div style={s.shell}>
+    <div style={s.content}>{children}</div>
   </div>
 );
 
-const Header: React.FC<{
-  title: string;
-  summary?: string;
-  updatedAt?: string | null;
-  rankerVersion?: string;
-  regimeStyle?: string;
-}> = ({ title, summary, updatedAt, rankerVersion, regimeStyle }) => (
-  <header style={styles.header}>
-    <div>
-      <p style={styles.eyebrow}>Personalized institutional briefing</p>
-      <h1 style={styles.title}>{title}</h1>
-      {summary && <p style={styles.summary}>{summary}</p>}
-    </div>
-    <div style={styles.headerMeta}>
-      {regimeStyle && <Pill label={`Profile · ${regimeStyle}`} />}
-      {rankerVersion && <Pill label={`Ranker · ${rankerVersion}`} />}
-      {updatedAt && <Pill label={`Updated · ${new Date(updatedAt).toLocaleTimeString()}`} />}
-    </div>
-  </header>
+const PageHeader: React.FC<{ briefing: StructuredBriefing }> = ({ briefing }) => {
+  const updated = briefing.materialized_at ?? briefing.generated_at;
+  return (
+    <header style={s.pageHeader}>
+      <div>
+        <p style={s.eyebrow}>Personalized institutional briefing</p>
+        <h1 style={s.pageTitle}>Morning Routines</h1>
+      </div>
+      <div style={s.headerPills}>
+        {briefing.ranker_version && <Pill label={`Ranker · ${briefing.ranker_version}`} />}
+        {updated && <Pill label={`Updated · ${new Date(updated).toLocaleTimeString()}`} />}
+        {briefing.cache_hit && <Pill label="cached" />}
+      </div>
+    </header>
+  );
+};
+
+const PageFooter: React.FC<{ briefing: StructuredBriefing }> = ({ briefing }) => (
+  <footer style={s.footer}>
+    <span>
+      Candidate pool: {briefing.candidate_set_size ?? '—'} · lineage {briefing.lineage_id ?? '—'}
+    </span>
+    <span style={s.footerNote}>
+      Briefing personalises research relevance. It does not recommend trades or allocations.
+    </span>
+  </footer>
 );
 
-const Section: React.FC<{ briefingId: string; section: BriefingSection }> = ({ briefingId, section }) => {
-  const [open, setOpen] = useState(true);
-  const onToggle = () => {
-    const next = !open;
-    setOpen(next);
-    if (next) {
-      logEvent({
-        event_type: 'briefing_section_open',
-        event_category: 'briefing',
-        placement: PAGE_PLACEMENT,
-        entity_id: section.key,
-        properties: { briefing_id: briefingId },
-      });
-    }
-  };
+// ─── A — Regime Banner ────────────────────────────────────────────────────────
 
-  if (!section.items || section.items.length === 0) {
-    return null;
-  }
-
+const RegimeBanner: React.FC<{ regime: StructuredBriefing['regime'] }> = ({ regime }) => {
+  const urgent = regime?.shifted_recently;
   return (
-    <section style={styles.section}>
-      <button type="button" style={styles.sectionHeader} onClick={onToggle} aria-expanded={open}>
-        {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-        <span style={styles.sectionLabel}>{section.label}</span>
-        <span style={styles.sectionCount}>{section.items.length}</span>
-      </button>
-      {open && (
-        <ul style={styles.itemList}>
-          {section.items.map((item) => (
-            <ItemCard key={item.artifact_id} item={item} sectionKey={section.key} />
-          ))}
-        </ul>
+    <section style={{ ...s.card, ...s.regimeBanner, ...(urgent ? s.regimeBannerUrgent : {}) }}>
+      <div style={s.regimeBannerTop}>
+        <div style={s.regimeMeta}>
+          <span style={s.regimeLabel}>{regime?.label ?? 'Macro Regime'}</span>
+          {typeof regime?.episode_day === 'number' && (
+            <span style={s.regimeEpisode}>Day {regime.episode_day} of episode</span>
+          )}
+        </div>
+        <div style={s.regimeConfidence}>
+          <span style={s.confLabel}>τ</span>
+          <span style={s.confValue}>{((regime?.confidence ?? 0) * 100).toFixed(0)}%</span>
+        </div>
+      </div>
+      {regime?.summary && <p style={s.regimeSummary}>{regime.summary}</p>}
+      {regime?.historical_analog && (
+        <p style={s.regimeAnalog}>Historical analog: {regime.historical_analog}</p>
       )}
+      <a href="/macro" style={s.cardLink}>
+        explore regime <ExternalLink size={11} style={{ verticalAlign: 'middle' }} />
+      </a>
     </section>
   );
 };
 
-const ItemCard: React.FC<{ item: RankedItem; sectionKey: string }> = ({ item, sectionKey }) => {
-  const [whyOpen, setWhyOpen] = useState(false);
-  const [dismissed, setDismissed] = useState(false);
+// ─── Cold state prompt ────────────────────────────────────────────────────────
 
-  const onExpand = () => {
-    logValueAction('expand', {
-      category: 'briefing',
-      placement: PAGE_PLACEMENT,
-      artifact_id: item.artifact_id,
-    });
-  };
-
-  const onDismiss = () => {
-    setDismissed(true);
-    logDismiss({
-      category: 'briefing',
-      placement: PAGE_PLACEMENT,
-      artifact_id: item.artifact_id,
-      reason: sectionKey,
-    });
-  };
-
-  const onLessLikeThis = () => {
-    void logFeedback({
-      kind: 'relevance',
-      artifact_id: item.artifact_id,
-      signal: 'less_like_this',
-      properties: { section: sectionKey, kind: item.kind },
-    });
-  };
-
-  const onMuteCategory = () => {
-    void logFeedback({
-      kind: 'mute',
-      category: item.kind,
-      signal: 'mute',
-      properties: { artifact_id: item.artifact_id },
-    });
-  };
-
-  if (dismissed) return null;
-
+const ColdStatePrompt: React.FC = () => {
+  const navigate = useNavigate();
   return (
-    <li style={styles.itemCard}>
-      <div style={styles.itemHeaderRow}>
-        <div style={styles.itemTitleColumn}>
-          <p style={styles.itemTitle}>{item.title ?? 'Observation'}</p>
-          <div style={styles.metaRow}>
-            {item.severity && <SeverityChip severity={item.severity} />}
-            {typeof item.confidence === 'number' && (
-              <span style={styles.confidence}>
-                Confidence {confidenceLabel(item.confidence)}
-              </span>
-            )}
-            {(item.symbols ?? []).slice(0, 4).map((s) => (
-              <span key={s} style={styles.symbolChip}>{s.toUpperCase()}</span>
-            ))}
-          </div>
-        </div>
-        <div style={styles.itemActions}>
-          <IconButton title="Why was this shown?" onClick={() => setWhyOpen((v) => !v)}>
-            <Info size={13} />
-          </IconButton>
-          <IconButton title="Less like this" onClick={onLessLikeThis}>
-            <Volume2 size={13} style={{ opacity: 0.7 }} />
-          </IconButton>
-          <IconButton title="Dismiss" onClick={onDismiss}>
-            <EyeOff size={13} />
-          </IconButton>
-        </div>
-      </div>
-      {item.summary && (
-        <p style={styles.itemBody} onClick={onExpand}>
-          {item.summary}
-        </p>
-      )}
-      {whyOpen && (
-        <WhyShown item={item} onMuteCategory={onMuteCategory} />
-      )}
-    </li>
-  );
-};
-
-const WhyShown: React.FC<{ item: RankedItem; onMuteCategory: () => void }> = ({ item, onMuteCategory }) => {
-  const reasons = item.reason_codes ?? [];
-  const comps = item.component_scores ?? {};
-  return (
-    <div style={styles.whyShown}>
-      <div style={styles.whyTitle}>Why this surfaced</div>
-      {reasons.length > 0 && (
-        <ul style={styles.reasonList}>
-          {reasons.map((r) => (
-            <li key={r} style={styles.reasonItem}>{humanizeReason(r)}</li>
-          ))}
-        </ul>
-      )}
-      <div style={styles.scoreGrid}>
-        {Object.entries(comps).map(([k, v]) => (
-          <ScoreBar key={k} label={humanizeComponent(k)} value={typeof v === 'number' ? v : 0} />
-        ))}
-      </div>
-      <div style={styles.whyFooter}>
-        <span style={styles.whyMeta}>
-          base score {item.base_score.toFixed(3)} · ranker rules-first · all evidence sourced from V4 intelligence layer
-        </span>
-        <button type="button" style={styles.muteCategory} onClick={onMuteCategory}>
-          Mute {item.kind}
+    <div style={s.coldPrompt}>
+      <p style={s.coldText}>
+        You're seeing the global morning brief. Add your holdings and Deplyze tracks
+        what changed overnight for <em>your</em> positions.
+      </p>
+      <div style={s.coldActions}>
+        <button style={s.coldBtn} onClick={() => navigate('/portfolio/overview')}>
+          + Add holdings
+        </button>
+        <button style={s.coldBtnSecondary} onClick={() => navigate('/portfolio/holdings')}>
+          + Add watchlist
         </button>
       </div>
     </div>
   );
 };
 
-const Footer: React.FC<{ briefing: { lineage_id?: string; candidate_set_size?: number } }> = ({ briefing }) => (
-  <footer style={styles.footer}>
-    <span>
-      Candidate pool: {briefing.candidate_set_size ?? '—'} · lineage {briefing.lineage_id ?? '—'}
-    </span>
-    <span style={styles.footerNote}>
-      Briefing personalizes research relevance. It does not recommend trades or allocations.
-    </span>
-  </footer>
-);
+// ─── B — Portfolio Pulse ──────────────────────────────────────────────────────
 
-const EmptySections: React.FC = () => (
-  <div style={styles.empty}>
-    <p style={styles.emptyTitle}>No new institutional observations cross today’s relevance threshold.</p>
-    <p style={styles.emptyBody}>
-      The system is still analysing overnight V4 outputs. Check the Intelligence Terminal for the
-      unfiltered feed.
-    </p>
-  </div>
-);
-
-const DisabledState: React.FC = () => (
-  <div style={styles.empty}>
-    <p style={styles.emptyTitle}>Personalization is not yet enabled for this environment.</p>
-    <p style={styles.emptyBody}>
-      The Morning Terminal will populate once the personalization engine is provisioned.
-    </p>
-  </div>
-);
-
-const LoadingState: React.FC = () => (
-  <div style={styles.loading}>
-    <p style={styles.eyebrow}>Personalized institutional briefing</p>
-    <p style={styles.loadingMessage}>Synthesising overnight intelligence…</p>
-  </div>
-);
-
-const ErrorState: React.FC<{ message: string; onRetry: () => void }> = ({ message, onRetry }) => (
-  <div style={styles.empty}>
-    <p style={styles.emptyTitle}>Could not load briefing.</p>
-    <p style={styles.emptyBody}>{message}</p>
-    <button type="button" style={styles.retry} onClick={onRetry}>Retry</button>
-  </div>
-);
-
-// ─── Atoms ───────────────────────────────────────────────────────────────────
-
-const Pill: React.FC<{ label: string }> = ({ label }) => <span style={styles.pill}>{label}</span>;
-
-const SeverityChip: React.FC<{ severity: string }> = ({ severity }) => {
-  const tone =
-    severity === 'high' ? styles.sevHigh :
-    severity === 'medium' ? styles.sevMed :
-    severity === 'low' ? styles.sevLow :
-    styles.sevInfo;
-  return <span style={{ ...styles.severityChip, ...tone }}>{severity}</span>;
+const PortfolioPulse: React.FC<{ pulse: NonNullable<StructuredBriefing['portfolio_pulse']> }> = ({ pulse }) => {
+  const pnlPos = pulse.pnl_delta_pct >= 0;
+  const pnlPct = `${pnlPos ? '+' : ''}${(pulse.pnl_delta_pct * 100).toFixed(2)}%`;
+  return (
+    <section style={s.card}>
+      <SectionHeader icon={<TrendingUp size={14} />} title="Portfolio Pulse" />
+      <div style={s.pulseRow}>
+        <div style={s.pulseKpi}>
+          <span style={s.kpiLabel}>Overnight P&amp;L</span>
+          <span style={{ ...s.kpiValue, color: pnlPos ? 'var(--primary)' : '#dc3c3c' }}>
+            {pnlPos ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
+            &nbsp;{pnlPct}
+          </span>
+        </div>
+        <div style={s.pulseKpi}>
+          <span style={s.kpiLabel}>Regime compatibility</span>
+          <CompatBar score={pulse.regime_compatibility} />
+        </div>
+        {pulse.flag_count > 0 && (
+          <div style={s.pulseKpi}>
+            <span style={s.kpiLabel}>Flags today</span>
+            <span style={{ ...s.kpiValue, color: pulse.flag_count > 2 ? '#dc3c3c' : '#c98b1f' }}>
+              <AlertTriangle size={13} /> {pulse.flag_count}
+            </span>
+          </div>
+        )}
+      </div>
+      {pulse.flags.length > 0 && (
+        <ul style={s.flagList}>
+          {pulse.flags.map((f, i) => (
+            <li key={i} style={s.flagItem}>
+              {f.symbol && <span style={s.symbolChip}>{f.symbol}</span>}
+              <span style={{ ...s.severityDot, background: severityColor(f.severity) }} />
+              <span style={s.flagReason}>{f.reason}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <a href="/portfolio/overview" style={s.cardLink}>
+        view portfolio <ExternalLink size={11} style={{ verticalAlign: 'middle' }} />
+      </a>
+    </section>
+  );
 };
 
-const IconButton: React.FC<{ title: string; onClick: () => void; children: React.ReactNode }> = ({
-  title, onClick, children,
-}) => (
-  <button type="button" title={title} aria-label={title} style={styles.iconButton} onClick={onClick}>
-    {children}
-  </button>
-);
-
-const ScoreBar: React.FC<{ label: string; value: number }> = ({ label, value }) => {
-  const pct = Math.max(0, Math.min(1, value)) * 100;
+const CompatBar: React.FC<{ score: number }> = ({ score }) => {
+  const pct = Math.max(0, Math.min(100, score));
+  const color = pct >= 70 ? 'var(--primary)' : pct >= 40 ? '#c98b1f' : '#dc3c3c';
   return (
-    <div style={styles.scoreRow}>
-      <span style={styles.scoreLabel}>{label}</span>
-      <div style={styles.scoreTrack}>
-        <div style={{ ...styles.scoreFill, width: `${pct}%` }} />
+    <div style={s.compatRow}>
+      <div style={s.compatTrack}>
+        <div style={{ ...s.compatFill, width: `${pct}%`, background: color }} />
       </div>
-      <span style={styles.scoreValue}>{value.toFixed(2)}</span>
+      <span style={{ ...s.kpiValue, color }}>{pct}</span>
     </div>
   );
 };
 
-// ─── Reason / component humanization ─────────────────────────────────────────
+// ─── C — Watchlist Overnight ──────────────────────────────────────────────────
 
-function humanizeReason(code: string): string {
-  switch (code) {
-    case 'affects_portfolio':         return 'Affects holdings in your portfolio';
-    case 'touches_portfolio':         return 'Touches a portfolio position';
-    case 'watchlist_overlap':         return 'Overlaps with a watchlist symbol';
-    case 'active_investigation':      return 'Continues an active investigation';
-    case 'elevated_severity':         return 'Elevated severity from V4 intelligence';
-    case 'high_confidence_source':    return 'High-confidence source';
-    case 'v4_agent_grounded':         return 'Grounded in V4 agent output';
-    case 'historical_analog':         return 'Backed by a historical analog match';
-    case 'narrative_shift':           return 'Reflects a narrative shift';
-    default:                          return code.replaceAll('_', ' ');
-  }
-}
+const WatchlistOvernight: React.FC<{ overnight: NonNullable<StructuredBriefing['watchlist_overnight']> }> = ({ overnight }) => (
+  <section style={s.card}>
+    <SectionHeader icon={<TrendingUp size={14} />} title="Watchlist Overnight" />
+    <ul style={s.moverList}>
+      {overnight.movers.map((m) => {
+        const pos = m.change_pct >= 0;
+        return (
+          <li key={m.symbol} style={s.moverItem}>
+            <span style={s.symbolChip}>{m.symbol}</span>
+            <span style={{ color: pos ? 'var(--primary)' : '#dc3c3c', fontSize: '0.8125rem', fontWeight: 600 }}>
+              {pos ? '+' : ''}{(m.change_pct * 100).toFixed(2)}%
+            </span>
+            {m.narrative_shift && <Badge label="narrative shift" />}
+            {m.catalyst_this_week && <Badge label={m.catalyst_this_week} />}
+          </li>
+        );
+      })}
+    </ul>
+    <a href="/portfolio/holdings" style={s.cardLink}>
+      view watchlist <ExternalLink size={11} style={{ verticalAlign: 'middle' }} />
+    </a>
+  </section>
+);
 
-function humanizeComponent(key: string): string {
-  switch (key) {
-    case 'portfolio_impact':             return 'Portfolio impact';
-    case 'watchlist_match':              return 'Watchlist match';
-    case 'investigation_continuation':   return 'Investigation continuation';
-    case 'regime_urgency':               return 'Regime urgency';
-    case 'confidence':                   return 'Confidence';
-    case 'novelty':                      return 'Novelty';
-    case 'recency':                      return 'Recency';
-    case 'source_quality':               return 'Source quality';
-    default:                             return key.replaceAll('_', ' ');
-  }
-}
+// ─── D — Ranked Feed ──────────────────────────────────────────────────────────
 
-function confidenceLabel(c: number): string {
-  if (c >= 0.7) return 'High';
-  if (c >= 0.4) return 'Medium';
-  return 'Low';
+const RankedFeed: React.FC<{
+  items: StructuredBriefing['ranked_feed'];
+  isCold: boolean;
+}> = ({ items, isCold }) => (
+  <section style={s.card}>
+    <SectionHeader icon={<BookOpen size={14} />} title="Intelligence Feed" />
+    {isCold && (
+      <p style={s.coldFeedNote}>
+        Global brief — add holdings to personalise the feed.
+      </p>
+    )}
+    {items.length === 0 ? (
+      <p style={s.emptyNote}>No observations cross today's relevance threshold.</p>
+    ) : (
+      <ul style={s.feedList}>
+        {items.map((item) => (
+          <FeedItem key={item.id} item={item} />
+        ))}
+      </ul>
+    )}
+  </section>
+);
+
+const FeedItem: React.FC<{ item: StructuredBriefing['ranked_feed'][number] }> = ({ item }) => {
+  const pct = Math.max(0, Math.min(1, item.confidence)) * 100;
+  return (
+    <li style={s.feedItem}>
+      <div style={s.feedItemHeader}>
+        <div style={s.feedItemTitle}>{item.title}</div>
+        <div style={s.feedItemMeta}>
+          <Badge label={item.reason_tag} />
+          <span style={s.confChip}>τ {pct.toFixed(0)}%</span>
+        </div>
+      </div>
+      {item.explanation && <p style={s.feedItemBody}>{item.explanation}</p>}
+      <a href={item.cta_route} style={s.feedCta}>
+        {item.cta_label} <ExternalLink size={10} style={{ verticalAlign: 'middle' }} />
+      </a>
+    </li>
+  );
+};
+
+// ─── E — Research Queue ───────────────────────────────────────────────────────
+
+const ResearchQueue: React.FC<{ queue: NonNullable<StructuredBriefing['research_queue']> }> = ({ queue }) => (
+  <section style={s.card}>
+    <SectionHeader icon={<BookOpen size={14} />} title="Research Queue" />
+    <ul style={s.queueList}>
+      {queue.map((inv) => (
+        <li key={inv.id} style={s.queueItem}>
+          <div style={s.queueItemHeader}>
+            <span style={s.queueTitle}>{inv.title}</span>
+            {inv.has_new_evidence && <Badge label="new evidence" urgent />}
+          </div>
+          {inv.symbols.length > 0 && (
+            <div style={s.queueSymbols}>
+              {inv.symbols.slice(0, 5).map((sym) => (
+                <span key={sym} style={s.symbolChip}>{sym}</span>
+              ))}
+            </div>
+          )}
+          <a href={`/research/i/${inv.id}`} style={s.cardLink}>
+            continue research <ExternalLink size={10} style={{ verticalAlign: 'middle' }} />
+          </a>
+        </li>
+      ))}
+    </ul>
+  </section>
+);
+
+// ─── F — Copilot Entry ────────────────────────────────────────────────────────
+
+const CopilotEntry: React.FC = () => {
+  const navigate = useNavigate();
+  return (
+    <section style={{ ...s.card, ...s.copilotCard }}>
+      <SectionHeader icon={<MessageSquare size={14} />} title="Deplyze Assistant" />
+      <p style={s.copilotHint}>
+        Ask about this morning's brief, your portfolio, or any signal you see above.
+      </p>
+      <button style={s.copilotBtn} onClick={() => navigate('/copilot')}>
+        Ask me about this morning's brief
+      </button>
+    </section>
+  );
+};
+
+// ─── Shared atoms ─────────────────────────────────────────────────────────────
+
+const SectionHeader: React.FC<{ icon: React.ReactNode; title: string }> = ({ icon, title }) => (
+  <div style={s.sectionHeader}>
+    <span style={s.sectionIcon}>{icon}</span>
+    <span style={s.sectionTitle}>{title}</span>
+  </div>
+);
+
+const Badge: React.FC<{ label: string; urgent?: boolean }> = ({ label, urgent }) => (
+  <span style={{ ...s.badge, ...(urgent ? s.badgeUrgent : {}) }}>{label}</span>
+);
+
+const Pill: React.FC<{ label: string }> = ({ label }) => (
+  <span style={s.pill}>{label}</span>
+);
+
+// ─── States ──────────────────────────────────────────────────────────────────
+
+const LoadingState: React.FC = () => (
+  <div style={s.stateBox}>
+    <p style={s.eyebrow}>Personalized institutional briefing</p>
+    <p style={s.statePrimary}>Synthesising overnight intelligence…</p>
+  </div>
+);
+
+const DisabledState: React.FC = () => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+    {/* Page header mirrors the live state so it doesn't feel broken */}
+    <header style={s.pageHeader}>
+      <div>
+        <p style={s.eyebrow}>Personalized institutional briefing</p>
+        <h1 style={s.pageTitle}>Morning Routines</h1>
+      </div>
+    </header>
+
+    {/* Skeleton sections */}
+    <div style={{ ...s.card, ...s.regimeBanner, opacity: 0.45 }}>
+      <div style={s.regimeBannerTop}>
+        <div style={s.regimeMeta}>
+          <span style={{ ...s.regimeLabel, background: 'var(--muted)', color: 'transparent', borderRadius: 4, display: 'inline-block', width: 160 }}>——</span>
+          <span style={{ ...s.regimeEpisode, background: 'var(--muted)', color: 'transparent', borderRadius: 4, display: 'inline-block', width: 80 }}>——</span>
+        </div>
+      </div>
+      <div style={{ height: 12, background: 'var(--muted)', borderRadius: 4, width: '70%' }} />
+    </div>
+
+    <div style={{ ...s.card, opacity: 0.45 }}>
+      <div style={{ height: 12, background: 'var(--muted)', borderRadius: 4, width: '40%', marginBottom: 8 }} />
+      {[1, 2, 3].map(i => (
+        <div key={i} style={{ padding: '0.75rem 0', borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ height: 12, background: 'var(--muted)', borderRadius: 4, width: `${55 + i * 10}%` }} />
+          <div style={{ height: 10, background: 'var(--muted)', borderRadius: 4, width: '80%' }} />
+        </div>
+      ))}
+    </div>
+
+    {/* Explanation card */}
+    <div style={{ border: '1px dashed var(--border)', borderRadius: 10, padding: '1.25rem 1.375rem', display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
+      <p style={{ margin: 0, fontSize: '0.9375rem', fontWeight: 600, color: 'var(--foreground)' }}>
+        Your morning brief is being provisioned
+      </p>
+      <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--muted-foreground)', lineHeight: 1.55 }}>
+        Morning Routines delivers a personalised pre-market briefing — regime context, portfolio pulse,
+        watchlist movers, and a ranked intelligence feed — each weekday before market open.
+      </p>
+      <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--muted-foreground)', lineHeight: 1.55 }}>
+        The first brief will appear here once the personalization engine deploys and runs its
+        initial build. No action needed on your part.
+      </p>
+      <a href="/" style={{ fontSize: '0.8125rem', color: 'var(--primary)', textDecoration: 'none', marginTop: '0.25rem' }}>
+        Go to Intelligence Terminal →
+      </a>
+    </div>
+  </div>
+);
+
+const ErrorState: React.FC<{ message: string; onRetry: () => void }> = ({ message, onRetry }) => (
+  <div style={s.stateBox}>
+    <p style={s.statePrimary}>Could not load briefing.</p>
+    <p style={s.stateSecondary}>{message}</p>
+    <button style={s.retryBtn} onClick={onRetry}>Retry</button>
+  </div>
+);
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function severityColor(sev: string): string {
+  if (sev === 'high')   return '#dc3c3c';
+  if (sev === 'medium') return '#c98b1f';
+  return '#5b7fcc';
 }
 
 // ─── Styles ──────────────────────────────────────────────────────────────────
-// Inline because Deplyze pages don't use a CSS-in-JS lib. Tokens come from
-// global CSS vars (--background, --foreground, --primary etc.) for theme
-// parity with the rest of the institutional terminal.
 
-const styles: Record<string, React.CSSProperties> = {
+const s: Record<string, React.CSSProperties> = {
   shell: { background: 'var(--background)', minHeight: '100%', padding: '1.5rem 2rem 3rem' },
-  content: { maxWidth: 980, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '1.5rem' },
-  eyebrow: {
-    fontSize: '0.6875rem', letterSpacing: '0.08em', textTransform: 'uppercase',
-    color: 'var(--muted-foreground)', margin: 0,
-  },
-  title: { fontSize: '1.5rem', fontWeight: 600, color: 'var(--foreground)', margin: '0.25rem 0 0.5rem', letterSpacing: '-0.015em' },
-  summary: { fontSize: '0.9375rem', color: 'var(--foreground)', margin: 0, lineHeight: 1.5, maxWidth: 760 },
-  header: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem' },
-  headerMeta: { display: 'flex', flexWrap: 'wrap', gap: '0.375rem', justifyContent: 'flex-end' },
-  pill: {
-    fontSize: '0.6875rem', padding: '0.125rem 0.5rem', borderRadius: 6,
-    border: '1px solid var(--border)', color: 'var(--muted-foreground)',
-    background: 'var(--card)',
-  },
-  sectionList: { display: 'flex', flexDirection: 'column', gap: '0.875rem' },
-  section: { border: '1px solid var(--border)', borderRadius: 10, background: 'var(--card)', overflow: 'hidden' },
-  sectionHeader: {
-    width: '100%', display: 'flex', alignItems: 'center', gap: '0.5rem',
-    padding: '0.75rem 1rem', background: 'transparent', border: 'none',
-    color: 'var(--foreground)', cursor: 'pointer', textAlign: 'left',
-  },
-  sectionLabel: { fontSize: '0.8125rem', fontWeight: 600, letterSpacing: '-0.005em' },
-  sectionCount: {
-    marginLeft: 'auto', fontSize: '0.6875rem', color: 'var(--muted-foreground)',
-    background: 'var(--muted)', padding: '0.0625rem 0.5rem', borderRadius: 999,
-  },
-  itemList: { listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 0 },
-  itemCard: {
-    padding: '0.875rem 1rem', borderTop: '1px solid var(--border)',
-    display: 'flex', flexDirection: 'column', gap: '0.5rem',
-  },
-  itemHeaderRow: { display: 'flex', alignItems: 'flex-start', gap: '0.75rem' },
-  itemTitleColumn: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '0.25rem' },
-  itemTitle: { margin: 0, fontSize: '0.9375rem', fontWeight: 500, color: 'var(--foreground)', lineHeight: 1.35 },
-  metaRow: { display: 'flex', flexWrap: 'wrap', gap: '0.375rem', alignItems: 'center' },
-  itemActions: { display: 'flex', gap: '0.25rem' },
-  iconButton: {
-    border: '1px solid var(--border)', background: 'transparent', color: 'var(--muted-foreground)',
-    width: 24, height: 24, borderRadius: 6, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-    cursor: 'pointer',
-  },
-  itemBody: {
-    margin: 0, fontSize: '0.875rem', color: 'var(--foreground)', lineHeight: 1.55,
-    cursor: 'pointer',
-  },
-  severityChip: { fontSize: '0.625rem', padding: '0.0625rem 0.4375rem', borderRadius: 6, textTransform: 'uppercase', letterSpacing: '0.04em' },
-  sevHigh: { background: 'rgba(220,60,60,0.10)', color: '#dc3c3c' },
-  sevMed: { background: 'rgba(255,176,46,0.10)', color: '#c98b1f' },
-  sevLow: { background: 'rgba(120,160,255,0.10)', color: '#5b7fcc' },
-  sevInfo: { background: 'var(--muted)', color: 'var(--muted-foreground)' },
-  confidence: { fontSize: '0.6875rem', color: 'var(--muted-foreground)' },
-  symbolChip: {
-    fontSize: '0.625rem', fontWeight: 600, color: 'var(--foreground)',
-    background: 'var(--muted)', padding: '0.0625rem 0.4375rem', borderRadius: 6,
-  },
-  whyShown: {
-    marginTop: '0.25rem', padding: '0.75rem 0.875rem', background: 'var(--muted)',
-    borderRadius: 8, display: 'flex', flexDirection: 'column', gap: '0.5rem',
-  },
-  whyTitle: { fontSize: '0.6875rem', fontWeight: 600, color: 'var(--foreground)', letterSpacing: '0.04em', textTransform: 'uppercase' },
-  reasonList: { listStyle: 'disc', paddingInlineStart: '1.125rem', margin: 0, color: 'var(--foreground)', fontSize: '0.8125rem' },
-  reasonItem: { lineHeight: 1.5 },
-  scoreGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.25rem 0.875rem' },
-  scoreRow: { display: 'flex', alignItems: 'center', gap: '0.5rem' },
-  scoreLabel: { fontSize: '0.6875rem', color: 'var(--muted-foreground)', width: 150 },
-  scoreTrack: { flex: 1, height: 4, background: 'var(--border)', borderRadius: 2, overflow: 'hidden' },
-  scoreFill: { height: '100%', background: 'var(--primary)' },
-  scoreValue: { fontSize: '0.6875rem', color: 'var(--foreground)', width: 36, textAlign: 'right' },
-  whyFooter: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem' },
-  whyMeta: { fontSize: '0.6875rem', color: 'var(--muted-foreground)' },
-  muteCategory: {
-    fontSize: '0.6875rem', padding: '0.1875rem 0.5rem', borderRadius: 6,
+  content: { maxWidth: 1000, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '1rem' },
+
+  pageHeader: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', marginBottom: '0.25rem' },
+  eyebrow: { fontSize: '0.6875rem', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--muted-foreground)', margin: 0 },
+  pageTitle: { fontSize: '1.5rem', fontWeight: 600, color: 'var(--foreground)', margin: '0.25rem 0 0', letterSpacing: '-0.015em' },
+  headerPills: { display: 'flex', flexWrap: 'wrap', gap: '0.375rem', justifyContent: 'flex-end', paddingTop: '0.25rem' },
+  pill: { fontSize: '0.6875rem', padding: '0.125rem 0.5rem', borderRadius: 6, border: '1px solid var(--border)', color: 'var(--muted-foreground)', background: 'var(--card)' },
+
+  card: { border: '1px solid var(--border)', borderRadius: 10, background: 'var(--card)', padding: '1rem 1.125rem', display: 'flex', flexDirection: 'column', gap: '0.625rem' },
+  cardLink: { fontSize: '0.75rem', color: 'var(--primary)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.25rem', marginTop: '0.125rem' },
+
+  sectionHeader: { display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.125rem' },
+  sectionIcon: { color: 'var(--muted-foreground)', display: 'flex', alignItems: 'center' },
+  sectionTitle: { fontSize: '0.8125rem', fontWeight: 600, color: 'var(--foreground)', letterSpacing: '-0.005em' },
+
+  // Regime banner
+  regimeBanner: { borderLeft: '3px solid var(--border)' },
+  regimeBannerUrgent: { borderLeft: '3px solid #c98b1f', background: 'rgba(255,176,46,0.04)' },
+  regimeBannerTop: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem' },
+  regimeMeta: { display: 'flex', flexDirection: 'column', gap: '0.125rem' },
+  regimeLabel: { fontSize: '0.9375rem', fontWeight: 600, color: 'var(--foreground)' },
+  regimeEpisode: { fontSize: '0.6875rem', color: 'var(--muted-foreground)' },
+  regimeConfidence: { display: 'flex', alignItems: 'center', gap: '0.25rem', flexShrink: 0 },
+  confLabel: { fontSize: '0.6875rem', fontStyle: 'italic', color: 'var(--muted-foreground)' },
+  confValue: { fontSize: '0.9375rem', fontWeight: 600, color: 'var(--foreground)' },
+  regimeSummary: { margin: 0, fontSize: '0.875rem', color: 'var(--foreground)', lineHeight: 1.55 },
+  regimeAnalog: { margin: 0, fontSize: '0.75rem', color: 'var(--muted-foreground)', fontStyle: 'italic' },
+
+  // Cold state
+  coldPrompt: { border: '1px dashed var(--border)', borderRadius: 10, padding: '1rem 1.125rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' },
+  coldText: { margin: 0, fontSize: '0.875rem', color: 'var(--foreground)', lineHeight: 1.5 },
+  coldActions: { display: 'flex', gap: '0.5rem' },
+  coldBtn: { fontSize: '0.8125rem', padding: '0.375rem 0.875rem', borderRadius: 6, border: 'none', background: 'var(--primary)', color: 'var(--primary-foreground)', cursor: 'pointer', fontWeight: 500 },
+  coldBtnSecondary: { fontSize: '0.8125rem', padding: '0.375rem 0.875rem', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--foreground)', cursor: 'pointer' },
+
+  // Portfolio pulse
+  pulseRow: { display: 'flex', flexWrap: 'wrap', gap: '1.5rem' },
+  pulseKpi: { display: 'flex', flexDirection: 'column', gap: '0.25rem', minWidth: 120 },
+  kpiLabel: { fontSize: '0.6875rem', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em' },
+  kpiValue: { fontSize: '1rem', fontWeight: 600, color: 'var(--foreground)', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' },
+  compatRow: { display: 'flex', alignItems: 'center', gap: '0.5rem' },
+  compatTrack: { width: 80, height: 5, background: 'var(--border)', borderRadius: 2, overflow: 'hidden' },
+  compatFill: { height: '100%', borderRadius: 2 },
+  flagList: { listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '0.375rem' },
+  flagItem: { display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8125rem', color: 'var(--foreground)' },
+  severityDot: { width: 8, height: 8, borderRadius: '50%', flexShrink: 0 },
+  flagReason: { color: 'var(--muted-foreground)', fontSize: '0.8125rem' },
+
+  // Watchlist
+  moverList: { listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '0.5rem' },
+  moverItem: { display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' },
+
+  // Feed
+  coldFeedNote: { margin: 0, fontSize: '0.8125rem', color: 'var(--muted-foreground)', fontStyle: 'italic' },
+  emptyNote: { margin: 0, fontSize: '0.8125rem', color: 'var(--muted-foreground)' },
+  feedList: { listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 0 },
+  feedItem: { padding: '0.75rem 0', borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '0.375rem' },
+  feedItemHeader: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.75rem' },
+  feedItemTitle: { fontSize: '0.9375rem', fontWeight: 500, color: 'var(--foreground)', lineHeight: 1.35, flex: 1 },
+  feedItemMeta: { display: 'flex', gap: '0.375rem', alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' },
+  feedItemBody: { margin: 0, fontSize: '0.8125rem', color: 'var(--foreground)', lineHeight: 1.5 },
+  feedCta: { fontSize: '0.75rem', color: 'var(--primary)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' },
+  confChip: { fontSize: '0.6875rem', color: 'var(--muted-foreground)' },
+
+  // Research queue
+  queueList: { listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '0.75rem' },
+  queueItem: { display: 'flex', flexDirection: 'column', gap: '0.375rem' },
+  queueItemHeader: { display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' },
+  queueTitle: { fontSize: '0.9375rem', fontWeight: 500, color: 'var(--foreground)' },
+  queueSymbols: { display: 'flex', flexWrap: 'wrap', gap: '0.25rem' },
+
+  // Copilot
+  copilotCard: { background: 'var(--muted)' },
+  copilotHint: { margin: 0, fontSize: '0.8125rem', color: 'var(--muted-foreground)' },
+  copilotBtn: {
+    fontSize: '0.875rem', padding: '0.5rem 1rem', borderRadius: 8,
     border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--foreground)',
-    cursor: 'pointer',
+    cursor: 'pointer', fontWeight: 500, textAlign: 'left',
   },
-  footer: {
-    display: 'flex', justifyContent: 'space-between', gap: '0.75rem',
-    fontSize: '0.6875rem', color: 'var(--muted-foreground)',
-    borderTop: '1px solid var(--border)', paddingTop: '0.75rem',
-  },
+
+  // Badges
+  badge: { fontSize: '0.625rem', padding: '0.0625rem 0.4375rem', borderRadius: 6, background: 'var(--muted)', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.04em' },
+  badgeUrgent: { background: 'rgba(255,176,46,0.15)', color: '#c98b1f' },
+
+  // Shared chips
+  symbolChip: { fontSize: '0.625rem', fontWeight: 600, color: 'var(--foreground)', background: 'var(--muted)', padding: '0.0625rem 0.4375rem', borderRadius: 6 },
+
+  // Footer
+  footer: { display: 'flex', justifyContent: 'space-between', gap: '0.75rem', fontSize: '0.6875rem', color: 'var(--muted-foreground)', borderTop: '1px solid var(--border)', paddingTop: '0.75rem' },
   footerNote: { fontStyle: 'italic' },
-  empty: {
-    padding: '2rem', textAlign: 'center', borderRadius: 10,
-    border: '1px dashed var(--border)', background: 'var(--card)',
-    display: 'flex', flexDirection: 'column', gap: '0.375rem', alignItems: 'center',
-  },
-  emptyTitle: { margin: 0, fontSize: '0.9375rem', color: 'var(--foreground)', fontWeight: 500 },
-  emptyBody: { margin: 0, fontSize: '0.8125rem', color: 'var(--muted-foreground)', maxWidth: 520, lineHeight: 1.5 },
-  retry: {
-    marginTop: '0.5rem', fontSize: '0.75rem', padding: '0.375rem 0.875rem', borderRadius: 6,
-    border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--foreground)', cursor: 'pointer',
-  },
-  loading: { padding: '3rem 0', textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '0.5rem' },
-  loadingMessage: { fontSize: '0.9375rem', color: 'var(--muted-foreground)', margin: 0 },
+
+  // States
+  stateBox: { padding: '2.5rem', textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'center' },
+  statePrimary: { margin: 0, fontSize: '0.9375rem', fontWeight: 500, color: 'var(--foreground)' },
+  stateSecondary: { margin: 0, fontSize: '0.8125rem', color: 'var(--muted-foreground)', maxWidth: 480, lineHeight: 1.5 },
+  retryBtn: { marginTop: '0.5rem', fontSize: '0.75rem', padding: '0.375rem 0.875rem', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--foreground)', cursor: 'pointer' },
 };

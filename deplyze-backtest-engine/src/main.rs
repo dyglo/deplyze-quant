@@ -20,6 +20,9 @@ mod models;
 mod regime;
 mod strategy;
 
+#[cfg(test)]
+mod e2e_tests;
+
 use std::collections::HashMap;
 use std::env;
 use std::net::SocketAddr;

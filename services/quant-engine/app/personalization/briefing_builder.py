@@ -37,6 +37,7 @@ from app.personalization.ranker import (
 log = structlog.get_logger("quant_engine.personalization.briefing_builder")
 
 MAX_FEED_ITEMS = 8
+MIN_FEED_ITEMS = 3   # guaranteed minimum even if items fall below confidence gate
 MAX_QUEUE_ITEMS = 3
 MIN_CONFIDENCE_GATE = 0.40
 WATCHLIST_MOVE_THRESHOLD = 0.005   # 0.5 %
@@ -191,6 +192,7 @@ def _fetch_portfolio_pulse(
                 "regime_compatibility": regime_compat,
                 "flag_count": len(flags),
                 "flags": flags,
+                "holdings_count": None,  # not available from synthesis path
             }
 
     # ── Path B: lightweight OHLCV-based pulse ────────────────────────────────
@@ -238,6 +240,7 @@ def _fetch_portfolio_pulse(
         "regime_compatibility": 75,  # neutral default when no synthesis available
         "flag_count": 0,
         "flags": [],
+        "holdings_count": len(portfolio_symbols),
     }
 
 
@@ -490,6 +493,7 @@ def build_briefing(
     ranked = rank_candidates(candidates, profile)
 
     ranked_feed = []
+    below_threshold_pool = []  # gate-passed items below MIN_CONFIDENCE_GATE, for fill
     safety_gate_log = []
     for r in ranked:
         if not r.gate_passed:
@@ -498,10 +502,8 @@ def build_briefing(
                 "reasons": r.gate_reasons,
             })
             continue
-        if r.candidate.confidence is not None and r.candidate.confidence < MIN_CONFIDENCE_GATE:
-            continue
         cta_route, cta_label = _cta(r.candidate.kind, list(r.candidate.symbols or []))
-        ranked_feed.append({
+        item = {
             "id": r.candidate.artifact_id,
             "title": (r.candidate.title or "")[:120],
             "reason_tag": _reason_tag(r.reason_codes),
@@ -509,9 +511,20 @@ def build_briefing(
             "explanation": (r.candidate.summary or "")[:300],
             "cta_label": cta_label,
             "cta_route": cta_route,
-        })
+            "below_threshold": False,
+        }
+        if r.candidate.confidence is not None and r.candidate.confidence < MIN_CONFIDENCE_GATE:
+            below_threshold_pool.append({**item, "below_threshold": True})
+            continue
+        ranked_feed.append(item)
         if len(ranked_feed) >= MAX_FEED_ITEMS:
             break
+
+    # Guarantee minimum 3 items — fill from below-threshold pool if needed.
+    # Items are marked below_threshold=True so the UI can render a separator.
+    if len(ranked_feed) < MIN_FEED_ITEMS:
+        needed = MIN_FEED_ITEMS - len(ranked_feed)
+        ranked_feed.extend(below_threshold_pool[:needed])
 
     is_personalized = bool(profile.portfolio_symbols or profile.watchlist_symbols)
 

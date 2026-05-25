@@ -323,7 +323,7 @@ router.get('/profile', async (req, res, next) => {
         generated_at
       FROM \`${PROJECT}.${FEATURES_DS}.user_profile_daily\`
       WHERE user_id_hash = @uid_hash
-      ORDER BY snapshot_date DESC
+      ORDER BY snapshot_date DESC, generated_at DESC
       LIMIT 1
     `;
     const [rows] = await getBQ().query({
@@ -357,6 +357,7 @@ router.get('/profile', async (req, res, next) => {
 
 const QUANT_ENGINE_URL = process.env.QUANT_ENGINE_URL ?? '';
 const ENGINE_TIMEOUT_MS = 25_000;
+const BRIEFING_CACHE_VERSION = 'v2';
 
 function ensureEngine(res: Response): boolean {
   if (!QUANT_ENGINE_URL) {
@@ -537,7 +538,7 @@ router.get('/briefing', async (req, res, next) => {
       portfolioCtx.portfolioSymbols.length > 0 ||
       portfolioCtx.watchlistSymbols.length > 0;
     const cacheVariant = hasPersonalData ? 'personalized' : 'cold';
-    const cacheKey = `briefing:${req.uid}:${today}:${cacheVariant}`;
+    const cacheKey = `briefing:${BRIEFING_CACHE_VERSION}:${req.uid}:${today}:${cacheVariant}`;
 
     // Check Redis cache
     const cached = await redisCacheGet(cacheKey);

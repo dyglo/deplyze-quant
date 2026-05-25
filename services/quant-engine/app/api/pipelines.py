@@ -64,6 +64,16 @@ class FredIngestRequest(BaseModel):
     days_back: int = 1825                       # 5y default if no since_date
 
 
+class OpenMacroIngestRequest(BaseModel):
+    sources: Optional[List[str]] = None          # world_bank, imf_datamapper, dbnomics
+    countries: Optional[List[str]] = None        # ISO3, defaults to institutional country set
+    start_year: Optional[int] = None
+    end_year: Optional[int] = None
+    world_bank_indicators: Optional[List[str]] = None
+    imf_indicators: Optional[List[str]] = None
+    dbnomics_series_ids: Optional[List[str]] = None
+
+
 class CotIngestRequest(BaseModel):
     markets: Optional[List[str]] = None         # defaults to DEFAULT_MARKETS
     since_date: Optional[str] = None            # YYYY-MM-DD
@@ -240,6 +250,38 @@ async def ingest_fred(req: FredIngestRequest, background_tasks: BackgroundTasks)
         "series_count": len(req.series_ids) if req.series_ids else "default",
         "since_date": req.since_date,
         "days_back": req.days_back,
+    }
+
+
+@router.post("/ingest/open-macro")
+async def ingest_open_macro_route(req: OpenMacroIngestRequest, background_tasks: BackgroundTasks):
+    """
+    Open macro expansion — World Bank, IMF DataMapper, and DBnomics.
+
+    Writes raw observations, normalized country indicators, country regime
+    features, research observations, and macro artifacts using idempotent
+    BigQuery load+MERGE jobs.
+    """
+    from app.refinery.open_macro_ingestor import ingest_open_macro
+    run = _new_run("open_macro_ingest")
+    background_tasks.add_task(
+        ingest_open_macro,
+        run["run_id"],
+        sources=req.sources,
+        countries=req.countries,
+        start_year=req.start_year,
+        end_year=req.end_year,
+        world_bank_indicators=req.world_bank_indicators,
+        imf_indicators=req.imf_indicators,
+        dbnomics_series_ids=req.dbnomics_series_ids,
+    )
+    return {
+        "run_id": run["run_id"],
+        "status": "queued",
+        "sources": req.sources or ["dbnomics", "imf_datamapper", "world_bank"],
+        "countries": req.countries or "default",
+        "start_year": req.start_year,
+        "end_year": req.end_year,
     }
 
 

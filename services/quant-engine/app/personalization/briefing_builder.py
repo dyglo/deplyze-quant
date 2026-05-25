@@ -52,7 +52,7 @@ def _profile_for_user(bq: bigquery.Client, user_id_hash: str) -> UserProfile:
                active_investigation_ids, regime_style, preferred_depth
         FROM `{tbl}`
         WHERE user_id_hash = @uid
-        ORDER BY snapshot_date DESC
+        ORDER BY snapshot_date DESC, generated_at DESC
         LIMIT 1
     """
     try:

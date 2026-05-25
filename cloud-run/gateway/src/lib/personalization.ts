@@ -99,6 +99,7 @@ const ALWAYS_VALUE: ReadonlySet<EventType> = new Set([
   'export',
   'scenario_run',
   'copilot_followup',
+  'briefing_open',
   'investigation_create',
   'investigation_update',
   'investigation_pin',

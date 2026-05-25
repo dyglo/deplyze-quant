@@ -25,6 +25,7 @@ TABLE_REGISTRY = [
     (settings.BQ_DATASET_RAW_API, "provider_responses_raw", S.PROVIDER_RESPONSES_RAW, "ingestion_time", ["provider"]),
     # raw_public
     (settings.BQ_DATASET_RAW_PUBLIC, "public_macro_raw", S.PUBLIC_MACRO_RAW, "ingestion_time", ["source_type"]),
+    (settings.BQ_DATASET_RAW_PUBLIC, "open_macro_raw", S.OPEN_MACRO_RAW, "ingestion_time", ["provider", "country_iso3", "indicator_code"]),
     (settings.BQ_DATASET_RAW_PUBLIC, "public_filings_raw", S.PUBLIC_FILINGS_RAW, "ingestion_time", ["symbol"]),
     (settings.BQ_DATASET_RAW_PUBLIC, "public_calendar_raw", S.PUBLIC_CALENDAR_RAW, "ingestion_time", ["source_type"]),
     (settings.BQ_DATASET_RAW_PUBLIC, "public_reports_raw", S.PUBLIC_REPORTS_RAW, "ingestion_time", ["source_type"]),
@@ -38,6 +39,7 @@ TABLE_REGISTRY = [
     (settings.BQ_DATASET_CLEANED, "fundamentals_cleaned", S.FUNDAMENTALS_CLEANED, "observation_time", ["symbol"]),
     (settings.BQ_DATASET_CLEANED, "earnings_cleaned", S.EARNINGS_CLEANED, "observation_time", ["symbol"]),
     (settings.BQ_DATASET_CLEANED, "macro_cleaned", S.MACRO_CLEANED, "observation_time", ["source_type"]),
+    (settings.BQ_DATASET_CLEANED, "global_indicators_cleaned", S.GLOBAL_INDICATORS_CLEANED, "observation_time", ["country_iso3", "indicator_code", "provider"]),
     (settings.BQ_DATASET_CLEANED, "news_cleaned", S.NEWS_CLEANED, "ingestion_time", ["symbol"]),
     # features
     (settings.BQ_DATASET_FEATURES, "returns_features", S.RETURNS_FEATURES, "observation_time", ["symbol", "asset_type"]),
@@ -66,11 +68,13 @@ TABLE_REGISTRY = [
     (settings.BQ_DATASET_CLEANED, "narrative_cleaned", S.NARRATIVE_CLEANED, "published_at", ["theme_id"]),
     # features · V3 Phase 2 (macro/narrative/filing/ontology)
     (settings.BQ_DATASET_FEATURES, "macro_features", S.MACRO_FEATURES, "observation_time", ["series_id"]),
+    (settings.BQ_DATASET_FEATURES, "country_regime_features", S.COUNTRY_REGIME_FEATURES, "as_of_date", ["country_iso3"]),
     (settings.BQ_DATASET_FEATURES, "narrative_features", S.NARRATIVE_FEATURES, "observation_time", ["theme_id"]),
     (settings.BQ_DATASET_FEATURES, "filing_features", S.FILING_FEATURES, "filing_date", ["cik", "form_type"]),
     (settings.BQ_DATASET_FEATURES, "ontology_features", S.ONTOLOGY_FEATURES, "observation_time", ["entity_type", "entity_id"]),
     # research · V3 Phase 2 (macro/narrative/filing memory)
     (settings.BQ_DATASET_RESEARCH, "macro_observations", S.MACRO_OBSERVATIONS, "observation_time", ["observation_type", "regime_state"]),
+    (settings.BQ_DATASET_RESEARCH, "country_macro_observations", S.COUNTRY_MACRO_OBSERVATIONS, "observation_time", ["country_iso3", "observation_type"]),
     (settings.BQ_DATASET_RESEARCH, "narrative_memory", S.NARRATIVE_MEMORY, "last_seen_at", ["theme_id"]),
     (settings.BQ_DATASET_RESEARCH, "filing_observations", S.FILING_OBSERVATIONS, "observation_time", ["cik", "form_type"]),
     # artifacts · V3 Phase 2 (macro/narrative/filing artifacts)

@@ -32,6 +32,7 @@ SESSION_GAP_MIN = 30  # minutes of inactivity that close a session
 VALUE_EVENT_TYPES = (
     "expand", "save", "export", "scenario_run", "copilot_followup",
     "investigation_create", "investigation_update", "investigation_pin",
+    "briefing_open",
 )
 
 

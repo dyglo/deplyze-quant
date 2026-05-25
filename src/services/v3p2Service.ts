@@ -53,6 +53,74 @@ export async function fetchMacroObservations(opts: {
   return r.items;
 }
 
+export interface GlobalIndicatorRow {
+  country_iso3: string;
+  country_name: string | null;
+  provider: string;
+  indicator_code: string;
+  indicator_name: string | null;
+  indicator_category: string | null;
+  period: string;
+  period_start: { value: string } | string | null;
+  value: number | null;
+  yoy_change: number | null;
+  period_change: number | null;
+  unit: string | null;
+  is_forecast: boolean | null;
+  data_quality_score: number | null;
+  updated_at: { value: string } | string | null;
+}
+
+export interface CountryRegimeRow {
+  country_iso3: string;
+  country_name: string | null;
+  as_of_date: { value: string } | string;
+  latest_period: string | null;
+  growth_state: string | null;
+  inflation_state: string | null;
+  debt_state: string | null;
+  external_state: string | null;
+  employment_state: string | null;
+  composite_risk_score: number | null;
+  data_coverage: number | null;
+  indicator_count: number | null;
+  evidence: unknown;
+  source_providers: string[] | null;
+  updated_at: { value: string } | string | null;
+}
+
+export async function fetchGlobalIndicators(opts: {
+  countries?: string[];
+  category?: string;
+  limit?: number;
+} = {}): Promise<GlobalIndicatorRow[]> {
+  const r = await gatewayGet<{ items: GlobalIndicatorRow[]; count: number }>(
+    '/macro/global-indicators',
+    {
+      countries: opts.countries?.join(',') ?? null,
+      category: opts.category ?? null,
+      limit: opts.limit ?? 120,
+    },
+    ClientTTL.macro_series,
+  );
+  return r.items;
+}
+
+export async function fetchCountryRegimes(opts: {
+  countries?: string[];
+  limit?: number;
+} = {}): Promise<CountryRegimeRow[]> {
+  const r = await gatewayGet<{ items: CountryRegimeRow[]; count: number }>(
+    '/macro/country-regimes',
+    {
+      countries: opts.countries?.join(',') ?? null,
+      limit: opts.limit ?? 24,
+    },
+    ClientTTL.macro_series,
+  );
+  return r.items;
+}
+
 // ─── Filings ─────────────────────────────────────────────────────────────────
 
 export interface FilingRow {

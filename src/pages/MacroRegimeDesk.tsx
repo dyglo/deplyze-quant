@@ -23,6 +23,7 @@ import { AgentIntelligenceFeed } from '../components/quant/AgentIntelligenceFeed
 import { MacroAnalogPanel } from '../components/quant/MacroAnalogPanel';
 import { useAgentOutputs } from '../hooks/useAgentIntelligence';
 import { useHistoricalAnalog } from '../hooks/useAgentReasoning';
+import { GlobalMacroIndicatorsPanel } from '../components/quant/GlobalMacroIndicatorsPanel';
 
 interface SeriesMeta {
   id: string;
@@ -413,6 +414,8 @@ export const MacroRegimeDesk: React.FC = () => {
 
       {/* ── V3 Phase 2: warehouse-backed regime classifier ──────────────────── */}
       <V3P2MacroRegimePanel />
+
+      <GlobalMacroIndicatorsPanel />
 
       {/* ── V4: Agent intelligence (macro + liquidity) ──────────────────────── */}
       <section style={{ marginBottom: 28 }}>

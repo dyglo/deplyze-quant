@@ -398,6 +398,9 @@ class BacktestExportRequest(BaseModel):
     symbol: Optional[str] = None
     series_ids: Optional[List[str]] = None
     lookback_days: Optional[int] = None
+    # Dev-only: also write the parquet to this local path so the Rust engine can
+    # read it via BACKTEST_PARQUET_LOCAL without GCS. Rejected in production.
+    local_out: Optional[str] = None
 
 
 @router.post("/backtest/export-parquet")
@@ -416,6 +419,7 @@ async def backtest_export_parquet(req: BacktestExportRequest):
             symbol=req.symbol,
             series_ids=req.series_ids,
             lookback_days=req.lookback_days,
+            local_out=req.local_out,
         )
         return summary
     except ExportError as e:

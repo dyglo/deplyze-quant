@@ -155,6 +155,7 @@ export interface StructuredBriefing {
     regime_compatibility: number;
     flag_count: number;
     flags: Array<{ symbol: string; reason: string; severity: 'low' | 'medium' | 'high' }>;
+    holdings_count?: number | null;
   } | null;
   watchlist_overnight: {
     movers: Array<{
@@ -172,6 +173,7 @@ export interface StructuredBriefing {
     explanation: string;
     cta_label: string;
     cta_route: string;
+    below_threshold?: boolean;
   }>;
   research_queue: Array<{
     id: string;

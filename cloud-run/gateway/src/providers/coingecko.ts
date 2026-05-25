@@ -48,6 +48,7 @@ export function isCryptoSupported(symbol: string): boolean {
 export async function getCryptoOhlcvBars(
   symbol: string,
   outputsize = 60,
+  signal?: AbortSignal,
 ): Promise<OHLCVBar[]> {
   const coinId = CRYPTO_ID_MAP[symbol.toUpperCase()];
   if (!coinId) throw new Error(`CoinGecko: no mapping for symbol "${symbol}"`);
@@ -60,7 +61,7 @@ export async function getCryptoOhlcvBars(
   else days = 365;
 
   const url = `${BASE}/coins/${encodeURIComponent(coinId)}/ohlc?vs_currency=usd&days=${days}`;
-  const raw = await getJson<Array<[number, number, number, number, number]>>('coingecko', url);
+  const raw = await getJson<Array<[number, number, number, number, number]>>('coingecko', url, { signal });
 
   if (!Array.isArray(raw)) throw new Error('CoinGecko: unexpected response format');
 

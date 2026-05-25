@@ -143,6 +143,7 @@ export function isFxSupported(symbol: string): boolean {
 export async function getFxOhlcvBars(
   symbol: string,
   outputsize = 60,
+  signal?: AbortSignal,
 ): Promise<OHLCVBar[]> {
   const k = key();
   if (!k) throw new Error('FRED: FRED_API_KEY env var not set');
@@ -162,7 +163,7 @@ export async function getFxOhlcvBars(
     observation_start: start,
   });
 
-  const resp = await getJson<FredObsResp>('fred', `${BASE}/series/observations?${params}`);
+  const resp = await getJson<FredObsResp>('fred', `${BASE}/series/observations?${params}`, { signal });
 
   if (resp.error_code) {
     throw new Error(`FRED: ${resp.error_message ?? `error ${resp.error_code}`}`);

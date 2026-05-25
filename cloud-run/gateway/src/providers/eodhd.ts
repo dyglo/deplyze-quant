@@ -56,13 +56,14 @@ export interface EodhdBar {
 export async function getHistoricalBars(
   symbol: string,
   opts: { from?: string; to?: string; period?: 'd' | 'w' | 'm' } = {},
+  signal?: AbortSignal,
 ): Promise<EodhdBar[]> {
   const { from, to, period = 'd' } = opts;
   const ticker = toEodhdTicker(symbol);
   let url = `${BASE}/eod/${encodeURIComponent(ticker)}?api_token=${key()}&fmt=json&period=${period}`;
   if (from) url += `&from=${from}`;
   if (to) url += `&to=${to}`;
-  return getJson<EodhdBar[]>('eodhd', url);
+  return getJson<EodhdBar[]>('eodhd', url, { signal });
 }
 
 // ─── Fundamentals ─────────────────────────────────────────────────────────

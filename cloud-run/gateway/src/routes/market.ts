@@ -11,19 +11,78 @@
 
 import { Router } from 'express';
 import { z } from 'zod';
+import { BigQuery } from '@google-cloud/bigquery';
 import * as polygon from '../providers/polygon';
 import * as finnhub from '../providers/finnhub';
 import * as td from '../providers/twelvedata';
 import * as eodhd from '../providers/eodhd';
 import * as fmp from '../providers/fmp';
 import * as serper from '../providers/serper';
+import * as stooq from '../providers/stooq';
 import { withCache, cacheSet, TTL } from '../services/cache';
 import { withFallback, quoteChain, ohlcvChain, newsChain } from '../lib/providerRouter';
 import type { OHLCVBar } from '../providers/twelvedata';
 import * as fred from '../providers/fred';
 import * as coingecko from '../providers/coingecko';
+import * as av from '../providers/alphavantage';
 
 const router = Router();
+const PROJECT = process.env.FIREBASE_PROJECT_ID ?? 'deplyze-quant';
+const CLEANED_DS = process.env.BQ_DATASET_CLEANED ?? 'cleaned';
+
+let _bq: BigQuery | null = null;
+function getBQ(): BigQuery {
+  if (!_bq) {
+    _bq = new BigQuery({
+      projectId: PROJECT,
+      location: process.env.BIGQUERY_LOCATION ?? 'US',
+    });
+  }
+  return _bq;
+}
+
+async function queryWarehouseOhlcv(symbol: string, limit: number): Promise<OHLCVBar[]> {
+  const [rows] = await getBQ().query({
+    query: `
+      SELECT
+        UNIX_MILLIS(TIMESTAMP(observation_time)) AS ts,
+        open,
+        high,
+        low,
+        COALESCE(adjusted_close, close) AS close,
+        volume
+      FROM \`${PROJECT}.${CLEANED_DS}.ohlcv_cleaned\`
+      WHERE symbol = @symbol
+        AND observation_time IS NOT NULL
+        AND close IS NOT NULL
+      QUALIFY ROW_NUMBER() OVER (
+        PARTITION BY DATE(observation_time)
+        ORDER BY updated_at DESC, processing_time DESC, ingestion_time DESC
+      ) = 1
+      ORDER BY observation_time DESC
+      LIMIT @limit
+    `,
+    params: { symbol, limit },
+    location: process.env.BIGQUERY_LOCATION ?? 'US',
+    maximumBytesBilled: String(100 * 1024 * 1024),
+  });
+
+  return (rows as Array<{
+    ts: string | number;
+    open: string | number | null;
+    high: string | number | null;
+    low: string | number | null;
+    close: string | number;
+    volume: string | number | null;
+  }>).reverse().map((r) => ({
+    ts: Number(r.ts),
+    open: Number(r.open ?? r.close),
+    high: Number(r.high ?? r.close),
+    low: Number(r.low ?? r.close),
+    close: Number(r.close),
+    volume: Number(r.volume ?? 0),
+  })).filter((b) => Number.isFinite(b.ts) && Number.isFinite(b.close));
+}
 
 // ─── /quote/:symbol ────────────────────────────────────────────────────────
 router.get('/quote/:symbol', async (req, res, next) => {
@@ -176,6 +235,10 @@ router.get('/ohlcv/:symbol(*)', async (req, res, next) => {
 
     // Minimum bar threshold: only applies to large equity history requests.
     const SPARSE_MIN = (!isCrossAsset && outputsize >= 500) ? 280 : 0;
+    const warehouseEligible = interval === '1day' && !isCrossAsset && !isFx && !isCrypto;
+    const warehouseMin = SPARSE_MIN > 0 ? SPARSE_MIN : Math.min(10, outputsize);
+    const minUsableBars = warehouseEligible ? warehouseMin : SPARSE_MIN;
+    let warehouseBars: OHLCVBar[] = [];
 
     const fetchFresh = async (): Promise<OHLCVBar[]> => {
       const today    = new Date().toISOString().slice(0, 10);
@@ -186,9 +249,9 @@ router.get('/ohlcv/:symbol(*)', async (req, res, next) => {
       if (isFx) {
         const { result } = await withFallback(ohlcvChain<OHLCVBar[]>({
           // FRED daily closing rates — free, 120 req/min, no daily cap
-          eodhd: async () => fred.getFxOhlcvBars(symbol, outputsize),
+          eodhd: async (signal) => fred.getFxOhlcvBars(symbol, outputsize, signal),
           // Twelve Data as fallback for FX (handles slash-format natively)
-          twelve_data: async () => td.getTimeSeries(td.normalizeTdSymbol(symbol), tdInterval, outputsize),
+          twelve_data: async (signal) => td.getTimeSeries(td.normalizeTdSymbol(symbol), tdInterval, outputsize, signal),
         }));
         return result;
       }
@@ -196,16 +259,16 @@ router.get('/ohlcv/:symbol(*)', async (req, res, next) => {
       // ── Crypto: CoinGecko first (free, no key), Twelve Data as fallback ──
       if (isCrypto) {
         const { result } = await withFallback(ohlcvChain<OHLCVBar[]>({
-          eodhd: async () => coingecko.getCryptoOhlcvBars(symbol, outputsize),
-          twelve_data: async () => td.getTimeSeries(td.normalizeTdSymbol(symbol), tdInterval, outputsize),
+          eodhd: async (signal) => coingecko.getCryptoOhlcvBars(symbol, outputsize, signal),
+          twelve_data: async (signal) => td.getTimeSeries(td.normalizeTdSymbol(symbol), tdInterval, outputsize, signal),
         }));
         return result;
       }
 
-      // ── Equities / ETFs / Indices: EODHD → Twelve Data → FMP → Polygon ──
+      // ── Equities / ETFs / Indices: paid feeds first, public/low-quota feeds last ──
       const { result } = await withFallback(ohlcvChain<OHLCVBar[]>({
-        eodhd: isDaily ? async () => {
-          const rawBars = await eodhd.getHistoricalBars(symbol, { from: pastDate, to: today });
+        eodhd: isDaily ? async (signal) => {
+          const rawBars = await eodhd.getHistoricalBars(symbol, { from: pastDate, to: today }, signal);
           if (!rawBars.length) throw new Error('EODHD: empty response');
           const bars = rawBars.slice(-outputsize).map((b) => ({
             ts: Date.parse(b.date),
@@ -215,20 +278,20 @@ router.get('/ohlcv/:symbol(*)', async (req, res, next) => {
           if (bars.length < SPARSE_MIN) throw new Error(`EODHD: sparse result (${bars.length}/${outputsize} bars)`);
           return bars;
         } : undefined,
-        twelve_data: async () => {
-          const bars = await td.getTimeSeries(td.normalizeTdSymbol(symbol), tdInterval, outputsize);
+        twelve_data: async (signal) => {
+          const bars = await td.getTimeSeries(td.normalizeTdSymbol(symbol), tdInterval, outputsize, signal);
           if (bars.length < SPARSE_MIN) throw new Error(`Twelve Data: sparse result (${bars.length}/${outputsize} bars)`);
           return bars;
         },
-        fmp: isDaily ? async () => {
-          const rawBars = await fmp.getHistoricalPrice(symbol, pastDate, today, outputsize);
+        fmp: isDaily ? async (signal) => {
+          const rawBars = await fmp.getHistoricalPrice(symbol, pastDate, today, outputsize, signal);
           if (!rawBars.length) throw new Error('FMP: empty response');
           return rawBars.map((b) => ({
             ts: Date.parse(b.date),
             open: b.open, high: b.high, low: b.low, close: b.adjClose ?? b.close, volume: b.volume,
           }));
         } : undefined,
-        polygon: isDaily && !isCrossAsset ? async () => {
+        polygon: isDaily && !isCrossAsset ? async (signal) => {
           const aggs = await polygon.getAggs({
             symbol,
             multiplier: 1,
@@ -237,6 +300,7 @@ router.get('/ohlcv/:symbol(*)', async (req, res, next) => {
             to: today,
             adjusted: true,
             limit: outputsize,
+            signal,
           });
           if (!aggs.length) throw new Error('Polygon: empty response');
           const bars = aggs.map((a) => ({
@@ -246,26 +310,66 @@ router.get('/ohlcv/:symbol(*)', async (req, res, next) => {
           if (bars.length < SPARSE_MIN) throw new Error(`Polygon: sparse result (${bars.length}/${outputsize} bars)`);
           return bars;
         } : undefined,
+        alpha_vantage: isDaily && !isCrossAsset && av.isConfigured() ? async (signal) => {
+          const bars = await av.getEquityDaily(symbol, outputsize, signal);
+          if (bars.length < SPARSE_MIN) throw new Error(`Alpha Vantage: sparse result (${bars.length}/${outputsize} bars)`);
+          return bars;
+        } : undefined,
+        stooq: isDaily && !isCrossAsset && stooq.isConfigured() ? async (signal) => {
+          const bars = await stooq.getDailyBars(symbol, pastDate, today, outputsize, signal);
+          if (bars.length < SPARSE_MIN) throw new Error(`Stooq: sparse result (${bars.length}/${outputsize} bars)`);
+          return bars;
+        } : undefined,
       }));
       return result;
     };
 
     let bars: OHLCVBar[];
+    let source = 'provider';
+    let stale = false;
     try {
+      if (warehouseEligible) {
+        try {
+          warehouseBars = await queryWarehouseOhlcv(symbol, outputsize);
+          if (warehouseBars.length >= warehouseMin) {
+            source = 'warehouse';
+            bars = warehouseBars;
+            void fetchFresh()
+              .then(async (fresh) => {
+                if (fresh.length >= warehouseMin) {
+                  await cacheSet(cacheKey, fresh, ttl);
+                }
+              })
+              .catch((refreshErr) => {
+                console.warn(`[ohlcv] background provider refresh failed for ${symbol}: ${(refreshErr as Error).message}`);
+              });
+            res.json({ symbol, interval, bars, source, stale });
+            return;
+          }
+        } catch (warehouseErr) {
+          console.warn(`[ohlcv] warehouse fallback failed for ${symbol}: ${(warehouseErr as Error).message}`);
+        }
+      }
+
       bars = await withCache(cacheKey, ttl, fetchFresh);
       // Post-cache sparse guard (equities only)
-      if (bars.length < SPARSE_MIN) {
+      if (bars.length < minUsableBars) {
         console.warn(`[ohlcv] stale sparse cache for ${symbol} — re-fetching`);
         bars = await fetchFresh();
         await cacheSet(cacheKey, bars, ttl);
       }
     } catch (providerErr) {
-      // All providers failed — return empty bars (graceful degradation, not 500).
       console.warn(`[ohlcv] all providers failed for ${symbol}: ${(providerErr as Error).message}`);
-      bars = [];
+      if (warehouseBars.length > 0) {
+        bars = warehouseBars;
+        source = 'warehouse';
+        stale = true;
+      } else {
+        bars = [];
+      }
     }
 
-    res.json({ symbol, interval, bars });
+    res.json({ symbol, interval, bars, source, stale });
   } catch (err) { next(err); }
 });
 

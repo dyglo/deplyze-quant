@@ -216,13 +216,14 @@ export async function getHistoricalPrice(
   from?: string,
   to?: string,
   limit = 500,
+  signal?: AbortSignal,
 ): Promise<FmpHistoricalBar[]> {
   // Use stable endpoint — v3/historical-price-full is a legacy endpoint
   const params = new URLSearchParams({ symbol, apikey: key() });
   if (from) params.set('from', from);
   if (to) params.set('to', to);
   const url = `${STABLE}/historical-price-eod/full?${params}`;
-  const r = await getJson<FmpHistoricalBar[]>('fmp', url);
+  const r = await getJson<FmpHistoricalBar[]>('fmp', url, { signal });
   // Stable endpoint returns newest-first; reverse to ascending
   return (Array.isArray(r) ? r : []).slice(0, limit).reverse();
 }

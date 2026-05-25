@@ -74,6 +74,11 @@ const EMPTY: PerfState = {
   error: null,
 };
 
+function normalizeMarketSymbol(symbol: string | null | undefined, fallback = 'SPY'): string {
+  const upper = (symbol ?? '').trim().toUpperCase();
+  return /^[A-Z0-9./:^_-]{1,20}$/.test(upper) ? upper : fallback;
+}
+
 function closes(bars: OHLCVBar[]): number[] {
   return bars.map(b => b.close);
 }
@@ -113,7 +118,9 @@ export function usePortfolioPerformance(
     const run = async () => {
       try {
         // Fetch all symbols + benchmark in parallel
-        const toFetch = [...new Set([...symbols, benchmarkId])];
+        const cleanSymbols = symbols.map((s) => normalizeMarketSymbol(s, '')).filter(Boolean);
+        const cleanBenchmark = normalizeMarketSymbol(benchmarkId);
+        const toFetch = [...new Set([...cleanSymbols, cleanBenchmark])];
         const responses = await Promise.allSettled(
           toFetch.map(sym => fetchOHLCV(sym, '1day', windowDays))
         );
@@ -128,7 +135,7 @@ export function usePortfolioPerformance(
           }
         });
 
-        const validSymbols = symbols.filter(s => barMap[s]);
+        const validSymbols = cleanSymbols.filter(s => barMap[s]);
         if (validSymbols.length === 0) {
           // Check if all requests were rejected (API/gateway error) vs providers returning empty data
           const allRejected = responses.every(r => r.status === 'rejected');
@@ -151,7 +158,7 @@ export function usePortfolioPerformance(
         // Align all series
         const allSeries = validSymbols.map(s => closes(barMap[s]));
         const [aligned, benchAligned] = (() => {
-          const bm = barMap[benchmarkId];
+          const bm = barMap[cleanBenchmark];
           if (!bm) return [alignSeries(allSeries), null];
           const all = alignSeries([...allSeries, closes(bm)]);
           return [all.slice(0, -1), all[all.length - 1]];

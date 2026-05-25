@@ -145,7 +145,7 @@ jobs:
             --max-instances 5 \
             --timeout 60 \
             --vpc-connector ${{ secrets.VPC_CONNECTOR_NAME }} \
-            --vpc-egress all-traffic \
+            --vpc-egress private-ranges-only \
             --set-env-vars "\
           FIREBASE_PROJECT_ID=${{ env.FIREBASE_PROJECT_ID }},\
           GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }},\
@@ -348,7 +348,7 @@ jobs:
             --no-cpu-throttling \
             --timeout 300 \
             --vpc-connector ${{ secrets.VPC_CONNECTOR_NAME }} \
-            --vpc-egress all-traffic \
+            --vpc-egress private-ranges-only \
             --set-env-vars "\
           GCP_PROJECT_ID=${{ env.GCP_PROJECT_ID }},\
           BIGQUERY_LOCATION=US,\

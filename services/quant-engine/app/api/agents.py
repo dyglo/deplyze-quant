@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 from typing import Optional, List
 
 import structlog
-from fastapi import APIRouter, BackgroundTasks, Query, Path
+from fastapi import APIRouter, BackgroundTasks, Query, Path, Body
 from pydantic import BaseModel
 
 from app.agents.orchestrator import run_all, run_one, ensure_agent_outputs_table
@@ -53,8 +53,8 @@ class AgentRunResponse(BaseModel):
 
 @router.post("/run")
 async def trigger_full_run(
-    req: AgentRunRequest,
     background_tasks: BackgroundTasks,
+    req: AgentRunRequest = Body(default_factory=AgentRunRequest),
 ):
     run_id = str(uuid.uuid4())
     if req.dry_run:
@@ -78,8 +78,8 @@ async def _run_all_bg(run_id: str, portfolio_id: Optional[str]) -> None:
 @router.post("/run/{agent_id}")
 async def trigger_single_agent(
     agent_id: str = Path(...),
-    req: AgentRunRequest = AgentRunRequest(),
     background_tasks: BackgroundTasks = None,
+    req: AgentRunRequest = Body(default_factory=AgentRunRequest),
 ):
     if agent_id not in REGISTRY_BY_ID:
         return {"error": f"Unknown agent_id: {agent_id}"}

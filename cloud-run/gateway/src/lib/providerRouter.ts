@@ -51,15 +51,20 @@ function recordFailure(id: string, message: string): void {
 
 // ─── Provider call wrapper ──────────────────────────────────────────────────
 
-const DEFAULT_TIMEOUT_MS = 10_000;
+const DEFAULT_TIMEOUT_MS = 8_000;
 const QUOTE_TIMEOUT_MS = 3_500;
 const NEWS_TIMEOUT_MS = 5_000;
+const OHLCV_TIMEOUT_MS = 4_500;
 const MAX_RETRIES = 1;
 
-async function callWithTimeout<T>(fn: () => Promise<T>, timeoutMs: number): Promise<T> {
+async function callWithTimeout<T>(fn: ProviderFn<T>, timeoutMs: number): Promise<T> {
+  const controller = new AbortController();
   return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('Provider timeout')), timeoutMs);
-    fn().then(
+    const timer = setTimeout(() => {
+      controller.abort();
+      reject(new Error('Provider timeout'));
+    }, timeoutMs);
+    fn(controller.signal).then(
       (v) => { clearTimeout(timer); resolve(v); },
       (e) => { clearTimeout(timer); reject(e); },
     );
@@ -68,11 +73,12 @@ async function callWithTimeout<T>(fn: () => Promise<T>, timeoutMs: number): Prom
 
 async function callProvider<T>(
   id: string,
-  fn: () => Promise<T>,
+  fn: ProviderFn<T>,
   timeoutMs = DEFAULT_TIMEOUT_MS,
+  maxRetries = MAX_RETRIES,
 ): Promise<T> {
   let lastErr: Error = new Error(`Provider ${id} failed`);
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const t0 = Date.now();
     try {
       const result = await callWithTimeout(fn, timeoutMs);
@@ -81,7 +87,7 @@ async function callProvider<T>(
     } catch (err) {
       lastErr = err instanceof Error ? err : new Error(String(err));
       recordFailure(id, lastErr.message);
-      if (attempt < MAX_RETRIES) await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+      if (attempt < maxRetries) await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
     }
   }
   throw lastErr;
@@ -89,10 +95,10 @@ async function callProvider<T>(
 
 // ─── Fallback chain execution ───────────────────────────────────────────────
 
-export type ProviderFn<T> = () => Promise<T>;
+export type ProviderFn<T> = (signal?: AbortSignal) => Promise<T>;
 
 export interface FallbackChain<T> {
-  providers: Array<{ id: string; fn: ProviderFn<T>; timeoutMs?: number }>;
+  providers: Array<{ id: string; fn: ProviderFn<T>; timeoutMs?: number; retries?: number }>;
   onProviderError?: (id: string, err: Error) => void;
 }
 
@@ -104,7 +110,7 @@ export async function withFallback<T>(chain: FallbackChain<T>): Promise<{ result
   const errors: string[] = [];
   for (const p of chain.providers) {
     try {
-      const result = await callProvider(p.id, p.fn, p.timeoutMs);
+      const result = await callProvider(p.id, p.fn, p.timeoutMs, p.retries);
       return { result, providerId: p.id };
     } catch (err) {
       const e = err instanceof Error ? err : new Error(String(err));
@@ -144,14 +150,16 @@ export function ohlcvChain<T>(providers: {
   alpha_vantage?: ProviderFn<T>;
   fmp?: ProviderFn<T>;
   polygon?: ProviderFn<T>;
+  stooq?: ProviderFn<T>;
 }): FallbackChain<T> {
   return {
     providers: [
-      ...(providers.eodhd        ? [{ id: 'eodhd',         fn: providers.eodhd }]        : []),
-      ...(providers.twelve_data  ? [{ id: 'twelve_data',   fn: providers.twelve_data }]  : []),
-      ...(providers.fmp          ? [{ id: 'fmp',           fn: providers.fmp }]          : []),
-      ...(providers.alpha_vantage? [{ id: 'alpha_vantage', fn: providers.alpha_vantage }]: []),
-      ...(providers.polygon      ? [{ id: 'polygon',       fn: providers.polygon }]      : []),
+      ...(providers.eodhd        ? [{ id: 'eodhd',         fn: providers.eodhd,         timeoutMs: OHLCV_TIMEOUT_MS, retries: 0 }] : []),
+      ...(providers.twelve_data  ? [{ id: 'twelve_data',   fn: providers.twelve_data,   timeoutMs: OHLCV_TIMEOUT_MS, retries: 0 }] : []),
+      ...(providers.fmp          ? [{ id: 'fmp',           fn: providers.fmp,           timeoutMs: OHLCV_TIMEOUT_MS, retries: 0 }] : []),
+      ...(providers.polygon      ? [{ id: 'polygon',       fn: providers.polygon,       timeoutMs: OHLCV_TIMEOUT_MS, retries: 0 }] : []),
+      ...(providers.alpha_vantage? [{ id: 'alpha_vantage', fn: providers.alpha_vantage, timeoutMs: OHLCV_TIMEOUT_MS, retries: 0 }]: []),
+      ...(providers.stooq        ? [{ id: 'stooq',         fn: providers.stooq,         timeoutMs: OHLCV_TIMEOUT_MS, retries: 0 }] : []),
     ],
   };
 }

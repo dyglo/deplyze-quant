@@ -111,6 +111,55 @@ class FinnhubClient:
                 raise ProviderError("finnhub", r.text, r.status_code)
             return r.json()
 
+
+# ─── EOD Historical Data ─────────────────────────────────────────────────────
+
+class EODHDClient:
+    BASE = "https://eodhd.com/api"
+
+    INDEX_SYMBOLS = {
+        "SPY": "SPY.US",
+        "QQQ": "QQQ.US",
+        "IWM": "IWM.US",
+        "DIA": "DIA.US",
+        "VIX": "VIX.INDX",
+    }
+
+    def __init__(self):
+        self.key = settings.EODHD_API_KEY
+        if not self.key:
+            raise ProviderError("eodhd", "EODHD_API_KEY not configured")
+
+    @classmethod
+    def ticker(cls, symbol: str) -> str:
+        upper = symbol.upper().replace("/", "")
+        if "." in symbol:
+            return symbol
+        if upper in cls.INDEX_SYMBOLS:
+            return cls.INDEX_SYMBOLS[upper]
+        return f"{upper}.US"
+
+    @retry(**RETRY_ARGS)
+    async def get_ohlcv(self, symbol: str, from_date: str, to_date: str) -> list:
+        url = f"{self.BASE}/eod/{self.ticker(symbol)}"
+        async with httpx.AsyncClient(timeout=30) as client:
+            r = await client.get(
+                url,
+                params={
+                    "api_token": self.key,
+                    "fmt": "json",
+                    "period": "d",
+                    "from": from_date,
+                    "to": to_date,
+                },
+            )
+            if r.status_code != 200:
+                raise ProviderError("eodhd", r.text, r.status_code)
+            data = r.json()
+            if not isinstance(data, list):
+                raise ProviderError("eodhd", f"unexpected response for {symbol}")
+            return data
+
     @retry(**RETRY_ARGS)
     async def get_news(self, symbol: str, from_date: str, to_date: str) -> list:
         async with httpx.AsyncClient(timeout=20) as client:

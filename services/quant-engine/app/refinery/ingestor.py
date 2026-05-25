@@ -4,6 +4,7 @@ writes immutable raw records to BigQuery raw_api tables.
 """
 
 import uuid
+import json
 import structlog
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional
@@ -25,43 +26,123 @@ def _date_range(days_back: int):
     return str(start), str(today)
 
 
+def _asset_type(symbol: str) -> str:
+    sym_upper = symbol.upper()
+    if sym_upper.startswith("C:") or "/" in sym_upper or (len(sym_upper) == 6 and sym_upper.isalpha()):
+        return "fx"
+    if sym_upper in ["GLD", "USO", "UNG", "SLV", "DBA", "DBC"]:
+        return "commodity"
+    if sym_upper in ["SPY", "QQQ", "VXX", "IWM", "DIA", "VIX", "VT", "EFA", "EEM", "ACWI"]:
+        return "index"
+    return "equity"
+
+
+def _base_ohlcv_record(
+    *,
+    symbol: str,
+    provider: str,
+    observation_time: str,
+    open_: float | None,
+    high: float | None,
+    low: float | None,
+    close: float | None,
+    volume: float | None,
+    adjusted_close: float | None,
+    raw_payload: dict,
+) -> dict:
+    now = _now_iso()
+    rec = {
+        "id": str(uuid.uuid4()),
+        "symbol": symbol.upper(),
+        "asset_type": _asset_type(symbol),
+        "provider": provider,
+        "source_type": "api",
+        "ingestion_time": now,
+        "observation_time": observation_time,
+        "processing_time": now,
+        "open": open_,
+        "high": high,
+        "low": low,
+        "close": close,
+        "volume": volume,
+        "adjusted_close": adjusted_close if adjusted_close is not None else close,
+        "timeframe": "1day",
+        "raw_payload": raw_payload,
+        "created_at": now,
+    }
+    enrich_record(rec, score_ohlcv_record)
+    return rec
+
+
 async def _ingest_ohlcv_polygon(symbol: str, from_date: str, to_date: str) -> List[dict]:
     from app.providers.clients import PolygonClient
     client = PolygonClient()
     raw = await client.get_ohlcv(symbol, from_date, to_date)
     results = raw.get("results", [])
     records = []
-    
-    # Determine asset class dynamically based on symbol structure
-    asset_type = "equity"
-    sym_upper = symbol.upper()
-    if sym_upper.startswith("C:") or (len(sym_upper) == 6 and sym_upper.isalpha()):
-        asset_type = "fx"
-    elif sym_upper in ["GLD", "USO", "UNG", "SLV", "DBA"]:
-        asset_type = "commodity"
-    elif sym_upper in ["SPY", "QQQ", "VXX", "IWM", "DIA", "VIX"]:
-        asset_type = "index"
-        
     for r in results:
         obs_ts = datetime.fromtimestamp(r["t"] / 1000, tz=timezone.utc).isoformat()
-        rec = {
-            "id": str(uuid.uuid4()),
-            "symbol": symbol,
-            "asset_type": asset_type,
-            "provider": "polygon",
-            "source_type": "api",
-            "observation_time": obs_ts,
-            "open": r.get("o"),
-            "high": r.get("h"),
-            "low": r.get("l"),
-            "close": r.get("c"),
-            "volume": r.get("v"),
-            "adjusted_close": r.get("c"),
-            "timeframe": "1day",
-            "raw_payload": r,
-        }
-        enrich_record(rec, score_ohlcv_record)
-        records.append(rec)
+        records.append(_base_ohlcv_record(
+            symbol=symbol,
+            provider="polygon",
+            observation_time=obs_ts,
+            open_=r.get("o"),
+            high=r.get("h"),
+            low=r.get("l"),
+            close=r.get("c"),
+            volume=r.get("v"),
+            adjusted_close=r.get("c"),
+            raw_payload=r,
+        ))
+    return records
+
+
+async def _ingest_ohlcv_fmp(symbol: str, from_date: str, to_date: str) -> List[dict]:
+    from app.providers.clients import FMPClient
+    client = FMPClient()
+    raw = await client.get_ohlcv(symbol, from_date, to_date)
+    bars = raw.get("historical", []) if isinstance(raw, dict) else []
+    records = []
+    for r in reversed(bars):
+        date = r.get("date")
+        if not date:
+            continue
+        records.append(_base_ohlcv_record(
+            symbol=symbol,
+            provider="fmp",
+            observation_time=f"{date}T00:00:00+00:00",
+            open_=r.get("open"),
+            high=r.get("high"),
+            low=r.get("low"),
+            close=r.get("close"),
+            volume=r.get("volume"),
+            adjusted_close=r.get("adjClose") or r.get("close"),
+            raw_payload=r,
+        ))
+    return records
+
+
+async def _ingest_ohlcv_eodhd(symbol: str, from_date: str, to_date: str) -> List[dict]:
+    from app.providers.clients import EODHDClient
+    client = EODHDClient()
+    bars = await client.get_ohlcv(symbol, from_date, to_date)
+    records = []
+    for r in bars:
+        date = r.get("date")
+        if not date:
+            continue
+        records.append(_base_ohlcv_record(
+            symbol=symbol,
+            provider="eodhd",
+            observation_time=f"{date}T00:00:00+00:00",
+            open_=r.get("open"),
+            high=r.get("high"),
+            low=r.get("low"),
+            close=r.get("close"),
+            volume=r.get("volume"),
+            adjusted_close=r.get("adjusted_close") or r.get("close"),
+            raw_payload=r,
+        ))
     return records
 
 
@@ -81,9 +162,11 @@ async def _ingest_news_finnhub(symbol: str, from_date: str, to_date: str) -> Lis
             "headline": item.get("headline"),
             "summary": item.get("summary"),
             "author": item.get("source"),
+            "ingestion_time": _now_iso(),
             "published_at": datetime.fromtimestamp(item.get("datetime", 0), tz=timezone.utc).isoformat(),
             "source_url": item.get("url"),
             "raw_payload": item,
+            "created_at": _now_iso(),
         }
         enrich_record(rec, score_news_record)
         records.append(rec)
@@ -101,7 +184,6 @@ def _write_to_bq(table_fqn: str, rows: List[dict]) -> int:
         r = dict(row)
         for k, v in r.items():
             if isinstance(v, dict) or isinstance(v, list):
-                import json
                 r[k] = json.dumps(v)
         clean_rows.append(r)
     errors = client.insert_rows_json(table_fqn, clean_rows)
@@ -117,6 +199,8 @@ async def run_ingest(
     providers: Optional[List[str]],
     timeframe: str,
     days_back: int,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
 ) -> None:
     """Background task: ingest OHLCV + news for given symbols."""
     from app.api.pipelines import _runs
@@ -135,7 +219,7 @@ async def run_ingest(
         _runs[run_id]["status"] = "running"
     log.info("ingest.start", run_id=run_id, symbols=symbols, days_back=days_back)
 
-    from_date, to_date = _date_range(days_back)
+    from_date, to_date = (from_date, to_date) if from_date and to_date else _date_range(days_back)
     total_written = 0
     errors = []
 
@@ -143,20 +227,34 @@ async def run_ingest(
     news_table = fully_qualified(settings.BQ_DATASET_RAW_API, "news_raw")
 
     for symbol in symbols:
-        # OHLCV via Polygon (primary) or FMP (fallback)
+        # OHLCV via Polygon -> FMP -> EODHD. Stop on the first provider that
+        # returns a usable history for this symbol.
         try:
-            if settings.POLYGON_API_KEY:
-                rows = await _ingest_ohlcv_polygon(symbol, from_date, to_date)
-            elif settings.FMP_API_KEY:
-                from app.providers.clients import FMPClient
-                fmp = FMPClient()
-                raw = await fmp.get_ohlcv(symbol, from_date, to_date)
-                rows = []  # FMP normalizer would go here
-            else:
-                rows = []
+            rows = []
+            provider_errors = []
+            chain = []
+            allowed = set(providers or [])
+            if settings.POLYGON_API_KEY and (not allowed or "polygon" in allowed):
+                chain.append(("polygon", _ingest_ohlcv_polygon))
+            if settings.FMP_API_KEY and (not allowed or "fmp" in allowed):
+                chain.append(("fmp", _ingest_ohlcv_fmp))
+            if settings.EODHD_API_KEY and (not allowed or "eodhd" in allowed):
+                chain.append(("eodhd", _ingest_ohlcv_eodhd))
+            for provider, fetcher in chain:
+                try:
+                    rows = await fetcher(symbol, from_date, to_date)
+                    if rows:
+                        log.info("ingest.ohlcv_provider_selected", symbol=symbol, provider=provider, rows=len(rows))
+                        break
+                    provider_errors.append({"provider": provider, "error": "empty response"})
+                except Exception as provider_err:
+                    provider_errors.append({"provider": provider, "error": str(provider_err)})
+                    log.warning("ingest.ohlcv_provider_failed", symbol=symbol, provider=provider, error=str(provider_err))
             written = _write_to_bq(ohlcv_table, rows)
             total_written += written
             log.info("ingest.ohlcv", symbol=symbol, rows=written)
+            if not rows and provider_errors:
+                errors.append({"symbol": symbol, "type": "ohlcv", "error": provider_errors})
         except Exception as e:
             log.error("ingest.ohlcv_failed", symbol=symbol, error=str(e))
             errors.append({"symbol": symbol, "type": "ohlcv", "error": str(e)})

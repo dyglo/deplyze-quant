@@ -415,10 +415,98 @@ async function callEngine(
   return { status: response.status, body };
 }
 
+// ─── Firestore enrichment helpers ────────────────────────────────────────────
+
+interface UserPortfolioContext {
+  portfolioId: string | null;
+  portfolioSymbols: string[];
+  watchlistSymbols: string[];
+}
+
+/**
+ * Reads the authenticated user's portfolio holdings and watchlist symbols
+ * directly from Firestore (server-side, via firebase-admin).
+ *
+ * This is the canonical fix for the personalization data gap: the quant-engine
+ * has no Firestore client, so the gateway must enrich each briefing request with
+ * the user's actual symbols before forwarding to the engine.
+ *
+ * Collections read:
+ *   portfolios/{portfolioId}           — where uid==req.uid, status=='active', isWatchlist==false
+ *   portfolios/{portfolioId}/holdings  — symbol field
+ *   intelligenceWatchlists/{id}        — where uid==req.uid, symbols[] field
+ */
+async function fetchUserPortfolioContext(uid: string): Promise<UserPortfolioContext> {
+  const { db } = await import('../services/firestoreAdmin.js');
+
+  const [portfolioSnap, watchlistSnap] = await Promise.all([
+    db.collection('portfolios')
+      .where('uid', '==', uid)
+      .where('status', '==', 'active')
+      .get(),
+    db.collection('intelligenceWatchlists')
+      .where('uid', '==', uid)
+      .get(),
+  ]);
+
+  // Find the primary (non-watchlist) portfolio — pick the most recently created
+  const portfolioDocs = portfolioSnap.docs
+    .filter(d => !d.data().isWatchlist)
+    .sort((a, b) => {
+      const at = a.data().createdAt?.toMillis?.() ?? 0;
+      const bt = b.data().createdAt?.toMillis?.() ?? 0;
+      return bt - at;
+    });
+
+  let portfolioId: string | null = null;
+  let portfolioSymbols: string[] = [];
+
+  if (portfolioDocs.length > 0) {
+    portfolioId = portfolioDocs[0].id;
+    // Gather symbols from holdings across all active non-watchlist portfolios
+    const holdingFetches = portfolioDocs.map(pd =>
+      db.collection('portfolios').doc(pd.id).collection('holdings').get()
+    );
+    const holdingSnaps = await Promise.all(holdingFetches);
+    const symbolSet = new Set<string>();
+    for (const snap of holdingSnaps) {
+      for (const d of snap.docs) {
+        const sym = d.data().symbol as string | undefined;
+        if (sym) symbolSet.add(sym.toUpperCase());
+      }
+    }
+    portfolioSymbols = Array.from(symbolSet);
+  }
+
+  // Collect all watchlist symbols across all watchlists
+  const watchlistSymbolSet = new Set<string>();
+  for (const d of watchlistSnap.docs) {
+    const syms = d.data().symbols as string[] | undefined;
+    if (Array.isArray(syms)) {
+      for (const s of syms) {
+        if (s) watchlistSymbolSet.add(s.toUpperCase());
+      }
+    }
+  }
+
+  return {
+    portfolioId,
+    portfolioSymbols,
+    watchlistSymbols: Array.from(watchlistSymbolSet),
+  };
+}
+
 /**
  * GET /v1/personalization/briefing
  * Returns the latest personalized briefing for the authenticated user.
- * Checks Redis first (key: briefing:{uid}:{date}); caches until 23:59 UTC.
+ *
+ * Cache key encodes personalization state to prevent a stale cold brief
+ * from being served to a user who adds holdings mid-day:
+ *   briefing:{uid}:{date}:personalized  — user has portfolio or watchlist data
+ *   briefing:{uid}:{date}:cold          — user has no data yet
+ *
+ * On a cache miss, Firestore is read to enrich the engine request with the
+ * user's actual portfolio_id, portfolio_symbols, and watchlist_symbols.
  */
 router.get('/briefing', async (req, res, next) => {
   try {
@@ -429,7 +517,27 @@ router.get('/briefing', async (req, res, next) => {
     }
     const userIdHash = hashUserId(req.uid);
     const today = new Date().toISOString().slice(0, 10);
-    const cacheKey = `briefing:${req.uid}:${today}`;
+
+    // Fetch Firestore context first so we can choose the right cache key
+    // and forward real symbols to the engine. Fail-safe: any error yields
+    // the anonymous cold context rather than blocking the response.
+    let portfolioCtx: UserPortfolioContext = {
+      portfolioId: null,
+      portfolioSymbols: [],
+      watchlistSymbols: [],
+    };
+    try {
+      portfolioCtx = await fetchUserPortfolioContext(req.uid);
+    } catch (ctxErr) {
+      // Log but don't block — engine falls back to cold brief
+      console.warn('[personalization] fetchUserPortfolioContext failed:', ctxErr);
+    }
+
+    const hasPersonalData =
+      portfolioCtx.portfolioSymbols.length > 0 ||
+      portfolioCtx.watchlistSymbols.length > 0;
+    const cacheVariant = hasPersonalData ? 'personalized' : 'cold';
+    const cacheKey = `briefing:${req.uid}:${today}:${cacheVariant}`;
 
     // Check Redis cache
     const cached = await redisCacheGet(cacheKey);
@@ -438,13 +546,25 @@ router.get('/briefing', async (req, res, next) => {
       return;
     }
 
-    // Call quant-engine
+    // Forward real portfolio context to the engine
+    const engineQuery: Record<string, string | undefined> = {
+      user_id_hash: userIdHash,
+    };
+    if (portfolioCtx.portfolioId) {
+      engineQuery.portfolio_id = portfolioCtx.portfolioId;
+    }
+    if (portfolioCtx.portfolioSymbols.length > 0) {
+      engineQuery.portfolio_symbols = portfolioCtx.portfolioSymbols.join(',');
+    }
+    if (portfolioCtx.watchlistSymbols.length > 0) {
+      engineQuery.watchlist_symbols = portfolioCtx.watchlistSymbols.join(',');
+    }
+
     const result = await callEngine('GET', '/personalization/briefing', {
-      query: { user_id_hash: userIdHash },
+      query: engineQuery,
     });
 
     if (result.status === 200 && result.body) {
-      // Cache until 23:59:59 UTC today
       const now = new Date();
       const midnight = new Date(Date.UTC(
         now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(),

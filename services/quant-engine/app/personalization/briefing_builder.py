@@ -440,17 +440,42 @@ def build_briefing(
     briefing_window: str = "premarket",
     briefing_date: Optional[date] = None,
     portfolio_id: Optional[str] = None,
+    injected_portfolio_symbols: Optional[list[str]] = None,
+    injected_watchlist_symbols: Optional[list[str]] = None,
     persist: bool = True,
 ) -> dict:
     """
     Build (and optionally persist) a structured morning briefing.
     Returns the StructuredBriefing shape consumed by MorningTerminal.tsx.
+
+    injected_portfolio_symbols / injected_watchlist_symbols: pre-loaded symbol
+    lists forwarded by the gateway after reading Firestore. They override the
+    (historically always-empty) BQ user_profile_daily values so users with
+    existing portfolios/watchlists always receive a personalized brief without
+    waiting for the nightly profile build to sync Firestore data.
     """
     if briefing_date is None:
         briefing_date = date.fromisoformat(datetime.now(timezone.utc).date().isoformat())
 
     bq = get_bigquery_client()
     profile = _profile_for_user(bq, user_id_hash)
+
+    # Merge gateway-injected symbols over BQ profile (which can be stale/empty)
+    if injected_portfolio_symbols or injected_watchlist_symbols:
+        merged_p = list({s.upper() for s in (
+            list(profile.portfolio_symbols or []) + (injected_portfolio_symbols or [])
+        )})
+        merged_w = list({s.upper() for s in (
+            list(profile.watchlist_symbols or []) + (injected_watchlist_symbols or [])
+        )})
+        profile = UserProfile(
+            user_id_hash=profile.user_id_hash,
+            watchlist_symbols=merged_w,
+            portfolio_symbols=merged_p,
+            active_investigation_symbols=profile.active_investigation_symbols,
+            regime_style=profile.regime_style,
+            preferred_depth=profile.preferred_depth,
+        )
     now_utc = datetime.now(timezone.utc)
 
     # Midnight tonight UTC (valid_until for cache)

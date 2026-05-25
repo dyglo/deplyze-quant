@@ -67,6 +67,13 @@ class BriefingRequest(BaseModel):
     persist: bool = True
 
 
+class MaterializeRequest(BaseModel):
+    briefing_window: str = "premarket"
+    user_id_hash: Optional[str] = None
+    briefing_date: Optional[str] = None
+    portfolio_id: Optional[str] = None
+
+
 class InvestigationCreateRequest(BaseModel):
     user_id_hash: str
     title: str
@@ -106,16 +113,41 @@ async def http_profile_build(req: ProfileBuildRequest):
 
 
 @router.post("/briefing/materialize")
-async def http_briefing_materialize(req: BriefingRequest):
+async def http_briefing_materialize(req: MaterializeRequest):
     _require_enabled()
     bd = date.fromisoformat(req.briefing_date) if req.briefing_date else None
-    return briefing_builder.build_briefing(
+
+    if req.user_id_hash is None:
+        # Population build: process all known users.
+        user_hashes = briefing_builder.get_all_user_hashes()
+        for uid in user_hashes:
+            try:
+                briefing_builder.build_briefing(
+                    user_id_hash=uid,
+                    briefing_window=req.briefing_window,
+                    briefing_date=bd,
+                    portfolio_id=req.portfolio_id,
+                    persist=True,
+                )
+            except Exception as exc:
+                log.warning(
+                    "briefing_materialize.user_failed",
+                    user_id_hash=uid,
+                    error=str(exc),
+                )
+        log.info("briefing_materialize.population_done", users_processed=len(user_hashes))
+        return {"status": "ok", "mode": "population", "users_processed": len(user_hashes)}
+
+    # Single-user build
+    briefing_builder.build_briefing(
         user_id_hash=req.user_id_hash,
         briefing_window=req.briefing_window,
         briefing_date=bd,
         portfolio_id=req.portfolio_id,
-        persist=req.persist,
+        persist=True,
     )
+    log.info("briefing_materialize.single_done", user_id_hash=req.user_id_hash)
+    return {"status": "ok", "mode": "single", "user_id_hash": req.user_id_hash}
 
 
 # ─── Read endpoints (gateway-proxied) ────────────────────────────────────────

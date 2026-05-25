@@ -48,7 +48,16 @@ export const MorningRoutines: React.FC = () => {
 
   if (briefing.loading) return <Shell><LoadingState /></Shell>;
   if (briefing.error)  return <Shell><ErrorState message={briefing.error.message} onRetry={briefing.refetch} /></Shell>;
-  if (!briefing.data)  return <Shell><DisabledState /></Shell>;
+  if (!briefing.data)  {
+    return (
+      <Shell>
+        <ErrorState
+          message="The briefing service returned no payload. Refresh the page to request a new morning brief."
+          onRetry={briefing.refetch}
+        />
+      </Shell>
+    );
+  }
 
   const d = briefing.data;
   const isCold = !d.is_personalized;
@@ -404,24 +413,6 @@ const DisabledState: React.FC = () => (
           <div style={{ height: 10, background: 'var(--muted)', borderRadius: 4, width: '80%' }} />
         </div>
       ))}
-    </div>
-
-    {/* Explanation card */}
-    <div style={{ border: '1px dashed var(--border)', borderRadius: 10, padding: '1.25rem 1.375rem', display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
-      <p style={{ margin: 0, fontSize: '0.9375rem', fontWeight: 600, color: 'var(--foreground)' }}>
-        Your morning brief is being provisioned
-      </p>
-      <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--muted-foreground)', lineHeight: 1.55 }}>
-        Morning Routines delivers a personalised pre-market briefing — regime context, portfolio pulse,
-        watchlist movers, and a ranked intelligence feed — each weekday before market open.
-      </p>
-      <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--muted-foreground)', lineHeight: 1.55 }}>
-        The first brief will appear here once the personalization engine deploys and runs its
-        initial build. No action needed on your part.
-      </p>
-      <a href="/" style={{ fontSize: '0.8125rem', color: 'var(--primary)', textDecoration: 'none', marginTop: '0.25rem' }}>
-        Go to Intelligence Terminal →
-      </a>
     </div>
   </div>
 );

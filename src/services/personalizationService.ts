@@ -260,13 +260,14 @@ export async function fetchBriefingMeta(): Promise<FetchResult<PersonalizedBrief
 
 export async function fetchStructuredBriefing(): Promise<StructuredBriefing | null> {
   try {
-    // The engine returns the structured dict directly (not wrapped in {"briefing":...})
-    const res = await gatewayGet<StructuredBriefing>(
+    const res = await gatewayGet<StructuredBriefing | { briefing?: StructuredBriefing }>(
       '/personalization/briefing',
       undefined,
       60_000,
     );
-    return res ?? null;
+    if (!res) return null;
+    const maybeWrapped = res as { briefing?: StructuredBriefing };
+    return 'briefing' in maybeWrapped ? maybeWrapped.briefing ?? null : res as StructuredBriefing;
   } catch (err: unknown) {
     const e = err as { status?: number };
     if (e?.status === 404 || e?.status === 503) return null;

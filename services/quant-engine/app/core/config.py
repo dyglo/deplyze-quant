@@ -82,6 +82,17 @@ class Settings(BaseSettings):
     # FRED + RSS + COT etc. extend here in later waves.
     FRED_API_KEY: str = ""
 
+    # ─── Backtest engine · wide-parquet export ───────────────────────────────
+    # The Rust backtest engine reads a wide, daily, forward-filled parquet from
+    # this bucket/object. Empty bucket → engine returns PARQUET_NOT_READY.
+    GCS_BACKTEST_BUCKET: str = ""
+    BACKTEST_PARQUET_OBJECT: str = "backtest/wide_daily.parquet"
+    # The instrument whose returns the backtest trades (must exist in
+    # cleaned.ohlcv_cleaned / features.returns_features).
+    BACKTEST_ASSET_SYMBOL: str = "SPY"
+    # History window for the export.
+    BACKTEST_LOOKBACK_DAYS: int = 365 * 15
+
     @property
     def ALLOWED_ORIGINS(self) -> List[str]:
         if not self.ALLOWED_ORIGINS_RAW:

@@ -201,6 +201,18 @@ fn compute(spec: StrategySpec, md: MarketData) -> Result<models::BacktestResults
 
     // Causal HMM features → fit → decode (filtered = causal labels).
     let feats = loader::build_hmm_features(&md).map_err(ApiError::from)?;
+
+    // Expose the engine's own causally-derived features (vol_zscore,
+    // liquidity_composite, inflation_persistence, ...) into the signal
+    // namespace so derived signals resolve from these no-look-ahead series
+    // rather than from columns Python would have to recompute (and risk
+    // leaking the future). Raw FRED columns from the parquet remain available.
+    let mut md = md;
+    for (j, name) in feats.feature_names.iter().enumerate() {
+        let col: Vec<f64> = feats.features.iter().map(|v| v[j]).collect();
+        md.columns.entry(name.clone()).or_insert(col);
+    }
+
     let cfg = HmmConfig {
         risk_feature_index: feats.risk_feature_index,
         higher_is_risk_off: true,

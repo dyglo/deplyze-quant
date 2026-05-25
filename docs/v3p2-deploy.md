@@ -139,6 +139,8 @@ gcloud run deploy deplyze-gateway \
   --region us-central1 \
   --platform managed \
   --no-allow-unauthenticated \
+  --vpc-connector deplyze-vpc-connector \
+  --vpc-egress private-ranges-only \
   --service-account "gateway@deplyze-quant.iam.gserviceaccount.com"
 ```
 

@@ -392,6 +392,38 @@ async def generate_briefings_route(req: BriefingsRequest, background_tasks: Back
             "types": req.briefing_types or ["daily_market_intelligence", "weekly_regime_brief", "anomaly_summary"]}
 
 
+class BacktestExportRequest(BaseModel):
+    # All optional — defaults come from settings (asset symbol, FRED series set,
+    # lookback). The nightly scheduler posts an empty body.
+    symbol: Optional[str] = None
+    series_ids: Optional[List[str]] = None
+    lookback_days: Optional[int] = None
+
+
+@router.post("/backtest/export-parquet")
+async def backtest_export_parquet(req: BacktestExportRequest):
+    """
+    Build the wide, daily, forward-filled parquet the Rust backtest engine
+    consumes and upload it to GCS. Runs synchronously so the caller (Cloud
+    Scheduler) gets a definitive result. Pure pivot/join — no feature
+    engineering happens here (the Rust engine derives regime features causally).
+    """
+    from fastapi import HTTPException
+    from app.backtest.export import run_export, ExportError
+
+    try:
+        summary = run_export(
+            symbol=req.symbol,
+            series_ids=req.series_ids,
+            lookback_days=req.lookback_days,
+        )
+        return summary
+    except ExportError as e:
+        # Misconfiguration or no data → 503 so the engine keeps returning
+        # PARQUET_NOT_READY rather than serving a stale/empty book.
+        raise HTTPException(status_code=503, detail=str(e))
+
+
 @router.get("/status/{run_id}")
 async def pipeline_status(run_id: str):
     """Get status of a pipeline run."""

@@ -23,6 +23,7 @@ serving an empty book).
 from __future__ import annotations
 
 import io
+import os
 from datetime import datetime, timezone
 
 import pandas as pd
@@ -200,26 +201,42 @@ def _upload_parquet(df: pd.DataFrame, bucket_name: str, object_path: str) -> int
     return len(data)
 
 
+def _write_parquet_local(df: pd.DataFrame, path: str) -> int:
+    """Write the parquet to a local path (dev only). Returns bytes written."""
+    abspath = os.path.abspath(path)
+    os.makedirs(os.path.dirname(abspath) or ".", exist_ok=True)
+    df.to_parquet(abspath, engine="pyarrow", index=False, compression="snappy")
+    return os.path.getsize(abspath)
+
+
 def run_export(
     symbol: str | None = None,
     series_ids: list[str] | None = None,
     lookback_days: int | None = None,
+    local_out: str | None = None,
 ) -> dict:
-    """Build and upload the wide parquet. Returns a summary dict."""
+    """Build the wide parquet and write it to GCS and/or a local path.
+
+    ``local_out`` is a developer convenience for testing the engine without GCS
+    (the Rust engine then reads it via ``BACKTEST_PARQUET_LOCAL``). It is
+    rejected in production to avoid arbitrary server-side file writes. When a
+    bucket is configured the upload still happens, so the nightly job is
+    unaffected.
+    """
     symbol = symbol or settings.BACKTEST_ASSET_SYMBOL
     series_ids = series_ids or DEFAULT_FRED_SERIES
     lookback_days = lookback_days or settings.BACKTEST_LOOKBACK_DAYS
 
-    if not settings.GCS_BACKTEST_BUCKET:
-        raise ExportError("GCS_BACKTEST_BUCKET is not configured")
+    if local_out and settings.is_production:
+        raise ExportError("local_out is not permitted in production")
+    if not settings.GCS_BACKTEST_BUCKET and not local_out:
+        raise ExportError("GCS_BACKTEST_BUCKET is not configured and no local_out was provided")
 
     started = datetime.now(timezone.utc)
     frame = build_wide_frame(symbol, series_ids, lookback_days)
-
     macro_cols = [c for c in frame.columns if c not in ("date", "asset_close", "asset_return")]
-    size = _upload_parquet(frame, settings.GCS_BACKTEST_BUCKET, settings.BACKTEST_PARQUET_OBJECT)
 
-    summary = {
+    summary: dict = {
         "status": "ok",
         "symbol": symbol,
         "rows": int(len(frame)),
@@ -227,9 +244,17 @@ def run_export(
         "macro_column_count": len(macro_cols),
         "data_from": frame["date"].iloc[0] if len(frame) else None,
         "data_through": frame["date"].iloc[-1] if len(frame) else None,
-        "gcs_uri": f"gs://{settings.GCS_BACKTEST_BUCKET}/{settings.BACKTEST_PARQUET_OBJECT}",
-        "bytes_written": size,
-        "duration_s": round((datetime.now(timezone.utc) - started).total_seconds(), 2),
     }
+
+    if settings.GCS_BACKTEST_BUCKET:
+        size = _upload_parquet(frame, settings.GCS_BACKTEST_BUCKET, settings.BACKTEST_PARQUET_OBJECT)
+        summary["gcs_uri"] = f"gs://{settings.GCS_BACKTEST_BUCKET}/{settings.BACKTEST_PARQUET_OBJECT}"
+        summary["bytes_written"] = size
+    if local_out:
+        local_size = _write_parquet_local(frame, local_out)
+        summary["local_path"] = os.path.abspath(local_out)
+        summary["local_bytes_written"] = local_size
+
+    summary["duration_s"] = round((datetime.now(timezone.utc) - started).total_seconds(), 2)
     log.info("backtest.export_complete", **summary)
     return summary

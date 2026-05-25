@@ -52,6 +52,8 @@ DEFAULT_FRED_SERIES: list[str] = [
     "UNRATE", "PAYEMS", "INDPRO",
 ]
 
+MIN_BACKTEST_ROWS = 60
+
 
 class ExportError(Exception):
     """Raised when the export cannot produce a usable dataset."""
@@ -234,6 +236,11 @@ def run_export(
 
     started = datetime.now(timezone.utc)
     frame = build_wide_frame(symbol, series_ids, lookback_days)
+    if len(frame) < MIN_BACKTEST_ROWS:
+        raise ExportError(
+            f"insufficient OHLCV data for symbol '{symbol}': {len(frame)} rows "
+            f"(need >= {MIN_BACKTEST_ROWS})"
+        )
     macro_cols = [c for c in frame.columns if c not in ("date", "asset_close", "asset_return")]
 
     summary: dict = {

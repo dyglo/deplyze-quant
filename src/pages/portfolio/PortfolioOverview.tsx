@@ -200,6 +200,8 @@ const PortfolioValueInput: React.FC<{
 
 // ─── Create Portfolio Modal ───────────────────────────────────────────────────
 
+const MARKET_SYMBOL_RE = /^[A-Z0-9./:^_-]{1,20}$/;
+
 const CreatePortfolioModal: React.FC<{ onClose: () => void; onCreate: (name: string, benchmarkId: string) => void }> = ({ onClose, onCreate }) => {
   const [name, setName] = useState('');
   const [bm, setBm] = useState(DEFAULT_BENCHMARK_ID);
@@ -207,7 +209,8 @@ const CreatePortfolioModal: React.FC<{ onClose: () => void; onCreate: (name: str
   const [customBm, setCustomBm] = useState('');
 
   const effectiveBm = customMode ? customBm.trim().toUpperCase() : bm;
-  const canCreate = name.trim() && effectiveBm.length > 0;
+  const customBenchmarkValid = !customMode || MARKET_SYMBOL_RE.test(effectiveBm);
+  const canCreate = name.trim() && effectiveBm.length > 0 && customBenchmarkValid;
 
   return (
     <div style={{
@@ -282,8 +285,13 @@ const CreatePortfolioModal: React.FC<{ onClose: () => void; onCreate: (name: str
                   }}
                 />
                 <p style={{ margin: '4px 0 0', fontSize: 10, color: 'var(--muted-foreground)' }}>
-                  Any symbol fetchable from your data provider (ETF, index, stock, crypto).
+                  Enter one provider symbol only. Comma-separated holdings lists are not valid benchmarks.
                 </p>
+                {!customBenchmarkValid && customBm.trim() && (
+                  <p style={{ margin: '4px 0 0', fontSize: 10, color: 'var(--destructive)' }}>
+                    Use a single symbol such as SPY, QQQ, ^GSPC, or BTC-USD.
+                  </p>
+                )}
               </div>
             ) : (
               <select

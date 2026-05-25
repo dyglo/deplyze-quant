@@ -70,13 +70,14 @@ export async function getTimeSeries(
   symbol: string,
   interval: TdInterval,
   outputsize = 200,
+  signal?: AbortSignal,
 ): Promise<OHLCVBar[]> {
   return _throttle(async () => {
     const params = new URLSearchParams({
       symbol, interval, outputsize: String(outputsize),
       apikey: key(), format: 'JSON', order: 'ASC',
     });
-    const resp = await getJson<TdTimeSeriesResp>('twelve_data', `${BASE}/time_series?${params}`);
+    const resp = await getJson<TdTimeSeriesResp>('twelve_data', `${BASE}/time_series?${params}`, { signal });
     if (resp.status === 'error') throw new Error(`Twelve Data: ${resp.message ?? 'error'}`);
     return (resp.values ?? []).map((v) => ({
       ts: Date.parse(v.datetime.length === 10 ? `${v.datetime}T00:00:00Z` : v.datetime + 'Z'),

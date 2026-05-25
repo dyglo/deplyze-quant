@@ -57,8 +57,9 @@ export async function getAggs(params: {
   to: string;   // YYYY-MM-DD
   adjusted?: boolean;
   limit?: number;
+  signal?: AbortSignal;
 }): Promise<PolygonAgg[]> {
-  const { symbol, multiplier, timespan, from, to, adjusted = true, limit = 500 } = params;
+  const { symbol, multiplier, timespan, from, to, adjusted = true, limit = 500, signal } = params;
   const qs = new URLSearchParams({
     adjusted: String(adjusted),
     sort: 'asc',
@@ -66,7 +67,7 @@ export async function getAggs(params: {
     apiKey: key(),
   });
   const url = `${BASE}/v2/aggs/ticker/${encodeURIComponent(symbol)}/range/${multiplier}/${timespan}/${from}/${to}?${qs}`;
-  const r = await getJson<{ results?: PolygonAgg[]; status: string; resultsCount?: number; count?: number }>('polygon', url);
+  const r = await getJson<{ results?: PolygonAgg[]; status: string; resultsCount?: number; count?: number }>('polygon', url, { signal });
   return r.results ?? [];
 }
 

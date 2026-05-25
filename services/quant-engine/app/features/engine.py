@@ -153,10 +153,36 @@ def _write_rows(table_fqn: str, rows: List[dict]) -> int:
     for r in rows:
         cr = {k: (json.dumps(v) if isinstance(v, (dict, list)) else v) for k, v in r.items()}
         clean.append(cr)
-    errors = client.insert_rows_json(table_fqn, clean)
+    bq = __import__("google.cloud.bigquery", fromlist=["QueryJobConfig", "ScalarQueryParameter"])
+    deduped = []
+    for row in clean:
+        symbol = row.get("symbol")
+        observation_time = row.get("observation_time")
+        provider = row.get("provider")
+        if not symbol or not observation_time or not provider:
+            deduped.append(row)
+            continue
+        exists_sql = f"""
+            SELECT 1
+            FROM `{table_fqn}`
+            WHERE symbol = @symbol
+              AND provider = @provider
+              AND DATE(observation_time) = DATE(@observation_time)
+            LIMIT 1
+        """
+        job_config = bq.QueryJobConfig(query_parameters=[
+            bq.ScalarQueryParameter("symbol", "STRING", symbol),
+            bq.ScalarQueryParameter("provider", "STRING", provider),
+            bq.ScalarQueryParameter("observation_time", "TIMESTAMP", observation_time),
+        ])
+        if not list(client.query(exists_sql, job_config=job_config).result()):
+            deduped.append(row)
+    if not deduped:
+        return 0
+    errors = client.insert_rows_json(table_fqn, deduped)
     if errors:
         log.error("features.write_errors", table=table_fqn, errors=errors[:2])
-    return len(rows) - len(errors)
+    return len(deduped) - len(errors)
 
 
 def _compute_and_write_returns(symbol: str, df: pd.DataFrame, now: str) -> int:

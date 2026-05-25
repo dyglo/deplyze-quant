@@ -6,9 +6,14 @@
  */
 
 import { getJson, requireEnv } from './http';
+import type { OHLCVBar } from './twelvedata';
 
 const BASE = 'https://www.alphavantage.co/query';
 function key() { return requireEnv('ALPHA_VANTAGE_API_KEY'); }
+
+export function isConfigured(): boolean {
+  return Boolean(process.env.ALPHA_VANTAGE_API_KEY);
+}
 
 interface AvSeriesResponse {
   name?: string;
@@ -115,4 +120,40 @@ export async function getFxDaily(from: string, to: string): Promise<AvFxBar[]> {
     }))
     .filter((b) => Number.isFinite(b.ts))
     .sort((a, b) => a.ts - b.ts);
+}
+
+// ─── Equity / ETF historical daily ─────────────────────────────────────────
+
+type AvDailyResp = {
+  'Time Series (Daily)'?: Record<string, Record<string, string>>;
+} & AvSeriesResponse;
+
+export async function getEquityDaily(
+  symbol: string,
+  outputsize: number,
+  signal?: AbortSignal,
+): Promise<OHLCVBar[]> {
+  const params = new URLSearchParams({
+    function: 'TIME_SERIES_DAILY',
+    symbol,
+    outputsize: outputsize > 100 ? 'full' : 'compact',
+    apikey: key(),
+  });
+  const resp = await getJson<AvDailyResp>('alpha_vantage', `${BASE}?${params}`, { signal });
+  ensureOk(resp);
+  const series = resp['Time Series (Daily)'] ?? {};
+  const bars = Object.entries(series)
+    .map(([date, vals]) => ({
+      ts: Date.parse(date),
+      open: Number(vals['1. open']),
+      high: Number(vals['2. high']),
+      low: Number(vals['3. low']),
+      close: Number(vals['4. close']),
+      volume: Number(vals['5. volume'] ?? 0),
+    }))
+    .filter((b) => Number.isFinite(b.ts) && Number.isFinite(b.close))
+    .sort((a, b) => a.ts - b.ts);
+
+  if (!bars.length) throw new Error('Alpha Vantage: empty daily series');
+  return bars.slice(-outputsize);
 }

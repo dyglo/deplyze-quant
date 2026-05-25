@@ -96,6 +96,21 @@ def _write_cleaned(table_fqn: str, rows: List[dict]) -> int:
             if isinstance(v, (dict, list)):
                 cr[k] = json.dumps(v)
         clean_rows.append(cr)
+    hashes = [r.get("dedup_hash") for r in clean_rows if r.get("dedup_hash")]
+    if hashes:
+        bq = __import__("google.cloud.bigquery", fromlist=["QueryJobConfig", "ArrayQueryParameter"])
+        existing_query = f"""
+            SELECT dedup_hash
+            FROM `{table_fqn}`
+            WHERE dedup_hash IN UNNEST(@hashes)
+        """
+        job_config = bq.QueryJobConfig(
+            query_parameters=[bq.ArrayQueryParameter("hashes", "STRING", hashes)]
+        )
+        existing = {row["dedup_hash"] for row in client.query(existing_query, job_config=job_config).result()}
+        clean_rows = [r for r in clean_rows if r.get("dedup_hash") not in existing]
+        if not clean_rows:
+            return 0
     errors = client.insert_rows_json(table_fqn, clean_rows)
     if errors:
         log.error("bq.cleaned_insert_errors", table=table_fqn, errors=errors[:3])
@@ -156,4 +171,3 @@ async def run_refine(run_id: str, symbols: List[str]) -> None:
         "errors": errors,
     })
     log.info("refine.complete", run_id=run_id, total=total)
-

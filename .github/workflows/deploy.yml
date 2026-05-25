@@ -154,8 +154,8 @@ jobs:
           REDIS_HOST=${{ secrets.REDIS_HOST }},\
           REDIS_PORT=${{ secrets.REDIS_PORT }},\
           QUANT_ENGINE_URL=${{ secrets.QUANT_ENGINE_URL }},\
-          PERSONALIZATION_ENABLED=true,\
-          PERSONALIZATION_USER_ID_SALT=${{ secrets.PERSONALIZATION_USER_ID_SALT }}"
+          PERSONALIZATION_ENABLED=true" \
+            --set-secrets "PERSONALIZATION_USER_ID_SALT=personalization-user-id-salt:latest"
 
       - name: Verify gateway health
         run: |
@@ -358,8 +358,8 @@ jobs:
           FRED_API_KEY=${{ secrets.FRED_API_KEY }},\
           REDIS_HOST=${{ secrets.REDIS_HOST }},\
           REDIS_PORT=${{ secrets.REDIS_PORT }},\
-          PERSONALIZATION_ENABLED=true,\
-          PERSONALIZATION_USER_ID_SALT=${{ secrets.PERSONALIZATION_USER_ID_SALT }}"
+          PERSONALIZATION_ENABLED=true" \
+            --set-secrets "PERSONALIZATION_USER_ID_SALT=personalization-user-id-salt:latest"
 
       - name: Verify quant engine health
         run: |

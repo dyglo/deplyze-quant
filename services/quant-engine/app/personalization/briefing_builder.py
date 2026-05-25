@@ -607,6 +607,26 @@ def _persist_briefing(
         log.error("briefing_builder.insert_errors", errors=errors[:3])
 
 
+def get_all_user_hashes() -> list[str]:
+    """
+    Return distinct user_id_hash values from the most recent user_profile_daily
+    snapshots (last 7 days). Used by the population materialize path.
+    """
+    bq = get_bigquery_client()
+    tbl = fully_qualified(settings.BQ_DATASET_FEATURES, "user_profile_daily")
+    sql = f"""
+        SELECT DISTINCT user_id_hash
+        FROM `{tbl}`
+        WHERE snapshot_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 7 DAY)
+    """
+    try:
+        rows = list(bq.query(sql).result())
+        return [str(r["user_id_hash"]) for r in rows if r["user_id_hash"]]
+    except Exception as e:
+        log.warning("briefing_builder.get_all_user_hashes_failed", error=str(e))
+        return []
+
+
 def latest_briefing(user_id_hash: str) -> Optional[dict]:
     """
     Return the most recent persisted briefing for `user_id_hash`, or None.
@@ -641,4 +661,4 @@ def latest_briefing(user_id_hash: str) -> Optional[dict]:
         return None
 
 
-__all__ = ["build_briefing", "latest_briefing"]
+__all__ = ["build_briefing", "latest_briefing", "get_all_user_hashes"]

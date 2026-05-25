@@ -26,6 +26,7 @@ from datetime import date, datetime, timezone
 from typing import Optional
 
 import structlog
+from google.api_core.exceptions import BadRequest
 from google.cloud import bigquery, firestore
 
 from app.bigquery.client import get_bigquery_client, fully_qualified
@@ -137,8 +138,8 @@ def build_profiles(
             SELECT
                 user_id_hash,
                 DATE_DIFF(@d, event_date, DAY) AS days_old,
-                event_type,
-                event_category,
+                value_type AS event_type,
+                CAST(NULL AS STRING) AS event_category,
                 symbol,
                 portfolio_id,
                 placement,
@@ -250,12 +251,21 @@ def build_profiles(
     # We DELETE then INSERT so re-runs converge.
     table = fully_qualified(settings.BQ_DATASET_FEATURES, "user_profile_daily")
     uid_list = ", ".join(f"'{s['user_id_hash']}'" for s in snapshots)
-    bq.query(
-        f"DELETE FROM `{table}` WHERE snapshot_date = @d AND user_id_hash IN ({uid_list})",
-        job_config=bigquery.QueryJobConfig(query_parameters=[
-            bigquery.ScalarQueryParameter("d", "DATE", target_date),
-        ]),
-    ).result()
+    try:
+        bq.query(
+            f"DELETE FROM `{table}` WHERE snapshot_date = @d AND user_id_hash IN ({uid_list})",
+            job_config=bigquery.QueryJobConfig(query_parameters=[
+                bigquery.ScalarQueryParameter("d", "DATE", target_date),
+            ]),
+        ).result()
+    except BadRequest as exc:
+        if "streaming buffer" not in str(exc).lower():
+            raise
+        log.warning(
+            "profile_builder.delete_skipped_streaming_buffer",
+            target_date=str(target_date),
+            users=len(snapshots),
+        )
     errors = bq.insert_rows_json(table, snapshots)
     if errors:
         log.error("profile_builder.insert_errors", errors=errors[:5])

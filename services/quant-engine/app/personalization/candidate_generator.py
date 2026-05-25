@@ -141,17 +141,21 @@ def _generic_artifact_pull(
     tbl = fully_qualified(settings.BQ_DATASET_ARTIFACTS, table_name)
     sql = f"""
         SELECT
-            COALESCE(artifact_id, id, GENERATE_UUID()) AS artifact_id,
+            artifact_id,
             COALESCE(title, summary) AS title,
             summary,
-            body,
+            CAST(NULL AS STRING) AS body,
             COALESCE(confidence, 0.5) AS confidence,
             severity,
-            symbols,
+            ARRAY_CONCAT(
+              IF(symbol IS NULL OR symbol = '', [], [UPPER(symbol)]),
+              ARRAY(SELECT UPPER(s) FROM UNNEST(IFNULL(related_symbols, [])) AS s)
+            ) AS symbols,
             created_at AS generated_at,
             artifact_type
         FROM `{tbl}`
         WHERE created_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL @h HOUR)
+          AND COALESCE(is_test, FALSE) = FALSE
         ORDER BY confidence DESC, created_at DESC
         LIMIT @lim
     """

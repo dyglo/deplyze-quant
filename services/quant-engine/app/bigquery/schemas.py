@@ -110,6 +110,40 @@ PUBLIC_MACRO_RAW = _base() + [
     S("raw_payload", "JSON", "NULLABLE"),
 ]
 
+OPEN_MACRO_RAW = [
+    S("id", "STRING", "REQUIRED"),
+    S("provider", "STRING", "REQUIRED"),
+    S("source_dataset", "STRING", "NULLABLE"),
+    S("source_series_id", "STRING", "NULLABLE"),
+    S("indicator_code", "STRING", "REQUIRED"),
+    S("indicator_name", "STRING", "NULLABLE"),
+    S("indicator_category", "STRING", "NULLABLE"),
+    S("country_code", "STRING", "NULLABLE"),
+    S("country_iso2", "STRING", "NULLABLE"),
+    S("country_iso3", "STRING", "NULLABLE"),
+    S("country_name", "STRING", "NULLABLE"),
+    S("region", "STRING", "NULLABLE"),
+    S("frequency", "STRING", "NULLABLE"),
+    S("unit", "STRING", "NULLABLE"),
+    S("period", "STRING", "REQUIRED"),
+    S("period_start", "DATE", "NULLABLE"),
+    S("period_end", "DATE", "NULLABLE"),
+    S("value", "FLOAT64", "NULLABLE"),
+    S("value_text", "STRING", "NULLABLE"),
+    S("vintage_date", "DATE", "NULLABLE"),
+    S("is_forecast", "BOOL", "NULLABLE"),
+    S("source_url", "STRING", "NULLABLE"),
+    S("request_url", "STRING", "NULLABLE"),
+    S("raw_payload", "JSON", "NULLABLE"),
+    S("metadata", "JSON", "NULLABLE"),
+    S("ingestion_time", "TIMESTAMP", "REQUIRED"),
+    S("observation_time", "TIMESTAMP", "NULLABLE"),
+    S("data_quality_score", "FLOAT64", "NULLABLE"),
+    S("lineage_id", "STRING", "NULLABLE"),
+    S("created_at", "TIMESTAMP", "REQUIRED"),
+    S("updated_at", "TIMESTAMP", "NULLABLE"),
+]
+
 PUBLIC_FILINGS_RAW = _base() + [
     S("cik", "STRING", "NULLABLE"),
     S("accession_number", "STRING", "NULLABLE"),
@@ -247,6 +281,36 @@ MACRO_CLEANED = _base() + [
     S("yoy_change", "FLOAT64", "NULLABLE"),
     S("mom_change", "FLOAT64", "NULLABLE"),
     S("dedup_hash", "STRING", "NULLABLE"),
+    S("updated_at", "TIMESTAMP", "NULLABLE"),
+]
+
+GLOBAL_INDICATORS_CLEANED = [
+    S("id", "STRING", "REQUIRED"),
+    S("provider", "STRING", "REQUIRED"),
+    S("source_dataset", "STRING", "NULLABLE"),
+    S("source_series_id", "STRING", "NULLABLE"),
+    S("indicator_code", "STRING", "REQUIRED"),
+    S("indicator_name", "STRING", "NULLABLE"),
+    S("indicator_category", "STRING", "NULLABLE"),
+    S("country_iso2", "STRING", "NULLABLE"),
+    S("country_iso3", "STRING", "NULLABLE"),
+    S("country_name", "STRING", "NULLABLE"),
+    S("region", "STRING", "NULLABLE"),
+    S("frequency", "STRING", "NULLABLE"),
+    S("unit", "STRING", "NULLABLE"),
+    S("period", "STRING", "REQUIRED"),
+    S("period_start", "DATE", "NULLABLE"),
+    S("period_end", "DATE", "NULLABLE"),
+    S("observation_time", "TIMESTAMP", "NULLABLE"),
+    S("value", "FLOAT64", "NULLABLE"),
+    S("yoy_change", "FLOAT64", "NULLABLE"),
+    S("period_change", "FLOAT64", "NULLABLE"),
+    S("is_forecast", "BOOL", "NULLABLE"),
+    S("data_quality_score", "FLOAT64", "NULLABLE"),
+    S("lineage_id", "STRING", "NULLABLE"),
+    S("dedup_hash", "STRING", "REQUIRED"),
+    S("metadata", "JSON", "NULLABLE"),
+    S("created_at", "TIMESTAMP", "REQUIRED"),
     S("updated_at", "TIMESTAMP", "NULLABLE"),
 ]
 
@@ -449,6 +513,26 @@ MACRO_FEATURES = _base() + [
     S("updated_at", "TIMESTAMP", "NULLABLE"),
 ]
 
+COUNTRY_REGIME_FEATURES = [
+    S("id", "STRING", "REQUIRED"),
+    S("country_iso3", "STRING", "REQUIRED"),
+    S("country_name", "STRING", "NULLABLE"),
+    S("as_of_date", "DATE", "REQUIRED"),
+    S("latest_period", "STRING", "NULLABLE"),
+    S("growth_state", "STRING", "NULLABLE"),
+    S("inflation_state", "STRING", "NULLABLE"),
+    S("debt_state", "STRING", "NULLABLE"),
+    S("external_state", "STRING", "NULLABLE"),
+    S("employment_state", "STRING", "NULLABLE"),
+    S("composite_risk_score", "FLOAT64", "NULLABLE"),
+    S("data_coverage", "FLOAT64", "NULLABLE"),
+    S("indicator_count", "INT64", "NULLABLE"),
+    S("evidence", "JSON", "NULLABLE"),
+    S("source_providers", "STRING", "REPEATED"),
+    S("created_at", "TIMESTAMP", "REQUIRED"),
+    S("updated_at", "TIMESTAMP", "NULLABLE"),
+]
+
 NARRATIVE_FEATURES = _base() + [
     S("theme_id", "STRING", "NULLABLE"),
     S("theme_label", "STRING", "NULLABLE"),
@@ -505,6 +589,26 @@ MACRO_OBSERVATIONS = _base() + [
     S("related_symbols", "STRING", "REPEATED"),
     S("tags", "STRING", "REPEATED"),
     S("severity", "STRING", "NULLABLE"),
+    S("updated_at", "TIMESTAMP", "NULLABLE"),
+]
+
+COUNTRY_MACRO_OBSERVATIONS = [
+    S("id", "STRING", "REQUIRED"),
+    S("country_iso3", "STRING", "REQUIRED"),
+    S("country_name", "STRING", "NULLABLE"),
+    S("observation_type", "STRING", "NULLABLE"),
+    S("regime_state", "STRING", "NULLABLE"),
+    S("title", "STRING", "NULLABLE"),
+    S("summary", "STRING", "NULLABLE"),
+    S("body", "STRING", "NULLABLE"),
+    S("related_indicators", "STRING", "REPEATED"),
+    S("related_symbols", "STRING", "REPEATED"),
+    S("tags", "STRING", "REPEATED"),
+    S("severity", "STRING", "NULLABLE"),
+    S("confidence", "FLOAT64", "NULLABLE"),
+    S("observation_time", "TIMESTAMP", "REQUIRED"),
+    S("lineage_id", "STRING", "NULLABLE"),
+    S("created_at", "TIMESTAMP", "REQUIRED"),
     S("updated_at", "TIMESTAMP", "NULLABLE"),
 ]
 

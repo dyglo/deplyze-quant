@@ -88,6 +88,90 @@ const MacroObsQuery = z.object({
   observation_type: z.string().optional(),
 });
 
+const GlobalIndicatorsQuery = z.object({
+  countries: z.string().optional(),
+  category: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(500).default(120),
+});
+
+router.get('/macro/global-indicators', async (req, res, next) => {
+  try {
+    const { countries, category, limit } = GlobalIndicatorsQuery.parse(req.query);
+    const countryList = countries
+      ? countries.split(',').map((c) => c.trim().toUpperCase()).filter(Boolean)
+      : ['USA', 'CHN', 'JPN', 'DEU', 'GBR', 'FRA', 'IND', 'BRA'];
+    const cacheKey = `v3p2:macro:global:${countryList.join(',')}:${category ?? 'all'}:${limit}`;
+    const rows = await withCache(cacheKey, TTL.quote * 10, () => {
+      const params: Record<string, unknown> = { countries: countryList, limit };
+      let where = 'country_iso3 IN UNNEST(@countries)';
+      if (category) {
+        where += ' AND indicator_category = @category';
+        params.category = category;
+      }
+      return runQuery<unknown>(`
+        WITH ranked AS (
+          SELECT *,
+                 ROW_NUMBER() OVER (
+                   PARTITION BY country_iso3, indicator_code
+                   ORDER BY period_start DESC, updated_at DESC
+                 ) AS rn
+          FROM \`${PROJECT}.cleaned.global_indicators_cleaned\`
+          WHERE ${where}
+        )
+        SELECT country_iso3, country_name, provider, indicator_code,
+               indicator_name, indicator_category, period, period_start,
+               value, yoy_change, period_change, unit, is_forecast,
+               data_quality_score, updated_at
+        FROM ranked
+        WHERE rn = 1
+        ORDER BY country_iso3, indicator_category, indicator_name
+        LIMIT @limit
+      `, params);
+    });
+    res.json({ items: rows, count: rows.length });
+  } catch (err) { next(err); }
+});
+
+const CountryRegimesQuery = z.object({
+  countries: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(24),
+});
+
+router.get('/macro/country-regimes', async (req, res, next) => {
+  try {
+    const { countries, limit } = CountryRegimesQuery.parse(req.query);
+    const countryList = countries
+      ? countries.split(',').map((c) => c.trim().toUpperCase()).filter(Boolean)
+      : null;
+    const cacheKey = `v3p2:macro:country_regimes:${countryList?.join(',') ?? 'all'}:${limit}`;
+    const rows = await withCache(cacheKey, TTL.quote * 10, () => {
+      const params: Record<string, unknown> = { limit };
+      const where = countryList?.length ? 'WHERE country_iso3 IN UNNEST(@countries)' : '';
+      if (countryList?.length) params.countries = countryList;
+      return runQuery<unknown>(`
+        WITH ranked AS (
+          SELECT *,
+                 ROW_NUMBER() OVER (
+                   PARTITION BY country_iso3
+                   ORDER BY as_of_date DESC, updated_at DESC
+                 ) AS rn
+          FROM \`${PROJECT}.features.country_regime_features\`
+          ${where}
+        )
+        SELECT country_iso3, country_name, as_of_date, latest_period,
+               growth_state, inflation_state, debt_state, external_state,
+               employment_state, composite_risk_score, data_coverage,
+               indicator_count, evidence, source_providers, updated_at
+        FROM ranked
+        WHERE rn = 1
+        ORDER BY composite_risk_score DESC, country_iso3
+        LIMIT @limit
+      `, params);
+    });
+    res.json({ items: rows, count: rows.length });
+  } catch (err) { next(err); }
+});
+
 router.get('/macro/observations', async (req, res, next) => {
   try {
     const { limit, observation_type } = MacroObsQuery.parse(req.query);

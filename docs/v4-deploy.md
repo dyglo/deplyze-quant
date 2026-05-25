@@ -71,6 +71,19 @@ GET {QUANT_ENGINE_URL}/agents/status     → 200, returns [] (no runs yet)
 The gateway has a new agents router mounted at `/v1/agents/*`.  
 Redeploy with the same process as previous gateway deployments.
 
+When redeploying the gateway, keep VPC egress constrained to private ranges:
+
+```bash
+gcloud run deploy deplyze-gateway \
+  --region us-central1 \
+  --project deplyze-quant \
+  --vpc-connector deplyze-vpc-connector \
+  --vpc-egress private-ranges-only
+```
+
+Redis stays reachable through the VPC connector, while public market/search
+providers continue to use normal Cloud Run internet egress.
+
 New env var required on gateway:
 ```
 BQ_DATASET_ARTIFACTS=artifacts    # already set if V3P2 is deployed; confirm

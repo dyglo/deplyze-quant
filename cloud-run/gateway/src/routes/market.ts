@@ -352,7 +352,13 @@ router.get('/headlines', async (req, res, next) => {
   try {
     const q = (req.query.q as string | undefined) ?? 'global markets';
     const cacheKey = `serper:news:${q.toLowerCase()}`;
-    const items = await withCache(cacheKey, TTL.news, () => serper.searchNews(q, 15));
+    let items: Awaited<ReturnType<typeof serper.searchNews>>;
+    try {
+      items = await withCache(cacheKey, TTL.news, () => serper.searchNews(q, 15));
+    } catch (providerErr) {
+      console.warn(`[headlines] Serper unavailable: ${(providerErr as Error).message}`);
+      items = [];
+    }
     res.json({ items });
   } catch (err) { next(err); }
 });

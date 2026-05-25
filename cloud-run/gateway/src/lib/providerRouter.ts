@@ -52,6 +52,8 @@ function recordFailure(id: string, message: string): void {
 // ─── Provider call wrapper ──────────────────────────────────────────────────
 
 const DEFAULT_TIMEOUT_MS = 10_000;
+const QUOTE_TIMEOUT_MS = 3_500;
+const NEWS_TIMEOUT_MS = 5_000;
 const MAX_RETRIES = 1;
 
 async function callWithTimeout<T>(fn: () => Promise<T>, timeoutMs: number): Promise<T> {
@@ -126,9 +128,9 @@ export function quoteChain<T>(providers: {
 }): FallbackChain<T> {
   return {
     providers: [
-      ...(providers.polygon    ? [{ id: 'polygon',     fn: providers.polygon }]    : []),
-      ...(providers.finnhub    ? [{ id: 'finnhub',     fn: providers.finnhub }]    : []),
-      ...(providers.twelve_data? [{ id: 'twelve_data', fn: providers.twelve_data }]: []),
+      ...(providers.polygon    ? [{ id: 'polygon',     fn: providers.polygon,     timeoutMs: QUOTE_TIMEOUT_MS }] : []),
+      ...(providers.finnhub    ? [{ id: 'finnhub',     fn: providers.finnhub,     timeoutMs: QUOTE_TIMEOUT_MS }] : []),
+      ...(providers.twelve_data? [{ id: 'twelve_data', fn: providers.twelve_data, timeoutMs: QUOTE_TIMEOUT_MS }]: []),
     ],
   };
 }
@@ -184,10 +186,10 @@ export function newsChain<T>(providers: {
 }): FallbackChain<T> {
   return {
     providers: [
-      ...(providers.polygon? [{ id: 'polygon', fn: providers.polygon }]: []),
-      ...(providers.finnhub? [{ id: 'finnhub', fn: providers.finnhub }]: []),
-      ...(providers.tavily ? [{ id: 'tavily',  fn: providers.tavily }] : []),
-      ...(providers.serper ? [{ id: 'serper',  fn: providers.serper }] : []),
+      ...(providers.polygon? [{ id: 'polygon', fn: providers.polygon, timeoutMs: NEWS_TIMEOUT_MS }]: []),
+      ...(providers.finnhub? [{ id: 'finnhub', fn: providers.finnhub, timeoutMs: NEWS_TIMEOUT_MS }]: []),
+      ...(providers.tavily ? [{ id: 'tavily',  fn: providers.tavily,  timeoutMs: NEWS_TIMEOUT_MS }] : []),
+      ...(providers.serper ? [{ id: 'serper',  fn: providers.serper,  timeoutMs: NEWS_TIMEOUT_MS }] : []),
     ],
   };
 }

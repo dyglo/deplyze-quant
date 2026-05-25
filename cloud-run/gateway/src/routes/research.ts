@@ -23,9 +23,15 @@ router.get('/web', async (req, res, next) => {
   try {
     const p = WebQuery.parse(req.query);
     const cacheKey = `tavily:${p.depth}:${p.topic}:${p.days ?? 'all'}:${p.q.toLowerCase()}`;
-    const data = await withCache(cacheKey, TTL.web_search, () =>
-      tavily.search(p.q, { topic: p.topic, days: p.days, searchDepth: p.depth, includeAnswer: true }),
-    );
+    let data: Awaited<ReturnType<typeof tavily.search>>;
+    try {
+      data = await withCache(cacheKey, TTL.web_search, () =>
+        tavily.search(p.q, { topic: p.topic, days: p.days, searchDepth: p.depth, includeAnswer: true }),
+      );
+    } catch (providerErr) {
+      console.warn(`[research/web] Tavily unavailable: ${(providerErr as Error).message}`);
+      data = { query: p.q, results: [] };
+    }
     res.json(data);
   } catch (err) { next(err); }
 });
@@ -35,9 +41,15 @@ router.get('/web/google', async (req, res, next) => {
   try {
     const q = (req.query.q as string | undefined)?.trim();
     if (!q) { res.status(400).json({ error: 'q is required' }); return; }
-    const data = await withCache(`serper:web:${q.toLowerCase()}`, TTL.web_search, () =>
-      serper.searchWeb(q, 10),
-    );
+    let data: Awaited<ReturnType<typeof serper.searchWeb>>;
+    try {
+      data = await withCache(`serper:web:${q.toLowerCase()}`, TTL.web_search, () =>
+        serper.searchWeb(q, 10),
+      );
+    } catch (providerErr) {
+      console.warn(`[research/web/google] Serper unavailable: ${(providerErr as Error).message}`);
+      data = { organic: [] };
+    }
     res.json(data);
   } catch (err) { next(err); }
 });

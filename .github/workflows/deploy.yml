@@ -397,17 +397,18 @@ jobs:
             --time-zone "Etc/UTC"
             --uri "$QE_URL/pipelines/backtest/export-parquet"
             --http-method POST
-            --headers "Content-Type=application/json"
             --message-body "{}"
             --oidc-service-account-email "${{ secrets.CLOUD_SCHEDULER_SA }}"
             --oidc-token-audience "$QE_URL"
             --attempt-deadline 300s
           )
           if gcloud scheduler jobs describe "$JOB" --location "${{ env.GCP_REGION }}" --quiet 2>/dev/null; then
-            gcloud scheduler jobs update http "$JOB" "${COMMON[@]}"
+            gcloud scheduler jobs update http "$JOB" "${COMMON[@]}" \
+              --update-headers "Content-Type=application/json"
             echo "Updated scheduler job $JOB ✓"
           else
-            gcloud scheduler jobs create http "$JOB" "${COMMON[@]}"
+            gcloud scheduler jobs create http "$JOB" "${COMMON[@]}" \
+              --headers "Content-Type=application/json"
             echo "Created scheduler job $JOB ✓"
           fi
 

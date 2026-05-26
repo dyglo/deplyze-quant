@@ -90,8 +90,10 @@ class Settings(BaseSettings):
     # The instrument whose returns the backtest trades (must exist in
     # cleaned.ohlcv_cleaned / features.returns_features).
     BACKTEST_ASSET_SYMBOL: str = "SPY"
-    # History window for the export.
+    # History window for the nightly legacy export.
     BACKTEST_LOOKBACK_DAYS: int = 365 * 15
+    # History window for per-instrument on-demand exports.
+    BACKTEST_INSTRUMENT_LOOKBACK_DAYS: int = 365 * 30
 
     @property
     def ALLOWED_ORIGINS(self) -> List[str]:

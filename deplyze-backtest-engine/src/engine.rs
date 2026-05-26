@@ -69,13 +69,34 @@ pub fn run(inputs: &EngineInputs) -> BacktestResults {
     let regime_metrics = partition_by_regime(&sim, inputs.regime);
     let signal_attribution = attribution(inputs, &entry, &exit, &sim);
 
-    let comparison = if spec.comparison_mode {
-        Some(compare_to_baseline(inputs, &sim))
+    let (comparison, baseline_equity) = if spec.comparison_mode {
+        let (cmp, bline) = compare_to_baseline(inputs, &sim);
+        (Some(cmp), Some(bline))
     } else {
-        None
+        (None, None)
     };
 
     let equity_curve = build_equity_curve(inputs, &sim);
+
+    // Buy-and-hold equity: compound the raw asset returns bar-by-bar.
+    let buy_hold_equity: Vec<f64> = {
+        let mut eq = Vec::with_capacity(n);
+        let mut e = 1.0f64;
+        eq.push(e);
+        for t in 1..n {
+            e = (e * (1.0 + inputs.returns[t])).max(1e-9);
+            eq.push(e);
+        }
+        eq
+    };
+
+    let dollar_summary = build_dollar_summary(
+        spec.starting_capital,
+        &sim.equity,
+        &buy_hold_equity,
+        baseline_equity.as_deref(),
+        inputs.dates,
+    );
 
     BacktestResults {
         strategy_id: spec.id.clone(),
@@ -85,6 +106,7 @@ pub fn run(inputs: &EngineInputs) -> BacktestResults {
         regime_metrics,
         signal_attribution,
         comparison,
+        dollar_summary: Some(dollar_summary),
         bars: n,
         data_through: inputs.dates.last().cloned().unwrap_or_default(),
     }
@@ -534,7 +556,7 @@ fn avg_active_weight(series: Option<&Vec<f64>>, weights: &[f64]) -> f64 {
 
 // ─── Comparison baseline (12-1 time-series momentum) ─────────────────────────────
 
-fn compare_to_baseline(inputs: &EngineInputs, enhanced: &SimResult) -> ComparisonResults {
+fn compare_to_baseline(inputs: &EngineInputs, enhanced: &SimResult) -> (ComparisonResults, Vec<f64>) {
     let n = inputs.returns.len();
     let gate = momentum_gate(inputs.asset_close, n);
     // Baseline uses the same cost model but a simple full-notional sizing.
@@ -551,6 +573,7 @@ fn compare_to_baseline(inputs: &EngineInputs, enhanced: &SimResult) -> Compariso
         asset_close: inputs.asset_close,
     };
     let baseline = simulate(&baseline_inputs, &gate);
+    let baseline_equity = baseline.equity.clone();
 
     let baseline_metrics = aggregate(&baseline, n);
     let enhanced_metrics = aggregate(enhanced, n);
@@ -567,13 +590,13 @@ fn compare_to_baseline(inputs: &EngineInputs, enhanced: &SimResult) -> Compariso
     let signal_value_score =
         (0.5 + 0.25 * sharpe_delta.tanh() + 0.25 * dd_frac).clamp(0.0, 1.0);
 
-    ComparisonResults {
+    (ComparisonResults {
         baseline_metrics,
         enhanced_metrics,
         sharpe_delta,
         drawdown_reduction_pct,
         signal_value_score,
-    }
+    }, baseline_equity)
 }
 
 fn clone_spec_for_baseline(spec: &StrategySpec) -> StrategySpec {
@@ -589,6 +612,8 @@ fn clone_spec_for_baseline(spec: &StrategySpec) -> StrategySpec {
         comparison_mode: false,
         tier: spec.tier,
         cost_model: spec.cost_model.clone(),
+        instrument: spec.instrument.clone(),
+        starting_capital: spec.starting_capital,
     }
 }
 
@@ -607,6 +632,31 @@ fn momentum_gate(close: Option<&[f64]>, n: usize) -> Vec<bool> {
         }
     }
     gate
+}
+
+// ─── Dollar summary ──────────────────────────────────────────────────────────────
+
+fn build_dollar_summary(
+    capital: f64,
+    enhanced_equity: &[f64],
+    buy_hold_equity: &[f64],
+    baseline_equity: Option<&[f64]>,
+    dates: &[String],
+) -> crate::models::DollarSummary {
+    use crate::models::{DollarPoint, DollarSummary};
+    let n = enhanced_equity.len().min(buy_hold_equity.len()).min(dates.len());
+    let curve: Vec<DollarPoint> = (0..n)
+        .map(|i| DollarPoint {
+            timestamp: dates[i].clone(),
+            enhanced: capital * enhanced_equity[i],
+            buy_hold: capital * buy_hold_equity[i],
+            baseline: baseline_equity.and_then(|b| b.get(i)).map(|v| capital * v),
+        })
+        .collect();
+    let enhanced_final = curve.last().map(|p| p.enhanced).unwrap_or(capital);
+    let buy_hold_final = curve.last().map(|p| p.buy_hold).unwrap_or(capital);
+    let baseline_final = baseline_equity.and_then(|b| b.last()).map(|v| capital * v);
+    DollarSummary { starting_capital: capital, enhanced_final, buy_hold_final, baseline_final, curve }
 }
 
 // ─── Equity curve ────────────────────────────────────────────────────────────────
@@ -688,6 +738,8 @@ mod tests {
             comparison_mode: false,
             tier: UserTier::Pro,
             cost_model: CostModel { commission_bps: 1.0, slippage_bps: 2.0 },
+            instrument: "SPY".to_string(),
+            starting_capital: 10_000.0,
         }
     }
 

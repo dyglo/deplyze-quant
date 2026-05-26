@@ -428,6 +428,40 @@ async def backtest_export_parquet(req: BacktestExportRequest):
         raise HTTPException(status_code=503, detail=str(e))
 
 
+class BacktestPrepareInstrumentRequest(BaseModel):
+    symbol: str
+    series_ids: Optional[List[str]] = None
+    lookback_days: Optional[int] = None
+
+
+@router.post("/backtest/prepare-instrument")
+async def backtest_prepare_instrument(req: BacktestPrepareInstrumentRequest):
+    """
+    Build and upload a per-instrument wide parquet to GCS at
+    ``instruments/{SYMBOL}.parquet`` so the Rust backtest engine can serve
+    requests for that instrument.
+
+    Uses the warehouse-first, provider-fallback data path (same chain as the
+    gateway market route). Runs synchronously so the caller gets a definitive
+    ready/fail result before submitting a run request.
+    """
+    from fastapi import HTTPException
+    from app.backtest.export import run_instrument_export, ExportError
+
+    if not req.symbol or not req.symbol.strip():
+        raise HTTPException(status_code=400, detail="symbol is required")
+
+    try:
+        summary = run_instrument_export(
+            symbol=req.symbol.strip().upper(),
+            series_ids=req.series_ids,
+            lookback_days=req.lookback_days,
+        )
+        return summary
+    except ExportError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
 @router.get("/status/{run_id}")
 async def pipeline_status(run_id: str):
     """Get status of a pipeline run."""

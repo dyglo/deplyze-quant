@@ -195,6 +195,45 @@ pub struct StrategySpec {
     /// Optional; defaults applied when absent so older clients keep working.
     #[serde(default)]
     pub cost_model: CostModel,
+    /// Instrument to backtest (selects the per-instrument parquet). Defaults to
+    /// the legacy single-asset parquet when absent.
+    #[serde(default = "default_instrument")]
+    pub instrument: String,
+    /// Starting capital for the dollar P&L curves (cosmetic only; does not
+    /// affect any ratio or signal — all engine math is in fractional returns).
+    #[serde(default = "default_starting_capital")]
+    pub starting_capital: f64,
+}
+
+fn default_instrument() -> String {
+    "SPY".to_string()
+}
+fn default_starting_capital() -> f64 {
+    10_000.0
+}
+
+// ─── Dollar P&L curves ────────────────────────────────────────────────────────
+
+/// One bar of the dollar-denominated equity curve.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DollarPoint {
+    pub timestamp: String,
+    pub enhanced: f64,
+    pub buy_hold: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub baseline: Option<f64>,
+}
+
+/// Three-curve dollar P&L surface for the results hero cards and equity chart.
+/// All values in dollars (starting_capital × fractional equity at each bar).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DollarSummary {
+    pub starting_capital: f64,
+    pub enhanced_final: f64,
+    pub buy_hold_final: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub baseline_final: Option<f64>,
+    pub curve: Vec<DollarPoint>,
 }
 
 // ─── Results ──────────────────────────────────────────────────────────────────
@@ -282,6 +321,8 @@ pub struct BacktestResults {
     pub signal_attribution: Vec<SignalAttribution>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub comparison: Option<ComparisonResults>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dollar_summary: Option<DollarSummary>,
     pub bars: usize,
     pub data_through: String,
 }

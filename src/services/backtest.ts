@@ -266,10 +266,17 @@ export function requestCommentary(opts: {
 }
 
 /** Trigger per-instrument parquet preparation in quant-engine before running. */
-export function prepareInstrument(symbol: string): Promise<{ status: string; rows?: number; gcs_uri?: string }> {
-  return gatewayPost<{ status: string; rows?: number; gcs_uri?: string }>(
+export function prepareInstrument(
+  symbol: string,
+  dateRange?: DateRange,
+): Promise<{ status: string; rows?: number; gcs_uri?: string; cache_gcs_uri?: string }> {
+  return gatewayPost<{ status: string; rows?: number; gcs_uri?: string; cache_gcs_uri?: string }>(
     '/backtest/prepare-instrument',
-    { symbol: symbol.toUpperCase() },
+    {
+      symbol: symbol.toUpperCase(),
+      start_date: dateRange?.start_date,
+      end_date: dateRange?.end_date,
+    },
   );
 }
 

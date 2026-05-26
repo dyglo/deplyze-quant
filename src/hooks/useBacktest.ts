@@ -112,7 +112,7 @@ export function useBacktest() {
     const instrument = resolvedSpec.instrument ?? 'SPY';
     setStep('prepare', { state: 'active', startedAt: Date.now(), detail: instrument });
     try {
-      const prep = await prepareInstrument(instrument);
+      const prep = await prepareInstrument(instrument, resolvedSpec.date_range);
       if (abortRef.current) return;
       setStep('prepare', {
         state: 'done',
@@ -191,7 +191,7 @@ export function useBacktest() {
     const instrument = spec.instrument ?? 'SPY';
     setStep('prepare', { state: 'active', startedAt: Date.now(), detail: instrument });
     try {
-      const prep = await prepareInstrument(instrument);
+      const prep = await prepareInstrument(instrument, spec.date_range);
       if (abortRef.current) return;
       setStep('prepare', {
         state: 'done',

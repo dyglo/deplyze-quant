@@ -403,6 +403,23 @@ class BacktestExportRequest(BaseModel):
     local_out: Optional[str] = None
 
 
+class BacktestResolveIntentRequest(BaseModel):
+    query: str
+
+
+@router.post("/backtest/resolve-intent")
+async def backtest_resolve_intent(req: BacktestResolveIntentRequest):
+    """Resolve a natural-language backtest prompt into a runnable StrategySpec."""
+    from fastapi import HTTPException
+    from app.backtest.intent import IntentResolutionError, resolve_intent
+
+    try:
+        spec = resolve_intent(req.query)
+        return {"spec": spec}
+    except IntentResolutionError as e:
+        raise HTTPException(status_code=422, detail=e.to_response())
+
+
 @router.post("/backtest/export-parquet")
 async def backtest_export_parquet(req: BacktestExportRequest):
     """
@@ -432,6 +449,8 @@ class BacktestPrepareInstrumentRequest(BaseModel):
     symbol: str
     series_ids: Optional[List[str]] = None
     lookback_days: Optional[int] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
 
 
 @router.post("/backtest/prepare-instrument")
@@ -456,6 +475,8 @@ async def backtest_prepare_instrument(req: BacktestPrepareInstrumentRequest):
             symbol=req.symbol.strip().upper(),
             series_ids=req.series_ids,
             lookback_days=req.lookback_days,
+            start_date=req.start_date,
+            end_date=req.end_date,
         )
         return summary
     except ExportError as e:

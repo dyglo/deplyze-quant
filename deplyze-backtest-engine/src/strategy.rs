@@ -182,8 +182,11 @@ pub fn validate(spec: &StrategySpec) -> ValidationResult {
     let mut tier_requirements = Vec::new();
 
     let lib = signal_library();
-    let known: HashMap<&str, &SignalMeta> =
-        lib.signals.iter().map(|m| (m.signal_id.as_str(), m)).collect();
+    let known: HashMap<&str, &SignalMeta> = lib
+        .signals
+        .iter()
+        .map(|m| (m.signal_id.as_str(), m))
+        .collect();
 
     // Date range.
     if spec.date_range.start_date >= spec.date_range.end_date {
@@ -210,7 +213,10 @@ pub fn validate(spec: &StrategySpec) -> ValidationResult {
             }
         }
         if !(0.0..=1.0).contains(&sig.weight) {
-            warnings.push(format!("signal '{}' weight {} outside [0,1]", sig.signal_id, sig.weight));
+            warnings.push(format!(
+                "signal '{}' weight {} outside [0,1]",
+                sig.signal_id, sig.weight
+            ));
         }
     }
 
@@ -227,10 +233,24 @@ pub fn validate(spec: &StrategySpec) -> ValidationResult {
     // Risk sanity.
     let max_dd = frac(spec.risk_params.max_drawdown_pct);
     if !(0.0..1.0).contains(&max_dd) {
-        warnings.push("max_drawdown_pct should be in (0,100]; circuit breaker may be ineffective".into());
+        warnings.push(
+            "max_drawdown_pct should be in (0,100]; circuit breaker may be ineffective".into(),
+        );
     }
     if frac(spec.risk_params.position_cap_pct) <= 0.0 {
         errors.push("position_cap_pct must be positive".into());
+    }
+    if spec.risk_params.signal_confirmation_bars == 0 {
+        warnings.push("signal_confirmation_bars below 1; engine will use 1".into());
+    }
+    if spec.risk_params.exit_confirmation_bars == 0 {
+        warnings.push("exit_confirmation_bars below 1; engine will use 1".into());
+    }
+    if spec.risk_params.entry_score_threshold < 0.0 || spec.risk_params.exit_score_threshold < 0.0 {
+        warnings.push("ensemble score thresholds should be non-negative".into());
+    }
+    if spec.risk_params.min_weight_change_pct < 0.0 {
+        warnings.push("min_weight_change_pct should be non-negative".into());
     }
 
     // Position sizing sanity.
@@ -239,7 +259,8 @@ pub fn validate(spec: &StrategySpec) -> ValidationResult {
             errors.push("FixedFractional.fraction must be positive".into());
         }
         PositionSizing::Kelly { kelly_fraction } if !(0.0..=1.0).contains(kelly_fraction) => {
-            warnings.push("Kelly.kelly_fraction outside [0,1]; full Kelly is rarely advisable".into());
+            warnings
+                .push("Kelly.kelly_fraction outside [0,1]; full Kelly is rarely advisable".into());
         }
         PositionSizing::VolTarget { target_annual_vol } if *target_annual_vol <= 0.0 => {
             errors.push("VolTarget.target_annual_vol must be positive".into());
@@ -263,7 +284,10 @@ fn validate_logic(
 ) {
     for c in &expr.conditions {
         if !known.contains_key(c.signal_id.as_str()) {
-            errors.push(format!("{ctx} references unknown signal_id: {}", c.signal_id));
+            errors.push(format!(
+                "{ctx} references unknown signal_id: {}",
+                c.signal_id
+            ));
         }
     }
 }
@@ -300,7 +324,12 @@ pub fn resolve_signal_series(
 
     // Collect every signal_id referenced by the spec (config + logic).
     let mut ids: Vec<String> = spec.signals.iter().map(|s| s.signal_id.clone()).collect();
-    for c in spec.entry_logic.conditions.iter().chain(spec.exit_logic.conditions.iter()) {
+    for c in spec
+        .entry_logic
+        .conditions
+        .iter()
+        .chain(spec.exit_logic.conditions.iter())
+    {
         ids.push(c.signal_id.clone());
     }
     ids.sort();
@@ -381,7 +410,10 @@ mod tests {
         StrategySpec {
             id: "s".into(),
             name: "s".into(),
-            date_range: DateRange { start_date: "2020-01-01".into(), end_date: "2021-01-01".into() },
+            date_range: DateRange {
+                start_date: "2020-01-01".into(),
+                end_date: "2021-01-01".into(),
+            },
             signals: signals
                 .iter()
                 .map(|id| SignalConfig {
@@ -396,20 +428,37 @@ mod tests {
                 operator: Operator::AND,
                 conditions: signals
                     .iter()
-                    .map(|id| Condition { signal_id: id.to_string(), direction: None, threshold: None })
+                    .map(|id| Condition {
+                        signal_id: id.to_string(),
+                        direction: None,
+                        threshold: None,
+                    })
                     .collect(),
             },
             exit_logic: LogicExpression {
                 operator: Operator::OR,
-                conditions: vec![Condition { signal_id: signals[0].to_string(), direction: Some(Direction::Below), threshold: Some(0.5) }],
+                conditions: vec![Condition {
+                    signal_id: signals[0].to_string(),
+                    direction: Some(Direction::Below),
+                    threshold: Some(0.5),
+                }],
             },
-            position_sizing: PositionSizing::VolTarget { target_annual_vol: 0.1 },
+            position_sizing: PositionSizing::VolTarget {
+                target_annual_vol: 0.1,
+            },
             risk_params: RiskParams {
                 max_drawdown_pct: 25.0,
                 position_cap_pct: 100.0,
                 rebalance_freq: RebalanceFreq::Daily,
                 risk_per_trade_pct: 1.0,
                 min_rr: 2.0,
+                min_holding_period_bars: 0,
+                signal_confirmation_bars: 1,
+                exit_confirmation_bars: 1,
+                cooldown_bars: 0,
+                entry_score_threshold: 0.0,
+                exit_score_threshold: 0.0,
+                min_weight_change_pct: 0.0,
             },
             comparison_mode: true,
             tier: UserTier::Pro,
@@ -435,7 +484,10 @@ mod tests {
     #[test]
     fn inverted_date_range_is_rejected() {
         let mut spec = spec_with(vec!["macro_regime_risk_on"]);
-        spec.date_range = DateRange { start_date: "2021-01-01".into(), end_date: "2020-01-01".into() };
+        spec.date_range = DateRange {
+            start_date: "2021-01-01".into(),
+            end_date: "2020-01-01".into(),
+        };
         assert!(!validate(&spec).valid);
     }
 

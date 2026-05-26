@@ -93,6 +93,13 @@ const RiskParams = z.object({
   rebalance_freq: RebalanceFreq,
   risk_per_trade_pct: z.number().optional(),
   min_rr: z.number().optional(),
+  min_holding_period_bars: z.number().int().nonnegative().optional(),
+  signal_confirmation_bars: z.number().int().positive().optional(),
+  exit_confirmation_bars: z.number().int().positive().optional(),
+  cooldown_bars: z.number().int().nonnegative().optional(),
+  entry_score_threshold: z.number().nonnegative().optional(),
+  exit_score_threshold: z.number().nonnegative().optional(),
+  min_weight_change_pct: z.number().nonnegative().optional(),
 });
 
 const CostModel = z
@@ -389,7 +396,14 @@ StrategySpec schema:
     "position_cap_pct": number,  // e.g. 1.0 for 100% max position
     "rebalance_freq":   "Daily" | "Weekly" | "Monthly" | "OnSignal",
     "risk_per_trade_pct": number,
-    "min_rr": number
+    "min_rr": number,
+    "min_holding_period_bars": number,
+    "signal_confirmation_bars": number,
+    "exit_confirmation_bars": number,
+    "cooldown_bars": number,
+    "entry_score_threshold": number,
+    "exit_score_threshold": number,
+    "min_weight_change_pct": number
   },
   "comparison_mode": boolean,
   "cost_model": { "commission_bps": number, "slippage_bps": number }
@@ -419,6 +433,8 @@ Rules:
 - Prefer 2-4 complementary signals for broad tactical prompts, not a single signal, when the user asks for macro/regime/risk-aware behavior.
 - Exit conditions should be the logical inverse of entry (e.g. entry Above 0 → exit Below 0).
 - Use "VolTarget" sizing for risk-aware ideas, "FixedFractional" for simple ideas.
+- For tactical allocation, risk-off, reduce-exposure, move-to-cash, or weakening-signal prompts, use anti-churn defaults: Weekly or Monthly rebalance, min_holding_period_bars 10-21, signal_confirmation_bars 2-3, exit_confirmation_bars 1-2, cooldown_bars 3-5, entry_score_threshold 0.05-0.15, exit_score_threshold 0.15-0.30, min_weight_change_pct 0.01-0.02.
+- Prefer Monthly rebalance for broad tactical allocation over multi-year windows; prefer Weekly for shorter tactical momentum windows.
 - If the user mentions a specific instrument, use it; otherwise default to "SPY".
 - If the user asks for comparison, set comparison_mode: true.
 - Be conservative: max_drawdown_pct=0.20, position_cap_pct=1.0, commission_bps=1.0, slippage_bps=2.0 unless user specifies.
@@ -461,7 +477,7 @@ router.post('/resolve', async (req, res, next) => {
 // institutional commentary. Follows the same pattern as /historical-research/reason.
 
 const CommentaryBody = z.object({
-  query: z.string().min(2).max(500),
+  query: z.string().min(2).max(4000),
   metrics: z.record(z.union([z.string(), z.number()])),
   context: z.string().max(2000).optional(),
 });

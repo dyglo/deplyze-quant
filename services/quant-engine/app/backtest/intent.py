@@ -59,14 +59,43 @@ def resolve_intent(query: str, *, today: datetime | None = None) -> dict[str, An
     starting_capital = _resolve_starting_capital(q)
     risk_per_trade = _resolve_risk_per_trade(q)
 
-    wants_ma_trend = bool(re.search(r"\b(?:moving\s+average|ma|sma|above\s+its\s+\d{2,3}[-\s]?day)\b", q, re.I))
-    wants_momentum = bool(re.search(r"\bmomentum\b|\btrend\b|\btactical\b|\bstrong\s+markets?\b", q, re.I))
+    wants_ma_trend = bool(
+        re.search(
+            r"\b(?:moving\s+average|ma|sma|above\s+its\s+\d{2,3}[-\s]?day|"
+            r"\d{2,3}[-\s]?day\s+trend|trend\s+is\s+positive|trend\s+turns?\s+negative)\b",
+            q,
+            re.I,
+        )
+    )
+    wants_vol_adjusted_momentum = bool(re.search(r"\bvol(?:atility)?[-\s]?adjusted\s+momentum\b", q, re.I))
+    wants_momentum = bool(
+        re.search(r"\bmomentum\b|\btrend\b|\btactical\b|\bstrong\s+markets?\b|\bweakens?\b", q, re.I)
+    )
     wants_mean_reversion = bool(re.search(r"\bmean\s+reversion\b|\boverbought\b|\boversold\b|\bz[-\s]?score\b", q, re.I))
     wants_carry = bool(re.search(r"\bcarry\b|\breal\s+yields?\b|\byields?\s+falling\b", q, re.I))
     wants_cross_asset = bool(re.search(r"\brelative\b|\bcross[-\s]?asset\b|\bversus\s+(?:spy|benchmark)\b", q, re.I))
     wants_macro = bool(re.search(r"\bmacro\b|\bregime\b|\brisk[-\s]?on\b|\brisk[-\s]?off\b|\bstrong\s+markets?\b", q, re.I))
+    wants_yield_stress = bool(re.search(r"yield[-\s]?curve\s+stress|curve\s+stress|stress\s+rises?", q, re.I))
     wants_yield_exit = bool(re.search(r"yield\s+curve|10\s*y\s*[-/]?\s*2\s*y|invert", q, re.I))
-    if not any([wants_momentum, wants_ma_trend, wants_mean_reversion, wants_carry, wants_cross_asset, wants_macro, wants_yield_exit]):
+    wants_tactical_controls = bool(
+        re.search(
+            r"\btactical(?:\s+allocation)?\b|\ballocation\b|\breduce\s+exposure\b|"
+            r"\bmove\s+to\s+cash\b|\brisk[-\s]?off\b|\bweakens?\b",
+            q,
+            re.I,
+        )
+    )
+    if not any([
+        wants_momentum,
+        wants_ma_trend,
+        wants_vol_adjusted_momentum,
+        wants_mean_reversion,
+        wants_carry,
+        wants_cross_asset,
+        wants_macro,
+        wants_yield_exit,
+        wants_yield_stress,
+    ]):
         raise IntentResolutionError(
             "Could not identify a supported entry or exit signal in the backtest query.",
             code="NLP_PARSE_FAILED",
@@ -88,7 +117,17 @@ def resolve_intent(query: str, *, today: datetime | None = None) -> dict[str, An
                 "weight": 1.0,
             }
         )
-    elif wants_momentum:
+    if wants_vol_adjusted_momentum:
+        signals.append(
+            {
+                "signal_id": "vol_adjusted_momentum",
+                "signal_type": "MomentumFactor",
+                "threshold": 0.0,
+                "direction": "Above",
+                "weight": 1.0,
+            }
+        )
+    elif wants_momentum and not wants_ma_trend:
         momentum_signal = _resolve_momentum_signal(q, start_date, end_date)
         signals.append(
             {
@@ -99,6 +138,8 @@ def resolve_intent(query: str, *, today: datetime | None = None) -> dict[str, An
                 "weight": 1.0,
             }
         )
+    elif wants_momentum:
+        momentum_signal = "trend_200d_slope"
     if wants_mean_reversion:
         signals.append(
             {
@@ -149,6 +190,17 @@ def resolve_intent(query: str, *, today: datetime | None = None) -> dict[str, An
                 "weight": 1.0,
             }
         )
+    elif wants_yield_stress:
+        signals.append(
+            {
+                "signal_id": "yield_curve_score",
+                "signal_type": "YieldSpread",
+                "threshold": 0.0,
+                "direction": "Above",
+                "weight": 1.0,
+            }
+        )
+    signals = _dedupe_signals(signals)
     for signal in signals:
         signal["weight"] = 1.0 / len(signals)
 
@@ -158,7 +210,11 @@ def resolve_intent(query: str, *, today: datetime | None = None) -> dict[str, An
         entry_conditions.append({"signal_id": "trend_200d_slope", "direction": "Above", "threshold": 0.0})
         if not wants_yield_exit:
             exit_conditions.append({"signal_id": "trend_200d_slope", "direction": "Below", "threshold": 0.0})
-    elif wants_momentum:
+    if wants_vol_adjusted_momentum:
+        entry_conditions.append({"signal_id": "vol_adjusted_momentum", "direction": "Above", "threshold": 0.0})
+        if not wants_yield_exit:
+            exit_conditions.append({"signal_id": "vol_adjusted_momentum", "direction": "Below", "threshold": -0.10})
+    elif wants_momentum and not wants_ma_trend:
         entry_conditions.append({"signal_id": momentum_signal, "direction": "Above", "threshold": 0.0})
         if not wants_yield_exit:
             exit_conditions.append({"signal_id": momentum_signal, "direction": "Below", "threshold": 0.0})
@@ -180,6 +236,8 @@ def resolve_intent(query: str, *, today: datetime | None = None) -> dict[str, An
             exit_conditions.append({"signal_id": "macro_regime_risk_on", "direction": "Below", "threshold": 0.45})
     if wants_yield_exit:
         exit_conditions.append({"signal_id": "yield_curve_10y2y", "direction": "CrossDown", "threshold": 0.0})
+    elif wants_yield_stress:
+        exit_conditions.append({"signal_id": "yield_curve_score", "direction": "Below", "threshold": -0.25})
     if not entry_conditions:
         entry_conditions = [{"signal_id": signals[0]["signal_id"], "direction": "Above", "threshold": signals[0]["threshold"]}]
     if not exit_conditions:
@@ -197,14 +255,73 @@ def resolve_intent(query: str, *, today: datetime | None = None) -> dict[str, An
         "risk_params": {
             "max_drawdown_pct": 25.0,
             "position_cap_pct": 100.0,
-            "rebalance_freq": "Weekly",
             "risk_per_trade_pct": risk_per_trade,
             "min_rr": 2.0,
+            **_resolve_execution_controls(q, start_date, end_date, tactical=wants_tactical_controls, yield_event_exit=wants_yield_exit),
         },
         "comparison_mode": True,
         "cost_model": {"commission_bps": 1.0, "slippage_bps": 2.0},
         "starting_capital": starting_capital,
         "tier": "Pro",
+    }
+
+
+def _dedupe_signals(signals: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    seen: set[str] = set()
+    out: list[dict[str, Any]] = []
+    for signal in signals:
+        sid = str(signal["signal_id"])
+        if sid in seen:
+            continue
+        seen.add(sid)
+        out.append(signal)
+    return out
+
+
+def _resolve_execution_controls(
+    query: str,
+    start_date: str,
+    end_date: str,
+    *,
+    tactical: bool,
+    yield_event_exit: bool,
+) -> dict[str, Any]:
+    start = datetime.strptime(start_date, "%Y-%m-%d").date()
+    end = datetime.strptime(end_date, "%Y-%m-%d").date()
+    days = (end - start).days
+    q = query.lower()
+    monthly = tactical and days >= 365 * 3 and bool(re.search(r"\ballocation\b|\bmulti[-\s]?signal\b|\bmacro\b", q))
+    if monthly:
+        return {
+            "rebalance_freq": "Monthly",
+            "min_holding_period_bars": 21,
+            "signal_confirmation_bars": 3,
+            "exit_confirmation_bars": 1 if yield_event_exit else 2,
+            "cooldown_bars": 5,
+            "entry_score_threshold": 0.10,
+            "exit_score_threshold": 0.25,
+            "min_weight_change_pct": 0.02,
+        }
+    if tactical:
+        return {
+            "rebalance_freq": "Weekly",
+            "min_holding_period_bars": 10,
+            "signal_confirmation_bars": 2,
+            "exit_confirmation_bars": 1 if yield_event_exit else 2,
+            "cooldown_bars": 3,
+            "entry_score_threshold": 0.05,
+            "exit_score_threshold": 0.15,
+            "min_weight_change_pct": 0.01,
+        }
+    return {
+        "rebalance_freq": "Weekly",
+        "min_holding_period_bars": 5,
+        "signal_confirmation_bars": 1,
+        "exit_confirmation_bars": 1,
+        "cooldown_bars": 0,
+        "entry_score_threshold": 0.0,
+        "exit_score_threshold": 0.0,
+        "min_weight_change_pct": 0.01,
     }
 
 
@@ -276,6 +393,9 @@ def _resolve_explicit_start(query: str) -> str | None:
     match = re.search(r"\b(?:from|since)\s+(\d{4})-(\d{1,2})(?:-\d{1,2})?\b", query, re.I)
     if match:
         return f"{int(match.group(1)):04d}-{int(match.group(2)):02d}-01"
+    match = re.search(r"\b(?:from|since)\s+(\d{4})\b", query, re.I)
+    if match:
+        return f"{int(match.group(1)):04d}-01-01"
     return None
 
 

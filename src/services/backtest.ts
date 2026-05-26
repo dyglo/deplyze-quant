@@ -20,7 +20,10 @@ export type SignalType =
   | 'YieldSpread'
   | 'VolatilityZScore'
   | 'MomentumFactor'
-  | 'CarryFactor';
+  | 'CarryFactor'
+  | 'TrendFactor'
+  | 'MeanReversion'
+  | 'CrossAssetMomentum';
 export type Direction = 'Above' | 'Below' | 'CrossUp' | 'CrossDown';
 export type Operator = 'AND' | 'OR';
 export type RebalanceFreq = 'Daily' | 'Weekly' | 'Monthly' | 'OnSignal';
@@ -66,6 +69,9 @@ export interface RiskParams {
 export interface CostModel {
   commission_bps?: number;
   slippage_bps?: number;
+  spread_bps?: number;
+  commission_per_trade?: number;
+  financing_rate_annual?: number;
 }
 
 export interface StrategySpec {
@@ -163,6 +169,60 @@ export interface DollarSummary {
   curve: DollarPoint[];
 }
 
+export interface ExpectancyMetrics {
+  expectancy_per_trade: number;
+  expectancy_per_dollar: number;
+  r_multiple_distribution: number[];
+  system_quality_number: number;
+  avg_win_loss_ratio: number;
+  largest_win_pct: number;
+  largest_loss_pct: number;
+  consecutive_losses_max: number;
+  recovery_factor: number;
+}
+
+export interface WalkForwardWindow {
+  train_start: string;
+  train_end: string;
+  test_start: string;
+  test_end: string;
+  insample_sharpe: number;
+  oos_sharpe: number;
+}
+
+export interface WalkForwardResults {
+  config: { n_windows: number; train_pct: number; test_pct: number; anchored: boolean };
+  windows: WalkForwardWindow[];
+  insample_sharpe: number;
+  oos_sharpe: number;
+  oos_vs_insample_ratio: number;
+  consistency_score: number;
+  warning?: string;
+}
+
+export interface TransactionCostSummary {
+  gross_cagr: number;
+  net_cagr: number;
+  gross_sharpe: number;
+  net_sharpe: number;
+  annual_return_drag: number;
+  sharpe_drag: number;
+  total_cost_pct: number;
+}
+
+export interface SignalConfidence {
+  signal_id: string;
+  avg_confidence_weight: number;
+  risk_on_weight: number;
+  transitional_weight: number;
+  risk_off_weight: number;
+}
+
+export interface EnsembleDiagnostics {
+  combination_method: 'WeightedVote' | 'ConfidenceWeighted' | 'RegimeConditional';
+  signals: SignalConfidence[];
+}
+
 export interface BacktestResults {
   strategy_id: string;
   equity_curve: EquityPoint[];
@@ -172,8 +232,47 @@ export interface BacktestResults {
   signal_attribution: SignalAttribution[];
   comparison?: ComparisonResults;
   dollar_summary?: DollarSummary;
+  expectancy_metrics?: ExpectancyMetrics;
+  walk_forward?: WalkForwardResults;
+  transaction_costs?: TransactionCostSummary;
+  ensemble?: EnsembleDiagnostics;
   bars: number;
   data_through: string;
+}
+
+export type ImprovementCategory =
+  | 'RegimeFilter'
+  | 'SignalRemoval'
+  | 'Rebalance'
+  | 'PositionSizing'
+  | 'Overfitting';
+
+export interface ImprovementActionPatch {
+  type: 'remove_signal' | 'add_or_update_signal' | 'set_rebalance_freq' | 'set_position_sizing';
+  signal_id?: string;
+  signal?: SignalConfig;
+  entry_operator?: Operator;
+  exit_operator?: Operator;
+  value?: RebalanceFreq;
+  method?: PositionSizing['method'];
+  kelly_fraction?: number;
+  target_annual_vol?: number;
+}
+
+export interface ImprovementSuggestion {
+  rank: number;
+  category: ImprovementCategory;
+  title: string;
+  explanation: string;
+  expected_impact: string;
+  action: string;
+  action_patch?: ImprovementActionPatch;
+}
+
+export interface ImprovementResponse {
+  result_id: string;
+  verdict: string;
+  suggestions: ImprovementSuggestion[];
 }
 
 export interface ValidationResult {
@@ -263,6 +362,10 @@ export function requestCommentary(opts: {
   context?: string;
 }): Promise<{ narrative: string }> {
   return gatewayPost<{ narrative: string }>('/backtest/commentary', opts);
+}
+
+export function requestImprovements(result: BacktestResults): Promise<ImprovementResponse> {
+  return gatewayPost<ImprovementResponse>('/backtest/suggest-improvements', result);
 }
 
 /** Trigger per-instrument parquet preparation in quant-engine before running. */

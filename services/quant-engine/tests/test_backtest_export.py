@@ -20,5 +20,15 @@ def test_export_adds_all_engine_momentum_columns():
 
     _add_engine_signal_columns(frame)
 
-    assert {"ts_momentum_12_1", "ts_momentum_63_21", "ts_momentum_21_5"}.issubset(frame.columns)
+    assert {
+        "ts_momentum_12_1",
+        "ts_momentum_63_21",
+        "ts_momentum_21_5",
+        "carry_factor",
+        "trend_200d_slope",
+        "vol_adjusted_momentum",
+        "mean_reversion_z",
+        "yield_curve_score",
+        "cross_asset_momentum",
+    }.issubset(frame.columns)
     assert frame["ts_momentum_21_5"].iloc[-1] > 0

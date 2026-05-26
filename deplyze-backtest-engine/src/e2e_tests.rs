@@ -159,6 +159,7 @@ fn macro_spec(comparison: bool) -> StrategySpec {
         cost_model: CostModel {
             commission_bps: 1.0,
             slippage_bps: 2.0,
+            ..CostModel::default()
         },
         instrument: "SPY".to_string(),
         starting_capital: 10_000.0,

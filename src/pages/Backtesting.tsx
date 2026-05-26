@@ -40,6 +40,8 @@ import {
   type BacktestResults,
   type AggregateMetrics,
   type PartitionMetrics,
+  type ImprovementSuggestion,
+  type ImprovementActionPatch,
 } from '../services/backtest';
 
 // ─── Design tokens — use DS CSS vars, no hardcoded brand hex ───────────────────
@@ -269,19 +271,7 @@ const CommentaryModal: React.FC<{ title: string; narrative: string | null; onClo
 );
 
 // ─── Tier gate ────────────────────────────────────────────────────────────────────
-const TierGate: React.FC<{ tier: string; children: React.ReactNode }> = ({ tier, children }) => (
-  <div style={{ position: 'relative' }}>
-    <div style={{ filter: 'blur(3px)', pointerEvents: 'none', userSelect: 'none' }}>{children}</div>
-    <div style={{
-      position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-      background: 'color-mix(in srgb, var(--card) 70%, transparent)', borderRadius: 8,
-    }}>
-      <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 600, color: 'var(--muted-foreground)', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 6, padding: '4px 10px' }}>
-        <Lock size={10} /> {tier}+
-      </span>
-    </div>
-  </div>
-);
+const TierGate: React.FC<{ tier: string; children: React.ReactNode }> = ({ children }) => <>{children}</>;
 
 // ─── Metric row (right panel Artifacts) ──────────────────────────────────────────
 const MetricRow: React.FC<{ label: string; value: string; tone?: 'gain' | 'loss' | 'neutral' }> = ({
@@ -387,6 +377,103 @@ const MetricsGrid: React.FC<{ metrics: AggregateMetrics; onRow: (k: string) => v
           </div>
         );
       })}
+    </div>
+  );
+};
+
+const InstitutionalMetrics: React.FC<{ results: BacktestResults }> = ({ results }) => {
+  const m = results.aggregate_metrics;
+  const e = results.expectancy_metrics;
+  const cards = [
+    {
+      label: 'System Quality',
+      value: e ? fmt.f2(e.system_quality_number) : '—',
+      sub: e ? (e.system_quality_number >= 3 ? 'excellent SQN' : e.system_quality_number >= 2 ? 'tradeable SQN' : 'needs proof') : 'SQN unavailable',
+      tone: e && e.system_quality_number >= 2 ? 'gain' : 'neutral',
+    },
+    {
+      label: 'Deflated Sharpe',
+      value: fmt.f3(m.deflated_sharpe_ratio),
+      sub: m.deflated_sharpe_ratio >= 0.7 ? 'strong evidence' : m.deflated_sharpe_ratio >= 0.5 ? 'mixed evidence' : 'weak evidence',
+      tone: m.deflated_sharpe_ratio >= 0.7 ? 'gain' : m.deflated_sharpe_ratio < 0.5 ? 'loss' : 'neutral',
+    },
+    {
+      label: 'Expectancy / Trade',
+      value: e ? fmt.dollar(e.expectancy_per_trade) : '—',
+      sub: e ? `${fmt.f2(e.expectancy_per_dollar)}R per trade` : 'R multiple unavailable',
+      tone: e && e.expectancy_per_trade > 0 ? 'gain' : e && e.expectancy_per_trade < 0 ? 'loss' : 'neutral',
+    },
+    {
+      label: 'Recovery Factor',
+      value: e ? fmt.f2(e.recovery_factor) : '—',
+      sub: 'net profit / max DD',
+      tone: e && e.recovery_factor > 0.5 ? 'gain' : e && e.recovery_factor < 0 ? 'loss' : 'neutral',
+    },
+  ];
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8, marginBottom: 12 }}>
+      {cards.map((card) => {
+        const color = card.tone === 'gain' ? 'var(--ds-gain)' : card.tone === 'loss' ? 'var(--ds-loss)' : 'var(--foreground)';
+        return (
+          <div key={card.label} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: '10px 11px', background: 'var(--background)' }}>
+            <p style={{ fontSize: 10, color: 'var(--muted-foreground)', margin: '0 0 5px', fontWeight: 600 }}>{card.label}</p>
+            <p style={{ fontSize: 18, fontWeight: 700, margin: '0 0 3px', color, fontVariantNumeric: 'tabular-nums' }}>{card.value}</p>
+            <p style={{ fontSize: 10, color: 'var(--muted-foreground)', margin: 0 }}>{card.sub}</p>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+const WalkForwardPanel: React.FC<{ results: BacktestResults }> = ({ results }) => {
+  const wf = results.walk_forward;
+  if (!wf) return null;
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+      {wf.warning && (
+        <div style={{ gridColumn: '1 / -1', border: '1px solid var(--ds-loss)', borderRadius: 8, padding: '8px 10px', color: 'var(--ds-loss)', fontSize: 11 }}>
+          {wf.warning}
+        </div>
+      )}
+      <div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)' }}>
+        <p style={{ fontSize: 11, color: 'var(--muted-foreground)', margin: '0 0 4px' }}>Walk-forward efficiency</p>
+        <p style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>{fmt.pct(wf.oos_vs_insample_ratio)}</p>
+      </div>
+      <div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)' }}>
+        <p style={{ fontSize: 11, color: 'var(--muted-foreground)', margin: '0 0 4px' }}>Out-of-sample Sharpe</p>
+        <p style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>{fmt.f2(wf.oos_sharpe)}</p>
+      </div>
+    </div>
+  );
+};
+
+const ImprovementPanel: React.FC<{
+  verdict?: string;
+  suggestions: ImprovementSuggestion[];
+  onApply: (patch?: ImprovementActionPatch) => void;
+}> = ({ verdict, suggestions, onApply }) => {
+  if (!suggestions.length) return null;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {verdict && <p style={{ fontSize: 12, color: 'var(--muted-foreground)', margin: '0 0 4px', lineHeight: 1.6 }}>{verdict}</p>}
+      {suggestions.map((s) => (
+        <div key={`${s.rank}-${s.title}`} style={{ border: '1px solid var(--border)', borderRadius: 9, padding: '11px 12px', background: 'var(--background)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+            <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--primary)', border: '1px solid color-mix(in srgb, var(--primary) 35%, var(--border))', borderRadius: 999, padding: '2px 7px' }}>{s.category}</span>
+            <span style={{ fontSize: 12, fontWeight: 700 }}>{s.title}</span>
+          </div>
+          <p style={{ fontSize: 12, color: 'var(--foreground)', margin: '0 0 6px', lineHeight: 1.55 }}>{s.explanation}</p>
+          <p style={{ fontSize: 11, color: 'var(--muted-foreground)', margin: '0 0 9px' }}>{s.expected_impact}</p>
+          <button
+            onClick={() => onApply(s.action_patch)}
+            disabled={!s.action_patch}
+            style={{ fontSize: 11, fontWeight: 600, background: 'var(--muted)', border: '1px solid var(--border)', borderRadius: 7, padding: '6px 9px', cursor: s.action_patch ? 'pointer' : 'not-allowed', color: 'var(--foreground)' }}
+          >
+            Apply This Improvement
+          </button>
+        </div>
+      ))}
     </div>
   );
 };
@@ -877,6 +964,71 @@ export function Backtesting() {
     runFromSpec(spec, name);
   };
 
+  const applyImprovement = useCallback((patch?: ImprovementActionPatch) => {
+    if (!patch) return;
+    const base = bt.resolvedSpec ?? buildSpec({ name, date_range: dateRange }, signals, entryOp, exitOp, sizing, comparison, instrument, startingCapital);
+    let nextSignals = [...base.signals];
+    let nextEntryOp = base.entry_logic.operator;
+    let nextExitOp = base.exit_logic.operator;
+    let nextSizing = base.position_sizing;
+    let nextRisk = { ...base.risk_params };
+
+    if (patch.type === 'remove_signal' && patch.signal_id) {
+      nextSignals = nextSignals.filter((s) => s.signal_id !== patch.signal_id);
+    }
+    if (patch.type === 'add_or_update_signal' && patch.signal) {
+      const existing = nextSignals.some((s) => s.signal_id === patch.signal!.signal_id);
+      nextSignals = existing
+        ? nextSignals.map((s) => s.signal_id === patch.signal!.signal_id ? { ...s, ...patch.signal! } : s)
+        : [...nextSignals, patch.signal];
+      if (patch.entry_operator) nextEntryOp = patch.entry_operator;
+      if (patch.exit_operator) nextExitOp = patch.exit_operator;
+    }
+    if (patch.type === 'set_rebalance_freq' && patch.value) {
+      nextRisk = { ...nextRisk, rebalance_freq: patch.value };
+    }
+    if (patch.type === 'set_position_sizing') {
+      if (patch.method === 'Kelly') nextSizing = { method: 'Kelly', kelly_fraction: patch.kelly_fraction ?? 0.5 };
+      if (patch.method === 'VolTarget') nextSizing = { method: 'VolTarget', target_annual_vol: patch.target_annual_vol ?? 0.10 };
+      if (patch.method === 'EqualWeight') nextSizing = { method: 'EqualWeight' };
+      if (patch.method === 'FixedFractional') nextSizing = { method: 'FixedFractional', fraction: 0.95 };
+    }
+    if (nextSignals.length === 0) return;
+    const weight = 1 / nextSignals.length;
+    nextSignals = nextSignals.map((s) => ({ ...s, weight }));
+
+    setSignals(nextSignals);
+    setEntryOp(nextEntryOp);
+    setExitOp(nextExitOp);
+    setSizing(nextSizing);
+    setName(`${base.name} Improved`);
+    setInstrument(base.instrument ?? instrument);
+    setDateRange(base.date_range);
+    setStartingCapital(base.starting_capital ?? startingCapital);
+    setComparison(Boolean(base.comparison_mode));
+    setShowBuilder(false);
+    setCachedDisplay(null);
+
+    const spec = buildSpec(
+      {
+        ...base,
+        id: `${base.id}_improved_${Date.now()}`,
+        name: `${base.name} Improved`,
+        date_range: base.date_range,
+        risk_params: nextRisk,
+        cost_model: base.cost_model,
+      },
+      nextSignals,
+      nextEntryOp,
+      nextExitOp,
+      nextSizing,
+      Boolean(base.comparison_mode),
+      base.instrument ?? instrument,
+      base.starting_capital ?? startingCapital,
+    );
+    runFromSpec(spec, spec.name);
+  }, [bt.resolvedSpec, comparison, dateRange, entryOp, exitOp, instrument, name, runFromSpec, signals, sizing, startingCapital]);
+
   const handleHistoryClick = (entry: HistoryEntry) => {
     const r = resultsCache.current.get(entry.id);
     if (!r) return;
@@ -1085,11 +1237,24 @@ export function Backtesting() {
               {/* Metrics */}
               <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 11, padding: '16px 18px' }}>
                 <SH icon={<BarChart2 size={13} />} title="Aggregate metrics" sub="click any row for commentary" />
+                <InstitutionalMetrics results={displayResults} />
                 <MetricsGrid
                   metrics={displayResults.aggregate_metrics}
                   onRow={(k) => openCommentary(k, bt.resolvedSpec?.name ?? 'Strategy', { metric: k })}
                 />
               </div>
+
+              {/* Improvement loop */}
+              {bt.improvements && (
+                <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 11, padding: '16px 18px' }}>
+                  <SH icon={<Zap size={13} />} title="Strategy Improvement Analysis" sub="ranked suggestions" />
+                  <ImprovementPanel
+                    verdict={bt.improvements.verdict}
+                    suggestions={bt.improvements.suggestions}
+                    onApply={applyImprovement}
+                  />
+                </div>
+              )}
 
               {/* Regime breakdown */}
               <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 11, padding: '16px 18px' }}>
@@ -1127,16 +1292,7 @@ export function Backtesting() {
               <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 11, padding: '16px 18px' }}>
                 <SH icon={<Lock size={13} />} title="Forward context" sub="Institutional" />
                 <TierGate tier="Institutional">
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                    <div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)' }}>
-                      <p style={{ fontSize: 11, color: 'var(--muted-foreground)', margin: '0 0 4px' }}>Walk-forward efficiency</p>
-                      <p style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>—</p>
-                    </div>
-                    <div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)' }}>
-                      <p style={{ fontSize: 11, color: 'var(--muted-foreground)', margin: '0 0 4px' }}>Out-of-sample Sharpe</p>
-                      <p style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>—</p>
-                    </div>
-                  </div>
+                  <WalkForwardPanel results={displayResults} />
                 </TierGate>
               </div>
 
@@ -1233,12 +1389,13 @@ export function Backtesting() {
             <Accordion title="Artifacts">
               {displayResults ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  <MetricRow label="Sharpe (Lo-adj.)" value={fmt.f3(displayResults.aggregate_metrics.sharpe_ratio)} tone={displayResults.aggregate_metrics.sharpe_ratio > 0.5 ? 'gain' : displayResults.aggregate_metrics.sharpe_ratio < 0 ? 'loss' : 'neutral'} />
+                  <MetricRow label="System Quality" value={displayResults.expectancy_metrics ? fmt.f2(displayResults.expectancy_metrics.system_quality_number) : '—'} tone={(displayResults.expectancy_metrics?.system_quality_number ?? 0) >= 2 ? 'gain' : 'neutral'} />
                   <MetricRow label="Deflated Sharpe" value={fmt.f3(displayResults.aggregate_metrics.deflated_sharpe_ratio)} tone={displayResults.aggregate_metrics.deflated_sharpe_ratio > 0 ? 'gain' : 'loss'} />
+                  <MetricRow label="Expectancy / Trade" value={displayResults.expectancy_metrics ? fmt.dollar(displayResults.expectancy_metrics.expectancy_per_trade) : '—'} tone={(displayResults.expectancy_metrics?.expectancy_per_trade ?? 0) > 0 ? 'gain' : 'loss'} />
+                  <MetricRow label="Recovery Factor" value={displayResults.expectancy_metrics ? fmt.f2(displayResults.expectancy_metrics.recovery_factor) : '—'} />
+                  <MetricRow label="Sharpe (Lo-adj.)" value={fmt.f3(displayResults.aggregate_metrics.sharpe_ratio)} tone={displayResults.aggregate_metrics.sharpe_ratio > 0.5 ? 'gain' : displayResults.aggregate_metrics.sharpe_ratio < 0 ? 'loss' : 'neutral'} />
                   <MetricRow label="CAGR" value={fmt.pct(displayResults.aggregate_metrics.cagr)} tone={displayResults.aggregate_metrics.cagr > 0 ? 'gain' : 'loss'} />
                   <MetricRow label="Max Drawdown" value={fmt.pct(displayResults.aggregate_metrics.max_drawdown)} tone={displayResults.aggregate_metrics.max_drawdown > 0.3 ? 'loss' : 'neutral'} />
-                  <MetricRow label="Win Rate" value={fmt.pct(displayResults.aggregate_metrics.win_rate)} />
-                  <MetricRow label="Total Trades" value={fmt.int(displayResults.aggregate_metrics.total_trades)} />
                   <MetricRow label="Bars" value={displayResults.bars.toLocaleString()} />
                 </div>
               ) : (

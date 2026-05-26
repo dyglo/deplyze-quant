@@ -15,8 +15,10 @@ import {
   prepareInstrument,
   runBacktest,
   requestCommentary,
+  requestImprovements,
   type StrategySpec,
   type BacktestResults,
+  type ImprovementResponse,
 } from '../services/backtest';
 
 // ─── Public types ──────────────────────────────────────────────────────────────
@@ -39,6 +41,7 @@ export interface BacktestState {
   resolvedSpec: StrategySpec | null;
   results: BacktestResults | null;
   narrative: string | null;
+  improvements: ImprovementResponse | null;
   error: string | null;
   isRunning: boolean;
 }
@@ -55,6 +58,7 @@ const INITIAL_STATE: BacktestState = {
   resolvedSpec: null,
   results: null,
   narrative: null,
+  improvements: null,
   error: null,
   isRunning: false,
 };
@@ -168,11 +172,24 @@ export function useBacktest() {
       });
       if (abortRef.current) return;
       setStep('commentary', { state: 'done', endedAt: Date.now() });
-      setState((s) => ({ ...s, narrative, isRunning: false }));
+      let improvements: ImprovementResponse | null = null;
+      try {
+        improvements = await requestImprovements(results);
+      } catch {
+        improvements = null;
+      }
+      if (abortRef.current) return;
+      setState((s) => ({ ...s, narrative, improvements, isRunning: false }));
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setStep('commentary', { state: 'failed', error: msg, endedAt: Date.now() });
-      setState((s) => ({ ...s, error: msg, isRunning: false }));
+      let improvements: ImprovementResponse | null = null;
+      try {
+        improvements = await requestImprovements(results);
+      } catch {
+        improvements = null;
+      }
+      setState((s) => ({ ...s, error: msg, improvements, isRunning: false }));
     }
   }, []);
 
@@ -244,11 +261,24 @@ export function useBacktest() {
       });
       if (abortRef.current) return;
       setStep('commentary', { state: 'done', endedAt: Date.now() });
-      setState((s) => ({ ...s, narrative, isRunning: false }));
+      let improvements: ImprovementResponse | null = null;
+      try {
+        improvements = await requestImprovements(results);
+      } catch {
+        improvements = null;
+      }
+      if (abortRef.current) return;
+      setState((s) => ({ ...s, narrative, improvements, isRunning: false }));
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setStep('commentary', { state: 'failed', error: msg, endedAt: Date.now() });
-      setState((s) => ({ ...s, error: msg, isRunning: false }));
+      let improvements: ImprovementResponse | null = null;
+      try {
+        improvements = await requestImprovements(results);
+      } catch {
+        improvements = null;
+      }
+      setState((s) => ({ ...s, error: msg, improvements, isRunning: false }));
     }
   }, []);
 

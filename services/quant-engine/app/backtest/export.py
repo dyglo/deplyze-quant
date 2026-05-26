@@ -57,7 +57,17 @@ DEFAULT_FRED_SERIES: list[str] = [
 MIN_BACKTEST_ROWS = 60
 REQUEST_START_TOLERANCE_DAYS = 31
 REQUEST_END_TOLERANCE_DAYS = 10
-ENGINE_SIGNAL_COLUMNS = ["ts_momentum_12_1", "ts_momentum_63_21", "ts_momentum_21_5"]
+ENGINE_SIGNAL_COLUMNS = [
+    "ts_momentum_12_1",
+    "ts_momentum_63_21",
+    "ts_momentum_21_5",
+    "carry_factor",
+    "trend_200d_slope",
+    "vol_adjusted_momentum",
+    "mean_reversion_z",
+    "yield_curve_score",
+    "cross_asset_momentum",
+]
 FRED_PRICE_SERIES = {
     "XAUUSD": "GOLDAMGBD228NLBM",  # London Bullion Market, gold PM fix, USD/troy ounce
 }
@@ -257,6 +267,7 @@ def build_wide_frame(symbol: str, series_ids: list[str], lookback_days: int) -> 
         for col in macro.columns:
             frame[col] = macro_on_spine[col]
 
+    _attach_benchmark_close(frame, symbol, lookback_days)
     _add_engine_signal_columns(frame)
     frame = frame.dropna(subset=["asset_close"]).copy()
     frame.insert(0, "date", [ts.strftime("%Y-%m-%d") for ts in frame.index])
@@ -331,12 +342,47 @@ def _write_parquet_local(df: pd.DataFrame, path: str) -> int:
     return os.path.getsize(abspath)
 
 
+def _causal_zscore(s: pd.Series, window: int = 252) -> pd.Series:
+    mean = s.rolling(window=window, min_periods=max(20, window // 4)).mean()
+    std = s.rolling(window=window, min_periods=max(20, window // 4)).std()
+    return ((s - mean) / std.replace(0.0, pd.NA)).fillna(0.0).clip(-5.0, 5.0)
+
+
 def _add_engine_signal_columns(frame: pd.DataFrame) -> None:
     """Add causal columns the deployed Rust signal resolver expects by name."""
     close = frame["asset_close"]
     frame["ts_momentum_12_1"] = (close.shift(21) / close.shift(252) - 1.0).fillna(0.0)
     frame["ts_momentum_63_21"] = (close.shift(21) / close.shift(63) - 1.0).fillna(0.0)
     frame["ts_momentum_21_5"] = (close.shift(5) / close.shift(21) - 1.0).fillna(0.0)
+
+    ret = frame.get("asset_return", close.pct_change().fillna(0.0))
+    realized_vol = ret.rolling(window=63, min_periods=21).std().replace(0.0, pd.NA)
+    frame["vol_adjusted_momentum"] = _causal_zscore(frame["ts_momentum_63_21"] / realized_vol, 252)
+
+    sma_63 = close.rolling(window=63, min_periods=20).mean()
+    std_63 = close.rolling(window=63, min_periods=20).std().replace(0.0, pd.NA)
+    frame["mean_reversion_z"] = (
+        -((close.shift(1) - sma_63.shift(1)) / std_63.shift(1))
+    ).fillna(0.0).clip(-5.0, 5.0)
+
+    sma_200 = close.rolling(window=200, min_periods=80).mean()
+    frame["trend_200d_slope"] = _causal_zscore(sma_200.shift(1).pct_change(21), 252)
+
+    if "T10Y2Y" in frame:
+        curve = frame["T10Y2Y"]
+    elif "DGS10" in frame and "DGS2" in frame:
+        curve = frame["DGS10"] - frame["DGS2"]
+    else:
+        curve = pd.Series(0.0, index=frame.index)
+    frame["carry_factor"] = _causal_zscore(curve.shift(1), 252)
+    frame["yield_curve_score"] = _causal_zscore(curve.shift(1) + curve.diff().shift(1), 252)
+
+    benchmark_close = frame.get("benchmark_close")
+    if benchmark_close is not None:
+        benchmark_mom = (benchmark_close.shift(21) / benchmark_close.shift(63) - 1.0).fillna(0.0)
+        frame["cross_asset_momentum"] = _causal_zscore(frame["ts_momentum_63_21"] - benchmark_mom, 252)
+    else:
+        frame["cross_asset_momentum"] = 0.0
 
 
 def run_export(
@@ -538,6 +584,28 @@ def _merge_provider_with_warehouse(warehouse: pd.Series, provider: pd.Series) ->
         return warehouse
     merged = pd.concat([provider, warehouse]).sort_index()
     return merged[~merged.index.duplicated(keep="last")]
+
+
+def _attach_benchmark_close(
+    frame: pd.DataFrame,
+    symbol: str,
+    lookback_days: int,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> None:
+    """Attach SPY benchmark history for cross-asset momentum when available."""
+    canonical = _canonical_symbol(symbol)
+    if canonical == "SPY":
+        frame["benchmark_close"] = frame["asset_close"]
+        return
+    benchmark = _load_asset_close("SPY", lookback_days, start_date, end_date)
+    if not _series_covers_request(benchmark, start_date, end_date):
+        provider = _load_ohlcv_from_providers("SPY", lookback_days, start_date, end_date)
+        benchmark = _merge_provider_with_warehouse(benchmark, provider)
+    if benchmark.empty:
+        return
+    benchmark_ff = benchmark.reindex(benchmark.index.union(frame.index)).sort_index().ffill()
+    frame["benchmark_close"] = benchmark_ff.reindex(frame.index)
 
 
 def _load_ohlcv_from_providers(
@@ -745,6 +813,7 @@ def build_wide_frame_with_fallback(
         for col in macro.columns:
             frame[col] = macro_on_spine[col]
 
+    _attach_benchmark_close(frame, canonical, lookback_days, start_date, end_date)
     _add_engine_signal_columns(frame)
     frame = frame.dropna(subset=["asset_close"]).copy()
     frame.insert(0, "date", [ts.strftime("%Y-%m-%d") for ts in frame.index])

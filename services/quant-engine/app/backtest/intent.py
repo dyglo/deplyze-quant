@@ -59,10 +59,14 @@ def resolve_intent(query: str, *, today: datetime | None = None) -> dict[str, An
     starting_capital = _resolve_starting_capital(q)
     risk_per_trade = _resolve_risk_per_trade(q)
 
+    wants_ma_trend = bool(re.search(r"\b(?:moving\s+average|ma|sma|above\s+its\s+\d{2,3}[-\s]?day)\b", q, re.I))
     wants_momentum = bool(re.search(r"\bmomentum\b|\btrend\b|\btactical\b|\bstrong\s+markets?\b", q, re.I))
+    wants_mean_reversion = bool(re.search(r"\bmean\s+reversion\b|\boverbought\b|\boversold\b|\bz[-\s]?score\b", q, re.I))
+    wants_carry = bool(re.search(r"\bcarry\b|\breal\s+yields?\b|\byields?\s+falling\b", q, re.I))
+    wants_cross_asset = bool(re.search(r"\brelative\b|\bcross[-\s]?asset\b|\bversus\s+(?:spy|benchmark)\b", q, re.I))
     wants_macro = bool(re.search(r"\bmacro\b|\bregime\b|\brisk[-\s]?on\b|\brisk[-\s]?off\b|\bstrong\s+markets?\b", q, re.I))
     wants_yield_exit = bool(re.search(r"yield\s+curve|10\s*y\s*[-/]?\s*2\s*y|invert", q, re.I))
-    if not wants_momentum and not wants_macro and not wants_yield_exit:
+    if not any([wants_momentum, wants_ma_trend, wants_mean_reversion, wants_carry, wants_cross_asset, wants_macro, wants_yield_exit]):
         raise IntentResolutionError(
             "Could not identify a supported entry or exit signal in the backtest query.",
             code="NLP_PARSE_FAILED",
@@ -74,12 +78,52 @@ def resolve_intent(query: str, *, today: datetime | None = None) -> dict[str, An
         )
 
     signals: list[dict[str, Any]] = []
-    if wants_momentum:
+    if wants_ma_trend:
+        signals.append(
+            {
+                "signal_id": "trend_200d_slope",
+                "signal_type": "TrendFactor",
+                "threshold": 0.0,
+                "direction": "Above",
+                "weight": 1.0,
+            }
+        )
+    elif wants_momentum:
         momentum_signal = _resolve_momentum_signal(q, start_date, end_date)
         signals.append(
             {
                 "signal_id": momentum_signal,
                 "signal_type": "MomentumFactor",
+                "threshold": 0.0,
+                "direction": "Above",
+                "weight": 1.0,
+            }
+        )
+    if wants_mean_reversion:
+        signals.append(
+            {
+                "signal_id": "mean_reversion_z",
+                "signal_type": "MeanReversion",
+                "threshold": 0.0,
+                "direction": "Above",
+                "weight": 1.0,
+            }
+        )
+    if wants_carry:
+        signals.append(
+            {
+                "signal_id": "carry_factor",
+                "signal_type": "CarryFactor",
+                "threshold": 0.0,
+                "direction": "Above",
+                "weight": 1.0,
+            }
+        )
+    if wants_cross_asset:
+        signals.append(
+            {
+                "signal_id": "cross_asset_momentum",
+                "signal_type": "CrossAssetMomentum",
                 "threshold": 0.0,
                 "direction": "Above",
                 "weight": 1.0,
@@ -110,10 +154,26 @@ def resolve_intent(query: str, *, today: datetime | None = None) -> dict[str, An
 
     entry_conditions: list[dict[str, Any]] = []
     exit_conditions: list[dict[str, Any]] = []
-    if wants_momentum:
+    if wants_ma_trend:
+        entry_conditions.append({"signal_id": "trend_200d_slope", "direction": "Above", "threshold": 0.0})
+        if not wants_yield_exit:
+            exit_conditions.append({"signal_id": "trend_200d_slope", "direction": "Below", "threshold": 0.0})
+    elif wants_momentum:
         entry_conditions.append({"signal_id": momentum_signal, "direction": "Above", "threshold": 0.0})
         if not wants_yield_exit:
             exit_conditions.append({"signal_id": momentum_signal, "direction": "Below", "threshold": 0.0})
+    if wants_mean_reversion:
+        entry_conditions.append({"signal_id": "mean_reversion_z", "direction": "Above", "threshold": 0.0})
+        if not wants_yield_exit:
+            exit_conditions.append({"signal_id": "mean_reversion_z", "direction": "Below", "threshold": 0.0})
+    if wants_carry:
+        entry_conditions.append({"signal_id": "carry_factor", "direction": "Above", "threshold": 0.0})
+        if not wants_yield_exit:
+            exit_conditions.append({"signal_id": "carry_factor", "direction": "Below", "threshold": 0.0})
+    if wants_cross_asset:
+        entry_conditions.append({"signal_id": "cross_asset_momentum", "direction": "Above", "threshold": 0.0})
+        if not wants_yield_exit:
+            exit_conditions.append({"signal_id": "cross_asset_momentum", "direction": "Below", "threshold": 0.0})
     if wants_macro:
         entry_conditions.append({"signal_id": "macro_regime_risk_on", "direction": "Above", "threshold": 0.55})
         if not wants_yield_exit:
@@ -126,8 +186,8 @@ def resolve_intent(query: str, *, today: datetime | None = None) -> dict[str, An
         exit_conditions = [{"signal_id": entry_conditions[0]["signal_id"], "direction": "Below", "threshold": 0.0}]
 
     return {
-        "id": _slug_strategy(instrument, wants_momentum, wants_yield_exit),
-        "name": _strategy_name(instrument, wants_momentum, wants_yield_exit, wants_macro),
+        "id": _slug_strategy(instrument, wants_momentum or wants_ma_trend, wants_yield_exit),
+        "name": _strategy_name(instrument, wants_momentum or wants_ma_trend, wants_yield_exit, wants_macro),
         "instrument": instrument,
         "date_range": {"start_date": start_date, "end_date": end_date},
         "signals": signals,

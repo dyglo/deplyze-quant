@@ -407,6 +407,10 @@ class BacktestResolveIntentRequest(BaseModel):
     query: str
 
 
+class BacktestImprovementRequest(BaseModel):
+    result: dict
+
+
 @router.post("/backtest/resolve-intent")
 async def backtest_resolve_intent(req: BacktestResolveIntentRequest):
     """Resolve a natural-language backtest prompt into a runnable StrategySpec."""
@@ -481,6 +485,14 @@ async def backtest_prepare_instrument(req: BacktestPrepareInstrumentRequest):
         return summary
     except ExportError as e:
         raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.post("/backtest/suggest-improvements")
+async def backtest_suggest_improvements(req: BacktestImprovementRequest):
+    """Return cached, structured strategy-improvement suggestions."""
+    from app.backtest.improvements import suggest_improvements
+
+    return suggest_improvements(req.result)
 
 
 @router.get("/status/{run_id}")

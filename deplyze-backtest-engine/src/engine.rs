@@ -46,10 +46,13 @@ pub struct EngineInputs<'a> {
 
 /// Internal per-run simulation output.
 struct SimResult {
-    net_returns: Vec<f64>, // length n; index 0 == 0.0 (no prior position)
-    equity: Vec<f64>,      // length n; equity[0] == 1.0
-    weights: Vec<f64>,     // target weight decided at each bar t
+    gross_returns: Vec<f64>, // length n; before transaction costs
+    net_returns: Vec<f64>,   // length n; index 0 == 0.0 (no prior position)
+    equity: Vec<f64>,        // length n; equity[0] == 1.0
+    gross_equity: Vec<f64>,  // cost-free equity path for cost-drag reporting
+    weights: Vec<f64>,       // target weight decided at each bar t
     trades: Vec<Trade>,
+    total_cost: f64,
 }
 
 // ─── Public entry point ─────────────────────────────────────────────────────────
@@ -61,13 +64,16 @@ pub fn run(inputs: &EngineInputs) -> BacktestResults {
     // Resolve entry/exit boolean series, then the long/flat gate.
     let entry = eval_logic(&spec.entry_logic, spec, &inputs.signal_series, n);
     let exit = eval_logic(&spec.exit_logic, spec, &inputs.signal_series, n);
-    let gate = build_gate(&entry, &exit);
+    let (gate, ensemble) = build_signal_gate(inputs, &entry, &exit);
 
     let sim = simulate(inputs, &gate);
 
     let aggregate_metrics = aggregate(&sim, n);
     let regime_metrics = partition_by_regime(&sim, inputs.regime);
     let signal_attribution = attribution(inputs, &entry, &exit, &sim);
+    let expectancy_metrics = expectancy(&sim, spec.starting_capital, aggregate_metrics.max_drawdown);
+    let walk_forward = walk_forward(inputs, &sim);
+    let transaction_costs = transaction_cost_summary(&sim);
 
     let (comparison, baseline_equity) = if spec.comparison_mode {
         let (cmp, bline) = compare_to_baseline(inputs, &sim);
@@ -107,6 +113,10 @@ pub fn run(inputs: &EngineInputs) -> BacktestResults {
         signal_attribution,
         comparison,
         dollar_summary: Some(dollar_summary),
+        expectancy_metrics: Some(expectancy_metrics),
+        walk_forward,
+        transaction_costs: Some(transaction_costs),
+        ensemble,
         bars: n,
         data_through: inputs.dates.last().cloned().unwrap_or_default(),
     }
@@ -211,6 +221,144 @@ fn build_gate(entry: &[bool], exit: &[bool]) -> Vec<bool> {
     gate
 }
 
+fn build_signal_gate(
+    inputs: &EngineInputs,
+    entry: &[bool],
+    exit: &[bool],
+) -> (Vec<bool>, Option<EnsembleDiagnostics>) {
+    if inputs.spec.signals.len() <= 1 {
+        return (build_gate(entry, exit), None);
+    }
+    let n = inputs.returns.len();
+    let mut scored: Vec<(&SignalConfig, Vec<f64>)> = Vec::new();
+    for sig in &inputs.spec.signals {
+        let Some(series) = inputs.signal_series.get(&sig.signal_id) else { continue };
+        let signed: Vec<f64> = series
+            .iter()
+            .map(|v| {
+                if !v.is_finite() {
+                    0.0
+                } else {
+                    match sig.direction {
+                        Direction::Above | Direction::CrossUp => *v - sig.threshold,
+                        Direction::Below | Direction::CrossDown => sig.threshold - *v,
+                    }
+                }
+            })
+            .collect();
+        scored.push((sig, trailing_zscore(&signed, 60)));
+    }
+    if scored.is_empty() {
+        return (build_gate(entry, exit), None);
+    }
+
+    let mut in_mkt = false;
+    let mut gate = vec![false; n];
+    let mut weight_sums: Vec<[f64; 3]> = vec![[0.0; 3]; scored.len()];
+    let mut weight_counts: Vec<[u32; 3]> = vec![[0; 3]; scored.len()];
+
+    for t in 0..n {
+        let regime = inputs.regime.filtered_state.get(t).copied().unwrap_or(0).min(2) as usize;
+        let raw_weights: Vec<f64> = scored
+            .iter()
+            .map(|(sig, score)| {
+                let learned = trailing_regime_sharpe(score, inputs.returns, &inputs.regime.filtered_state, t, regime);
+                sig.weight.max(0.0) * learned.max(0.0)
+            })
+            .collect();
+        let fallback = raw_weights.iter().all(|w| *w <= 1e-12);
+        let mut denom = 0.0;
+        let mut combined = 0.0;
+        for (i, (sig, score)) in scored.iter().enumerate() {
+            let w = if fallback { sig.weight.max(0.0) } else { raw_weights[i] };
+            denom += w.abs();
+            combined += w * score[t];
+            weight_sums[i][regime] += w;
+            weight_counts[i][regime] += 1;
+        }
+        let ensemble_entry = denom > 1e-12 && combined / denom > 0.0;
+        if in_mkt {
+            if exit[t] || !ensemble_entry {
+                in_mkt = false;
+            }
+        } else if entry[t] || ensemble_entry {
+            in_mkt = true;
+        }
+        gate[t] = in_mkt;
+    }
+
+    let diagnostics = scored
+        .iter()
+        .enumerate()
+        .map(|(i, (sig, _))| {
+            let avg = |r: usize| {
+                if weight_counts[i][r] > 0 {
+                    weight_sums[i][r] / weight_counts[i][r] as f64
+                } else {
+                    0.0
+                }
+            };
+            SignalConfidence {
+                signal_id: sig.signal_id.clone(),
+                avg_confidence_weight: (avg(0) + avg(1) + avg(2)) / 3.0,
+                risk_on_weight: avg(0),
+                transitional_weight: avg(1),
+                risk_off_weight: avg(2),
+            }
+        })
+        .collect();
+
+    (
+        gate,
+        Some(EnsembleDiagnostics {
+            combination_method: CombinationMethod::RegimeConditional,
+            signals: diagnostics,
+        }),
+    )
+}
+
+fn trailing_zscore(values: &[f64], window: usize) -> Vec<f64> {
+    let mut out = vec![0.0; values.len()];
+    for t in 0..values.len() {
+        let lo = (t + 1).saturating_sub(window);
+        let slice: Vec<f64> = values[lo..=t].iter().copied().filter(|v| v.is_finite()).collect();
+        if slice.len() < 10 {
+            continue;
+        }
+        let m = metrics::Moments::from_slice(&slice);
+        if m.std_dev > 1e-12 {
+            out[t] = ((values[t] - m.mean) / m.std_dev).clamp(-5.0, 5.0);
+        }
+    }
+    out
+}
+
+fn trailing_regime_sharpe(
+    score: &[f64],
+    returns: &[f64],
+    states: &[u8],
+    t: usize,
+    regime: usize,
+) -> f64 {
+    let lo = t.saturating_sub(252);
+    let mut contrib = Vec::new();
+    for k in lo..t {
+        if k + 1 >= returns.len() || states.get(k).copied().unwrap_or(0) as usize != regime {
+            continue;
+        }
+        contrib.push(score[k].signum() * returns[k + 1]);
+    }
+    if contrib.len() < 20 {
+        return 1.0;
+    }
+    let m = metrics::Moments::from_slice(&contrib);
+    if m.std_dev <= 1e-12 {
+        1.0
+    } else {
+        (m.mean / m.std_dev * (252.0_f64).sqrt()).max(0.0)
+    }
+}
+
 // ─── Simulation ─────────────────────────────────────────────────────────────────
 
 fn as_fraction(pct: f64) -> f64 {
@@ -272,13 +420,25 @@ fn simulate(inputs: &EngineInputs, gate: &[bool]) -> SimResult {
     let spec = inputs.spec;
     let cap = as_fraction(spec.risk_params.position_cap_pct);
     let max_dd = as_fraction(spec.risk_params.max_drawdown_pct);
-    let cost_rate = (spec.cost_model.commission_bps + spec.cost_model.slippage_bps) / 10_000.0;
+    let cost_rate = (spec.cost_model.commission_bps
+        + spec.cost_model.slippage_bps
+        + spec.cost_model.spread_bps)
+        / 10_000.0;
+    let fixed_commission_return = if spec.starting_capital > 0.0 {
+        spec.cost_model.commission_per_trade / spec.starting_capital
+    } else {
+        0.0
+    };
+    let financing_daily = spec.cost_model.financing_rate_annual / 252.0;
 
     let mut weights = vec![0.0f64; n];
+    let mut gross_returns = vec![0.0f64; n];
     let mut net_returns = vec![0.0f64; n];
     let mut equity = vec![1.0f64; n];
+    let mut gross_equity = vec![1.0f64; n];
     let mut peak = 1.0f64;
     let mut cooldown = 0usize;
+    let mut total_cost = 0.0f64;
 
     let mut prev_w = 0.0f64;
 
@@ -304,19 +464,26 @@ fn simulate(inputs: &EngineInputs, gate: &[bool]) -> SimResult {
 
         // Turnover cost charged at t for moving prev_w -> target.
         let turnover = (target - prev_w).abs();
-        let cost = turnover * cost_rate;
+        let fixed = if turnover > 1e-9 { fixed_commission_return } else { 0.0 };
+        let financing = target.max(1.0) - 1.0;
+        let financing_cost = financing.max(0.0) * financing_daily;
+        let cost = turnover * cost_rate + fixed + financing_cost;
+        total_cost += cost.max(0.0);
 
         // t+1 execution: this weight earns next bar's return.
         if t + 1 < n {
             let pnl = target * returns[t + 1];
+            gross_returns[t + 1] = pnl;
             let net = pnl - cost;
             net_returns[t + 1] = net;
+            gross_equity[t + 1] = (gross_equity[t] * (1.0 + pnl)).max(1e-9);
             equity[t + 1] = (equity[t] * (1.0 + net)).max(1e-9);
             if equity[t + 1] > peak {
                 peak = equity[t + 1];
             }
         } else {
             // Final bar: only the exit cost hits equity (no future return).
+            gross_equity[t] = gross_equity[t].max(1e-9);
             equity[t] = (equity[t] * (1.0 - cost)).max(1e-9);
         }
         prev_w = target;
@@ -324,14 +491,13 @@ fn simulate(inputs: &EngineInputs, gate: &[bool]) -> SimResult {
 
     let trades = extract_trades(inputs, &weights, &net_returns);
 
-    SimResult { net_returns, equity, weights, trades }
+    SimResult { gross_returns, net_returns, equity, gross_equity, weights, trades, total_cost }
 }
 
 /// Reconstruct trades from the realized weight path (entry when weight goes
 /// 0→>0, exit when it returns to 0).
 fn extract_trades(inputs: &EngineInputs, weights: &[f64], net_returns: &[f64]) -> Vec<Trade> {
     let n = weights.len();
-    let dates = inputs.dates;
     let mut trades = Vec::new();
     let mut open: Option<(usize, f64)> = None; // (entry_idx, compounded growth)
 
@@ -462,6 +628,127 @@ fn aggregate(sim: &SimResult, _n: usize) -> AggregateMetrics {
         skewness: m.skewness,
         excess_kurtosis: m.excess_kurtosis,
     }
+}
+
+fn expectancy(sim: &SimResult, starting_capital: f64, max_drawdown: f64) -> ExpectancyMetrics {
+    if sim.trades.is_empty() {
+        return ExpectancyMetrics::default();
+    }
+    let wins: Vec<f64> = sim.trades.iter().filter(|t| t.pnl_pct > 0.0).map(|t| t.pnl_pct).collect();
+    let losses: Vec<f64> = sim.trades.iter().filter(|t| t.pnl_pct <= 0.0).map(|t| t.pnl_pct.abs()).collect();
+    let win_rate = wins.len() as f64 / sim.trades.len() as f64;
+    let avg_win = if wins.is_empty() { 0.0 } else { wins.iter().sum::<f64>() / wins.len() as f64 };
+    let avg_loss = if losses.is_empty() { 0.0 } else { losses.iter().sum::<f64>() / losses.len() as f64 };
+    let expectancy_pct = win_rate * avg_win - (1.0 - win_rate) * avg_loss;
+    let r_multiple_distribution: Vec<f64> = if avg_loss > 1e-12 {
+        sim.trades.iter().map(|t| t.pnl_pct / avg_loss).collect()
+    } else {
+        Vec::new()
+    };
+    let sqn = if r_multiple_distribution.len() >= 2 {
+        let m = metrics::Moments::from_slice(&r_multiple_distribution);
+        if m.std_dev > 1e-12 {
+            m.mean / m.std_dev * (r_multiple_distribution.len() as f64).sqrt()
+        } else {
+            0.0
+        }
+    } else {
+        0.0
+    };
+    let mut current_losses = 0u32;
+    let mut max_losses = 0u32;
+    for t in &sim.trades {
+        if t.pnl_pct <= 0.0 {
+            current_losses += 1;
+            max_losses = max_losses.max(current_losses);
+        } else {
+            current_losses = 0;
+        }
+    }
+    let total_net_profit = sim.equity.last().copied().unwrap_or(1.0) - 1.0;
+    ExpectancyMetrics {
+        expectancy_per_trade: expectancy_pct * starting_capital,
+        expectancy_per_dollar: if avg_loss > 1e-12 { expectancy_pct / avg_loss } else { 0.0 },
+        r_multiple_distribution,
+        system_quality_number: sqn,
+        avg_win_loss_ratio: if avg_loss > 1e-12 { avg_win / avg_loss } else { 0.0 },
+        largest_win_pct: wins.iter().copied().fold(0.0, f64::max),
+        largest_loss_pct: losses.iter().copied().fold(0.0, f64::max),
+        consecutive_losses_max: max_losses,
+        recovery_factor: if max_drawdown > 1e-12 { total_net_profit / max_drawdown } else { 0.0 },
+    }
+}
+
+fn transaction_cost_summary(sim: &SimResult) -> TransactionCostSummary {
+    let gross_r: Vec<f64> = sim.gross_returns.iter().skip(1).copied().collect();
+    let net_r: Vec<f64> = sim.net_returns.iter().skip(1).copied().collect();
+    let gross_cagr = metrics::cagr(&sim.gross_equity);
+    let net_cagr = metrics::cagr(&sim.equity);
+    let gross_sharpe = metrics::lo_annualized_sharpe(&gross_r, 0.0);
+    let net_sharpe = metrics::lo_annualized_sharpe(&net_r, 0.0);
+    TransactionCostSummary {
+        gross_cagr,
+        net_cagr,
+        gross_sharpe,
+        net_sharpe,
+        annual_return_drag: gross_cagr - net_cagr,
+        sharpe_drag: gross_sharpe - net_sharpe,
+        total_cost_pct: sim.total_cost,
+    }
+}
+
+fn walk_forward(inputs: &EngineInputs, sim: &SimResult) -> Option<WalkForwardResults> {
+    let n = sim.net_returns.len();
+    if n < 252 * 3 {
+        return None;
+    }
+    let cfg = WalkForwardConfig { n_windows: 5, train_pct: 0.70, test_pct: 0.30, anchored: true };
+    let step = (n / cfg.n_windows as usize).max(1);
+    let mut windows = Vec::new();
+    for w in 1..=cfg.n_windows as usize {
+        let test_start = w * step;
+        if test_start + 20 >= n {
+            break;
+        }
+        let test_end = ((w + 1) * step).min(n - 1);
+        if test_end <= test_start + 20 {
+            continue;
+        }
+        let train_start = 1usize;
+        let train_end = test_start.saturating_sub(1);
+        let train = &sim.net_returns[train_start..=train_end];
+        let test = &sim.net_returns[test_start..=test_end];
+        windows.push(WalkForwardWindow {
+            train_start: inputs.dates.get(train_start).cloned().unwrap_or_default(),
+            train_end: inputs.dates.get(train_end).cloned().unwrap_or_default(),
+            test_start: inputs.dates.get(test_start).cloned().unwrap_or_default(),
+            test_end: inputs.dates.get(test_end).cloned().unwrap_or_default(),
+            insample_sharpe: metrics::lo_annualized_sharpe(train, 0.0),
+            oos_sharpe: metrics::lo_annualized_sharpe(test, 0.0),
+        });
+    }
+    if windows.is_empty() {
+        return None;
+    }
+    let insample = windows.iter().map(|w| w.insample_sharpe).sum::<f64>() / windows.len() as f64;
+    let oos = windows.iter().map(|w| w.oos_sharpe).sum::<f64>() / windows.len() as f64;
+    let ratio = if insample.abs() > 1e-12 { oos / insample } else { 0.0 };
+    let consistency =
+        windows.iter().filter(|w| w.oos_sharpe > 0.0).count() as f64 / windows.len() as f64;
+    let warning = if ratio < 0.5 {
+        Some("Overfitting detected - this strategy may not perform as shown in live trading.".to_string())
+    } else {
+        None
+    };
+    Some(WalkForwardResults {
+        config: cfg,
+        windows,
+        insample_sharpe: insample,
+        oos_sharpe: oos,
+        oos_vs_insample_ratio: ratio,
+        consistency_score: consistency,
+        warning,
+    })
 }
 
 fn partition_by_regime(sim: &SimResult, regime: &RegimeLabels) -> RegimeMetrics {
@@ -737,7 +1024,7 @@ mod tests {
             },
             comparison_mode: false,
             tier: UserTier::Pro,
-            cost_model: CostModel { commission_bps: 1.0, slippage_bps: 2.0 },
+            cost_model: CostModel { commission_bps: 1.0, slippage_bps: 2.0, ..CostModel::default() },
             instrument: "SPY".to_string(),
             starting_capital: 10_000.0,
         }
@@ -785,7 +1072,7 @@ mod tests {
         let sig = vec![1.0; n]; // always long
         let returns = vec![0.0; n]; // flat market
         let mut spec = base_spec();
-        spec.cost_model = CostModel { commission_bps: 50.0, slippage_bps: 50.0 };
+        spec.cost_model = CostModel { commission_bps: 50.0, slippage_bps: 50.0, ..CostModel::default() };
         let regime = make_regime(n);
         let mut series = HashMap::new();
         series.insert("sig".to_string(), sig);
@@ -800,6 +1087,27 @@ mod tests {
         let res = run(&inputs);
         // One entry => one turnover cost => equity below 1 in a flat market.
         assert!(res.equity_curve.last().unwrap().value < 1.0);
+    }
+
+    #[test]
+    fn expectancy_computes_sqn_from_r_multiples() {
+        let sim = SimResult {
+            gross_returns: vec![0.0; 5],
+            net_returns: vec![0.0; 5],
+            equity: vec![1.0, 1.1, 1.05, 1.2, 1.15],
+            gross_equity: vec![1.0, 1.1, 1.05, 1.2, 1.15],
+            weights: vec![0.0; 5],
+            total_cost: 0.0,
+            trades: vec![
+                Trade { entry_ts: "2020-01-01".into(), exit_ts: "2020-01-02".into(), pnl_pct: 0.10, regime_at_entry: 0, duration_days: 1.0, signals_triggered: vec![] },
+                Trade { entry_ts: "2020-01-03".into(), exit_ts: "2020-01-04".into(), pnl_pct: -0.05, regime_at_entry: 0, duration_days: 1.0, signals_triggered: vec![] },
+                Trade { entry_ts: "2020-01-05".into(), exit_ts: "2020-01-06".into(), pnl_pct: 0.15, regime_at_entry: 0, duration_days: 1.0, signals_triggered: vec![] },
+            ],
+        };
+        let e = expectancy(&sim, 100_000.0, 0.10);
+        assert!((e.expectancy_per_trade - 6_666.6667).abs() < 1.0);
+        assert!(e.system_quality_number > 0.0);
+        assert_eq!(e.consecutive_losses_max, 1);
     }
 
     #[test]

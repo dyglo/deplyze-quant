@@ -98,6 +98,24 @@ pub fn signal_library() -> SignalLibrary {
                 &["asset_close"],
                 "ratio",
             ),
+            s(
+                "ts_momentum_63_21",
+                SignalType::MomentumFactor,
+                "Time-Series Momentum 3-1",
+                "3-month minus 1-month trailing price momentum of the traded instrument.",
+                UserTier::Pro,
+                &["asset_close"],
+                "ratio",
+            ),
+            s(
+                "ts_momentum_21_5",
+                SignalType::MomentumFactor,
+                "Time-Series Momentum 1M-1W",
+                "1-month minus 1-week trailing price momentum of the traded instrument.",
+                UserTier::Pro,
+                &["asset_close"],
+                "ratio",
+            ),
         ],
     }
 }

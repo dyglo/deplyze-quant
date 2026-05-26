@@ -196,6 +196,8 @@ router.post('/run', async (req, res, next) => {
 const PrepareBody = z.object({
   symbol: z.string().min(1).max(20),
   lookback_days: z.number().int().positive().optional(),
+  start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  end_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
 
 router.post('/prepare-instrument', async (req, res, next) => {
@@ -204,14 +206,14 @@ router.post('/prepare-instrument', async (req, res, next) => {
       res.status(503).json({ error: 'Quant engine not configured', code: 'ENGINE_UNCONFIGURED' });
       return;
     }
-    const { symbol, lookback_days } = PrepareBody.parse(req.body);
+    const { symbol, lookback_days, start_date, end_date } = PrepareBody.parse(req.body);
     const idToken = await getEngineIdToken(QUANT_ENGINE_URL);
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (idToken) headers['Authorization'] = `Bearer ${idToken}`;
     const resp = await fetch(`${QUANT_ENGINE_URL}/pipelines/backtest/prepare-instrument`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ symbol: symbol.toUpperCase(), lookback_days }),
+      body: JSON.stringify({ symbol: symbol.toUpperCase(), lookback_days, start_date, end_date }),
       signal: AbortSignal.timeout(300_000), // 5 min — provider fetch + GCS upload
     });
     const json = await resp.json().catch(() => ({}));
@@ -241,6 +243,73 @@ function extractJson(s: string): unknown | null {
 const ResolveBody = z.object({
   query: z.string().min(2).max(1000),
 });
+
+const SIGNAL_ID_MAP: Record<string, string> = {
+  macro_regime: 'macro_regime_risk_on',
+  yield_spread: 'yield_curve_10y2y',
+  vol_zscore: 'realized_vol_z',
+  momentum_12_1: 'ts_momentum_12_1',
+};
+
+function normalizeSignalId(signalId: string): string {
+  return SIGNAL_ID_MAP[signalId] ?? signalId;
+}
+
+function normalizeSpec(candidate: unknown): unknown {
+  if (!candidate || typeof candidate !== 'object') return candidate;
+  const spec = JSON.parse(JSON.stringify(candidate)) as Record<string, unknown>;
+  if (typeof spec.instrument === 'string') {
+    const compact = spec.instrument.toUpperCase().replace(/[/-]/g, '');
+    spec.instrument = compact === 'GOLD' || compact === 'XAU' ? 'XAUUSD' : compact;
+  }
+  if (Array.isArray(spec.signals)) {
+    spec.signals = spec.signals.map((signal) => {
+      if (!signal || typeof signal !== 'object') return signal;
+      const next = { ...(signal as Record<string, unknown>) };
+      if (typeof next.signal_id === 'string') next.signal_id = normalizeSignalId(next.signal_id);
+      return next;
+    });
+  }
+  for (const key of ['entry_logic', 'exit_logic']) {
+    const logic = spec[key];
+    if (!logic || typeof logic !== 'object') continue;
+    const nextLogic = { ...(logic as Record<string, unknown>) };
+    if (Array.isArray(nextLogic.conditions)) {
+      nextLogic.conditions = nextLogic.conditions.map((condition) => {
+        if (typeof condition === 'string') return normalizeSignalId(condition);
+        if (!condition || typeof condition !== 'object') return condition;
+        const next = { ...(condition as Record<string, unknown>) };
+        if (typeof next.signal_id === 'string') next.signal_id = normalizeSignalId(next.signal_id);
+        return next;
+      });
+    }
+    spec[key] = nextLogic;
+  }
+  return spec;
+}
+
+async function resolveViaQuantEngine(query: string): Promise<unknown | null> {
+  if (!QUANT_ENGINE_URL) return null;
+  const idToken = await getEngineIdToken(QUANT_ENGINE_URL);
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (idToken) headers.Authorization = `Bearer ${idToken}`;
+  const resp = await fetch(`${QUANT_ENGINE_URL}/pipelines/backtest/resolve-intent`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ query }),
+    signal: AbortSignal.timeout(30_000),
+  });
+  const json = await resp.json().catch(() => ({}));
+  if (resp.ok && json && typeof json === 'object' && 'spec' in json) {
+    return (json as { spec: unknown }).spec;
+  }
+  const message =
+    json && typeof json === 'object' && 'detail' in json
+      ? JSON.stringify((json as { detail: unknown }).detail)
+      : `status ${resp.status}`;
+  console.warn('[backtest.resolve] quant resolver failed', { status: resp.status, message });
+  return null;
+}
 
 const RESOLVE_SYSTEM = `
 You are the Backtesting Strategy Planner for an institutional quantitative research terminal.
@@ -290,13 +359,13 @@ StrategySpec schema:
 }
 
 Available signal catalog (use exact signal_id and signal_type):
-- signal_id: "macro_regime",         signal_type: "MacroRegime",       threshold: 0 (Above=risk-on, Below=risk-off)
-- signal_id: "yield_spread",         signal_type: "YieldSpread",       threshold: 0 (Above=positive spread)
-- signal_id: "vol_zscore",           signal_type: "VolatilityZScore",  threshold: 1.0 (Below=low vol, Above=high vol)
-- signal_id: "momentum_12_1",        signal_type: "MomentumFactor",    threshold: 0 (Above=positive momentum)
-- signal_id: "carry_factor",         signal_type: "CarryFactor",       threshold: 0
-- signal_id: "narrative_score",      signal_type: "NarrativeScore",    threshold: 0
+- signal_id: "macro_regime_risk_on", signal_type: "MacroRegime",       threshold: 0 (Above=risk-on, Below=risk-off)
+- signal_id: "yield_curve_10y2y",    signal_type: "YieldSpread",       threshold: 0 (CrossDown=inversion)
+- signal_id: "yield_curve_10y3m",    signal_type: "YieldSpread",       threshold: 0 (CrossDown=inversion)
+- signal_id: "realized_vol_z",       signal_type: "VolatilityZScore",  threshold: 1.0 (Below=low vol, Above=high vol)
+- signal_id: "ts_momentum_12_1",     signal_type: "MomentumFactor",    threshold: 0 (Above=positive momentum)
 - signal_id: "liquidity_composite",  signal_type: "MacroRegime",       threshold: 0
+- signal_id: "inflation_persistence", signal_type: "MacroRegime",      threshold: 0
 
 Rules:
 - Exit conditions should be the logical inverse of entry (e.g. entry Above 0 → exit Below 0).
@@ -310,18 +379,31 @@ Rules:
 router.post('/resolve', async (req, res, next) => {
   try {
     const { query } = ResolveBody.parse(req.body);
+    const quantSpec = await resolveViaQuantEngine(query);
+    if (quantSpec) {
+      const spec = StrategySpec.parse(normalizeSpec(quantSpec));
+      res.json({ spec });
+      return;
+    }
+
     const today = new Date().toISOString().slice(0, 10);
     const raw = await geminiGenerate({
       systemInstruction: RESOLVE_SYSTEM,
       prompt: `Today is ${today}.\n\nUser strategy idea: ${query}\n\nReturn the StrategySpec JSON now.`,
       temperature: 0.1,
     });
+    console.info('[backtest.resolve] raw_llm_output', { sample: raw.slice(0, 2000) });
     const spec = extractJson(raw);
     if (!spec) {
-      res.status(502).json({ error: 'Resolver returned unparseable output', raw });
+      res.status(502).json({
+        error: 'Resolver returned unparseable output',
+        code: 'NLP_PARSE_FAILED',
+        clarifying_question: 'Could you restate the instrument, time window, entry signal, and exit rule?',
+      });
       return;
     }
-    res.json({ spec });
+    const parsed = StrategySpec.parse(normalizeSpec(spec));
+    res.json({ spec: parsed });
   } catch (err) { next(err); }
 });
 

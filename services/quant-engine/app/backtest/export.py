@@ -25,7 +25,7 @@ from __future__ import annotations
 import asyncio
 import io
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 import structlog
@@ -54,16 +54,65 @@ DEFAULT_FRED_SERIES: list[str] = [
 ]
 
 MIN_BACKTEST_ROWS = 60
+FRED_PRICE_SERIES = {
+    "XAUUSD": "GOLDAMGBD228NLBM",  # London Bullion Market, gold PM fix, USD/troy ounce
+}
+WORLD_BANK_GOLD_URL = "https://api.db.nomics.world/v22/series/WB/commodity_prices/FGOLD-1W?observations=1"
 
 
 class ExportError(Exception):
     """Raised when the export cannot produce a usable dataset."""
 
 
-def _load_asset_close(symbol: str, lookback_days: int) -> pd.Series:
+def _canonical_symbol(symbol: str) -> str:
+    s = (symbol or "").strip().upper().replace("/", "").replace("-", "")
+    if s in {"GOLD", "XAU", "XAUUSD"}:
+        return "XAUUSD"
+    if s in {"SILVER", "XAG", "XAGUSD"}:
+        return "XAGUSD"
+    return s
+
+
+def _range_bounds(
+    lookback_days: int,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> tuple[str, str]:
+    end_dt = (
+        datetime.strptime(end_date, "%Y-%m-%d").date()
+        if end_date
+        else datetime.now(timezone.utc).date()
+    )
+    start_dt = (
+        datetime.strptime(start_date, "%Y-%m-%d").date()
+        if start_date
+        else end_dt - timedelta(days=lookback_days)
+    )
+    if start_dt >= end_dt:
+        raise ExportError("start_date must be before end_date")
+    return start_dt.isoformat(), end_dt.isoformat()
+
+
+def _date_predicate(alias: str = "observation_time") -> str:
+    return (
+        f"AND DATE({alias}) BETWEEN DATE(@start_date) AND DATE(@end_date)"
+    )
+
+
+def _lookback_predicate(alias: str = "observation_time") -> str:
+    return f"AND DATE({alias}) >= DATE_SUB(CURRENT_DATE(), INTERVAL @lookback DAY)"
+
+
+def _load_asset_close(
+    symbol: str,
+    lookback_days: int,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> pd.Series:
     """Adjusted close (fallback close) for ``symbol``, indexed by date."""
     bq = get_bigquery_client()
     ohlcv = fully_qualified(settings.BQ_DATASET_CLEANED, "ohlcv_cleaned")
+    date_filter = _date_predicate() if start_date and end_date else _lookback_predicate()
     sql = f"""
         SELECT
           DATE(observation_time) AS d,
@@ -72,10 +121,10 @@ def _load_asset_close(symbol: str, lookback_days: int) -> pd.Series:
         WHERE symbol = @symbol
           AND observation_time IS NOT NULL
           AND COALESCE(adjusted_close, close) IS NOT NULL
-          AND DATE(observation_time) >= DATE_SUB(CURRENT_DATE(), INTERVAL @lookback DAY)
+          {date_filter}
         ORDER BY d ASC
     """
-    job_config = _query_params(symbol=symbol, lookback=lookback_days)
+    job_config = _query_params(symbol=symbol, lookback=lookback_days, start_date=start_date, end_date=end_date)
     rows = list(bq.query(sql, job_config=job_config).result())
     if not rows:
         return pd.Series(dtype="float64")
@@ -87,10 +136,16 @@ def _load_asset_close(symbol: str, lookback_days: int) -> pd.Series:
     return s[~s.index.duplicated(keep="last")]
 
 
-def _load_asset_returns(symbol: str, lookback_days: int) -> pd.Series:
+def _load_asset_returns(
+    symbol: str,
+    lookback_days: int,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> pd.Series:
     """Daily simple returns for ``symbol`` from features.returns_features."""
     bq = get_bigquery_client()
     rf = fully_qualified(settings.BQ_DATASET_FEATURES, "returns_features")
+    date_filter = _date_predicate() if start_date and end_date else _lookback_predicate()
     sql = f"""
         SELECT
           DATE(observation_time) AS d,
@@ -99,10 +154,10 @@ def _load_asset_returns(symbol: str, lookback_days: int) -> pd.Series:
         WHERE symbol = @symbol
           AND observation_time IS NOT NULL
           AND simple_return_1d IS NOT NULL
-          AND DATE(observation_time) >= DATE_SUB(CURRENT_DATE(), INTERVAL @lookback DAY)
+          {date_filter}
         ORDER BY d ASC
     """
-    job_config = _query_params(symbol=symbol, lookback=lookback_days)
+    job_config = _query_params(symbol=symbol, lookback=lookback_days, start_date=start_date, end_date=end_date)
     try:
         rows = list(bq.query(sql, job_config=job_config).result())
     except Exception as e:  # table may not exist in some environments
@@ -117,11 +172,17 @@ def _load_asset_returns(symbol: str, lookback_days: int) -> pd.Series:
     return s[~s.index.duplicated(keep="last")]
 
 
-def _load_macro_wide(series_ids: list[str], lookback_days: int) -> pd.DataFrame:
+def _load_macro_wide(
+    series_ids: list[str],
+    lookback_days: int,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> pd.DataFrame:
     """Pivot cleaned.macro_cleaned long → wide (date index, series columns)."""
     bq = get_bigquery_client()
     cleaned = fully_qualified(settings.BQ_DATASET_CLEANED, "macro_cleaned")
     in_list = ", ".join(f"'{s}'" for s in series_ids)
+    date_filter = _date_predicate() if start_date and end_date else _lookback_predicate()
     sql = f"""
         SELECT
           series_id,
@@ -131,10 +192,10 @@ def _load_macro_wide(series_ids: list[str], lookback_days: int) -> pd.DataFrame:
         WHERE series_id IN ({in_list})
           AND value IS NOT NULL
           AND observation_time IS NOT NULL
-          AND DATE(observation_time) >= DATE_SUB(CURRENT_DATE(), INTERVAL @lookback DAY)
+          {date_filter}
         ORDER BY d ASC
     """
-    job_config = _query_params(lookback=lookback_days)
+    job_config = _query_params(lookback=lookback_days, start_date=start_date, end_date=end_date)
     rows = list(bq.query(sql, job_config=job_config).result())
     if not rows:
         return pd.DataFrame()
@@ -153,6 +214,10 @@ def _query_params(**kwargs):
         params.append(bigquery.ScalarQueryParameter("symbol", "STRING", kwargs["symbol"]))
     if "lookback" in kwargs:
         params.append(bigquery.ScalarQueryParameter("lookback", "INT64", int(kwargs["lookback"])))
+    if kwargs.get("start_date"):
+        params.append(bigquery.ScalarQueryParameter("start_date", "STRING", kwargs["start_date"]))
+    if kwargs.get("end_date"):
+        params.append(bigquery.ScalarQueryParameter("end_date", "STRING", kwargs["end_date"]))
     return bigquery.QueryJobConfig(query_parameters=params)
 
 
@@ -188,6 +253,7 @@ def build_wide_frame(symbol: str, series_ids: list[str], lookback_days: int) -> 
         for col in macro.columns:
             frame[col] = macro_on_spine[col]
 
+    _add_engine_signal_columns(frame)
     frame = frame.dropna(subset=["asset_close"]).copy()
     frame.insert(0, "date", [ts.strftime("%Y-%m-%d") for ts in frame.index])
     frame = frame.reset_index(drop=True)
@@ -204,12 +270,38 @@ def _upload_parquet(df: pd.DataFrame, bucket_name: str, object_path: str) -> int
     return len(data)
 
 
+def _download_parquet(bucket_name: str, object_path: str) -> pd.DataFrame | None:
+    client = storage.Client(project=settings.GCP_PROJECT_ID)
+    blob = client.bucket(bucket_name).blob(object_path)
+    if not blob.exists():
+        return None
+    return pd.read_parquet(io.BytesIO(blob.download_as_bytes()), engine="pyarrow")
+
+
+def _frame_starts_near_request(df: pd.DataFrame, start_date: str) -> bool:
+    if df is None or df.empty or "date" not in df:
+        return False
+    first = datetime.strptime(str(df["date"].iloc[0]), "%Y-%m-%d").date()
+    requested = datetime.strptime(start_date, "%Y-%m-%d").date()
+    return first <= requested + timedelta(days=31)
+
+
+def _cached_frame_is_usable(df: pd.DataFrame, start_date: str) -> bool:
+    return _frame_starts_near_request(df, start_date) and "ts_momentum_12_1" in df.columns
+
+
 def _write_parquet_local(df: pd.DataFrame, path: str) -> int:
     """Write the parquet to a local path (dev only). Returns bytes written."""
     abspath = os.path.abspath(path)
     os.makedirs(os.path.dirname(abspath) or ".", exist_ok=True)
     df.to_parquet(abspath, engine="pyarrow", index=False, compression="snappy")
     return os.path.getsize(abspath)
+
+
+def _add_engine_signal_columns(frame: pd.DataFrame) -> None:
+    """Add causal columns the deployed Rust signal resolver expects by name."""
+    close = frame["asset_close"]
+    frame["ts_momentum_12_1"] = (close.shift(21) / close.shift(252) - 1.0).fillna(0.0)
 
 
 def run_export(
@@ -270,24 +362,148 @@ def run_export(
 
 # ─── Provider fallback for instruments not in the warehouse ──────────────────
 
-def _load_ohlcv_from_providers(symbol: str, lookback_days: int) -> pd.Series:
+def _load_ohlcv_from_fred(symbol: str, start_date: str, end_date: str) -> pd.Series:
+    """Fetch long-history instrument prices from FRED when Historical Research
+    uses FRED for that symbol (notably XAU/USD gold)."""
+    import httpx
+
+    canonical = _canonical_symbol(symbol)
+    series_id = FRED_PRICE_SERIES.get(canonical)
+    if not series_id or not settings.FRED_API_KEY:
+        return pd.Series(dtype="float64")
+    try:
+        r = httpx.get(
+            "https://api.stlouisfed.org/fred/series/observations",
+            params={
+                "series_id": series_id,
+                "api_key": settings.FRED_API_KEY,
+                "file_type": "json",
+                "limit": 100000,
+                "sort_order": "asc",
+                "units": "lin",
+                "observation_start": start_date,
+                "observation_end": end_date,
+            },
+            timeout=30,
+        )
+        if r.status_code != 200:
+            log.warning("backtest.fred_fallback_failed", symbol=symbol, status=r.status_code)
+            return pd.Series(dtype="float64")
+        observations = r.json().get("observations", [])
+        s = pd.Series(
+            {
+                pd.Timestamp(row["date"]): float(row["value"])
+                for row in observations
+                if row.get("date") and row.get("value") not in (None, ".")
+            },
+            dtype="float64",
+        ).sort_index()
+        if not s.empty:
+            log.info("backtest.ohlcv_provider_fallback", provider="fred", symbol=symbol, rows=len(s))
+        return s[~s.index.duplicated(keep="last")]
+    except Exception as e:
+        log.warning("backtest.fred_fallback_failed", symbol=symbol, error=str(e))
+        return pd.Series(dtype="float64")
+
+
+def _eodhd_symbol(symbol: str) -> str:
+    canonical = _canonical_symbol(symbol)
+    if canonical in {"XAUUSD", "XAGUSD"}:
+        return f"{canonical}.FOREX"
+    if "." in symbol:
+        return symbol.upper()
+    return f"{canonical}.US"
+
+
+def _twelve_data_symbol(symbol: str) -> str:
+    canonical = _canonical_symbol(symbol)
+    if canonical == "XAUUSD":
+        return "XAU/USD"
+    if canonical == "XAGUSD":
+        return "XAG/USD"
+    return canonical
+
+
+def _load_ohlcv_from_world_bank_gold(symbol: str, start_date: str, end_date: str) -> pd.Series:
+    """World Bank Pink Sheet gold history via DBNomics.
+
+    DBNomics exposes annual gold prices back to 1960. For backtesting we use it
+    only as a long-history bridge before paid daily providers begin; values are
+    expanded monthly, not invented tick data.
+    """
+    import httpx
+
+    if _canonical_symbol(symbol) != "XAUUSD":
+        return pd.Series(dtype="float64")
+    try:
+        r = httpx.get(WORLD_BANK_GOLD_URL, timeout=30)
+        if r.status_code != 200:
+            log.warning("backtest.world_bank_gold_failed", symbol=symbol, status=r.status_code)
+            return pd.Series(dtype="float64")
+        docs = r.json().get("series", {}).get("docs", [])
+        if not docs:
+            return pd.Series(dtype="float64")
+        doc = docs[0]
+        periods = doc.get("period", [])
+        values = doc.get("value", [])
+        start = pd.Timestamp(start_date)
+        end = pd.Timestamp(end_date)
+        points: dict[pd.Timestamp, float] = {}
+        for period, value in zip(periods, values):
+            if value in (None, "NA", ""):
+                continue
+            try:
+                year = int(str(period)[:4])
+                px = float(value)
+            except (TypeError, ValueError):
+                continue
+            year_start = pd.Timestamp(year=year, month=1, day=1)
+            year_end = pd.Timestamp(year=year, month=12, day=1)
+            for ts in pd.date_range(max(start, year_start), min(end, year_end), freq="MS"):
+                points[ts] = px
+        s = pd.Series(points, dtype="float64").sort_index()
+        if not s.empty:
+            log.info("backtest.ohlcv_provider_fallback", provider="world_bank_dbnomics", symbol=symbol, rows=len(s))
+        return s[~s.index.duplicated(keep="last")]
+    except Exception as e:
+        log.warning("backtest.world_bank_gold_failed", symbol=symbol, error=str(e))
+        return pd.Series(dtype="float64")
+
+
+def _merge_long_history(primary: pd.Series, long_history: pd.Series) -> pd.Series:
+    if primary.empty or long_history.empty:
+        return primary if not primary.empty else long_history
+    first_primary = primary.index.min()
+    prefix = long_history[long_history.index < first_primary]
+    if prefix.empty:
+        return primary
+    merged = pd.concat([prefix, primary]).sort_index()
+    return merged[~merged.index.duplicated(keep="last")]
+
+
+def _load_ohlcv_from_providers(
+    symbol: str,
+    lookback_days: int,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> pd.Series:
     """Fetch OHLCV from external providers (EODHD → Twelve Data → FMP) when the
     BQ warehouse has no data for ``symbol``. Returns adjusted-close indexed by date.
     Mirrors the provider chain in the gateway market route."""
-    from datetime import timedelta
     import httpx
 
-    end_dt = datetime.now(timezone.utc).date()
-    start_dt = end_dt - timedelta(days=lookback_days)
-    from_str = start_dt.strftime("%Y-%m-%d")
-    to_str = end_dt.strftime("%Y-%m-%d")
+    from_str, to_str = _range_bounds(lookback_days, start_date, end_date)
+    canonical = _canonical_symbol(symbol)
+
+    fred_series = _load_ohlcv_from_fred(canonical, from_str, to_str)
+    if not fred_series.empty:
+        return fred_series
+    world_bank_series = _load_ohlcv_from_world_bank_gold(canonical, from_str, to_str)
 
     # EODHD
     if settings.EODHD_API_KEY:
         try:
-            ticker = symbol.upper()
-            if "." not in ticker:
-                ticker = f"{ticker}.US"
+            ticker = _eodhd_symbol(canonical)
             url = f"https://eodhd.com/api/eod/{ticker}"
             r = httpx.get(url, params={
                 "api_token": settings.EODHD_API_KEY,
@@ -305,8 +521,8 @@ def _load_ohlcv_from_providers(symbol: str, lookback_days: int) -> pd.Series:
                         dtype="float64",
                     ).sort_index()
                     if not s.empty:
-                        log.info("backtest.ohlcv_provider_fallback", provider="eodhd", symbol=symbol, rows=len(s))
-                        return s[~s.index.duplicated(keep="last")]
+                        log.info("backtest.ohlcv_provider_fallback", provider="eodhd", symbol=canonical, rows=len(s))
+                        return _merge_long_history(s[~s.index.duplicated(keep="last")], world_bank_series)
         except Exception as e:
             log.warning("backtest.eodhd_fallback_failed", symbol=symbol, error=str(e))
 
@@ -314,7 +530,7 @@ def _load_ohlcv_from_providers(symbol: str, lookback_days: int) -> pd.Series:
     if settings.TWELVE_DATA_API_KEY:
         try:
             r = httpx.get("https://api.twelvedata.com/time_series", params={
-                "symbol": symbol,
+                "symbol": _twelve_data_symbol(canonical),
                 "interval": "1day",
                 "start_date": from_str,
                 "end_date": to_str,
@@ -330,15 +546,15 @@ def _load_ohlcv_from_providers(symbol: str, lookback_days: int) -> pd.Series:
                         dtype="float64",
                     ).sort_index()
                     if not s.empty:
-                        log.info("backtest.ohlcv_provider_fallback", provider="twelve_data", symbol=symbol, rows=len(s))
-                        return s[~s.index.duplicated(keep="last")]
+                        log.info("backtest.ohlcv_provider_fallback", provider="twelve_data", symbol=canonical, rows=len(s))
+                        return _merge_long_history(s[~s.index.duplicated(keep="last")], world_bank_series)
         except Exception as e:
             log.warning("backtest.twelve_data_fallback_failed", symbol=symbol, error=str(e))
 
     # FMP
     if settings.FMP_API_KEY:
         try:
-            r = httpx.get(f"https://financialmodelingprep.com/api/v3/historical-price-full/{symbol}", params={
+            r = httpx.get(f"https://financialmodelingprep.com/api/v3/historical-price-full/{canonical}", params={
                 "apikey": settings.FMP_API_KEY,
                 "from": from_str,
                 "to": to_str,
@@ -353,26 +569,36 @@ def _load_ohlcv_from_providers(symbol: str, lookback_days: int) -> pd.Series:
                         dtype="float64",
                     ).sort_index()
                     if not s.empty:
-                        log.info("backtest.ohlcv_provider_fallback", provider="fmp", symbol=symbol, rows=len(s))
-                        return s[~s.index.duplicated(keep="last")]
+                        log.info("backtest.ohlcv_provider_fallback", provider="fmp", symbol=canonical, rows=len(s))
+                        return _merge_long_history(s[~s.index.duplicated(keep="last")], world_bank_series)
         except Exception as e:
             log.warning("backtest.fmp_fallback_failed", symbol=symbol, error=str(e))
 
-    return pd.Series(dtype="float64")
+    return world_bank_series
 
 
-def build_wide_frame_with_fallback(symbol: str, series_ids: list[str], lookback_days: int) -> pd.DataFrame:
+def build_wide_frame_with_fallback(
+    symbol: str,
+    series_ids: list[str],
+    lookback_days: int,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> pd.DataFrame:
     """Like ``build_wide_frame`` but falls back to external providers if the BQ
     warehouse has no OHLCV data for ``symbol``."""
-    close = _load_asset_close(symbol, lookback_days)
+    canonical = _canonical_symbol(symbol)
+    close = _load_asset_close(canonical, lookback_days, start_date, end_date)
     if close.empty:
-        log.info("backtest.bq_miss_trying_providers", symbol=symbol)
-        close = _load_ohlcv_from_providers(symbol, lookback_days)
+        log.info("backtest.bq_miss_trying_providers", symbol=canonical)
+        close = _load_ohlcv_from_providers(canonical, lookback_days, start_date, end_date)
     if close.empty:
-        raise ExportError(f"no OHLCV data for symbol '{symbol}' in warehouse or external providers")
+        raise ExportError(
+            f"Historical data for {canonical} is unavailable for the requested range "
+            "with the current warehouse/provider configuration."
+        )
 
-    returns = _load_asset_returns(symbol, lookback_days)
-    macro = _load_macro_wide(series_ids, lookback_days)
+    returns = _load_asset_returns(canonical, lookback_days, start_date, end_date)
+    macro = _load_macro_wide(series_ids, lookback_days, start_date, end_date)
 
     spine = close.index
     frame = pd.DataFrame(index=spine)
@@ -393,6 +619,7 @@ def build_wide_frame_with_fallback(symbol: str, series_ids: list[str], lookback_
         for col in macro.columns:
             frame[col] = macro_on_spine[col]
 
+    _add_engine_signal_columns(frame)
     frame = frame.dropna(subset=["asset_close"]).copy()
     frame.insert(0, "date", [ts.strftime("%Y-%m-%d") for ts in frame.index])
     frame = frame.reset_index(drop=True)
@@ -403,40 +630,77 @@ def run_instrument_export(
     symbol: str,
     series_ids: list[str] | None = None,
     lookback_days: int | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
 ) -> dict:
-    """Build and upload a per-instrument parquet to GCS at ``instruments/{SYMBOL}.parquet``.
+    """Build and upload a per-instrument parquet to GCS.
 
     Called on-demand by the gateway when a user selects an instrument for
     backtesting. Uses the same warehouse-first, provider-fallback data path as the
-    gateway market route. Returns a summary dict; raises ``ExportError`` on failure.
+    gateway market route. Range-specific provider fetches are cached at
+    ``instruments/{SYMBOL}/{start}_{end}.parquet`` and copied to the engine's
+    current lookup object, ``instruments/{SYMBOL}.parquet``.
     """
     if not settings.GCS_BACKTEST_BUCKET:
         raise ExportError("GCS_BACKTEST_BUCKET is not configured")
 
     series_ids = series_ids or DEFAULT_FRED_SERIES
     lookback_days = lookback_days or settings.BACKTEST_INSTRUMENT_LOOKBACK_DAYS
-    object_path = f"instruments/{symbol.upper()}.parquet"
+    canonical = _canonical_symbol(symbol)
+    range_start, range_end = _range_bounds(lookback_days, start_date, end_date)
+    cache_object_path = f"instruments/{canonical}/{range_start}_{range_end}.parquet"
+    engine_object_path = f"instruments/{canonical}.parquet"
 
     started = datetime.now(timezone.utc)
-    frame = build_wide_frame_with_fallback(symbol.upper(), series_ids, lookback_days)
-    if len(frame) < MIN_BACKTEST_ROWS:
+    frame = _download_parquet(settings.GCS_BACKTEST_BUCKET, cache_object_path)
+    cache_hit = frame is not None and _cached_frame_is_usable(frame, range_start)
+    if frame is not None and not cache_hit:
+        log.info(
+            "backtest.instrument_cache_incomplete",
+            symbol=canonical,
+            cache_object_path=cache_object_path,
+            data_from=frame["date"].iloc[0] if len(frame) else None,
+            requested_start=range_start,
+        )
+        frame = None
+    if frame is None:
+        frame = build_wide_frame_with_fallback(
+            canonical,
+            series_ids,
+            lookback_days,
+            range_start,
+            range_end,
+        )
+    if start_date and not _frame_starts_near_request(frame, range_start):
+        data_from = frame["date"].iloc[0] if len(frame) else "unknown"
         raise ExportError(
-            f"insufficient OHLCV data for symbol '{symbol}': {len(frame)} rows "
-            f"(need >= {MIN_BACKTEST_ROWS})"
+            f"Historical data for {canonical} only goes back to {data_from} "
+            f"with the current provider; requested {range_start} to {range_end}."
+        )
+    if len(frame) < MIN_BACKTEST_ROWS:
+        data_from = frame["date"].iloc[0] if len(frame) else "unknown"
+        raise ExportError(
+            f"Historical data for {canonical} only has {len(frame)} rows "
+            f"from {data_from} to {range_end} with the current provider "
+            f"(need >= {MIN_BACKTEST_ROWS})."
         )
     macro_cols = [c for c in frame.columns if c not in ("date", "asset_close", "asset_return")]
-    size = _upload_parquet(frame, settings.GCS_BACKTEST_BUCKET, object_path)
+    cache_size = 0 if cache_hit else _upload_parquet(frame, settings.GCS_BACKTEST_BUCKET, cache_object_path)
+    engine_size = _upload_parquet(frame, settings.GCS_BACKTEST_BUCKET, engine_object_path)
 
     summary = {
         "status": "ok",
-        "symbol": symbol.upper(),
+        "symbol": canonical,
         "rows": int(len(frame)),
         "macro_columns": sorted(macro_cols),
         "macro_column_count": len(macro_cols),
         "data_from": frame["date"].iloc[0] if len(frame) else None,
         "data_through": frame["date"].iloc[-1] if len(frame) else None,
-        "gcs_uri": f"gs://{settings.GCS_BACKTEST_BUCKET}/{object_path}",
-        "bytes_written": size,
+        "gcs_uri": f"gs://{settings.GCS_BACKTEST_BUCKET}/{engine_object_path}",
+        "cache_gcs_uri": f"gs://{settings.GCS_BACKTEST_BUCKET}/{cache_object_path}",
+        "cache_hit": cache_hit,
+        "cache_bytes_written": cache_size,
+        "bytes_written": engine_size,
         "duration_s": round((datetime.now(timezone.utc) - started).total_seconds(), 2),
     }
     log.info("backtest.instrument_export_complete", **summary)

@@ -49,6 +49,9 @@ const SignalType = z.enum([
   'VolatilityZScore',
   'MomentumFactor',
   'CarryFactor',
+  'TrendFactor',
+  'MeanReversion',
+  'CrossAssetMomentum',
 ]);
 const Operator = z.enum(['AND', 'OR']);
 const RebalanceFreq = z.enum(['Daily', 'Weekly', 'Monthly', 'OnSignal']);
@@ -96,6 +99,9 @@ const CostModel = z
   .object({
     commission_bps: z.number().optional(),
     slippage_bps: z.number().optional(),
+    spread_bps: z.number().optional(),
+    commission_per_trade: z.number().optional(),
+    financing_rate_annual: z.number().optional(),
   })
   .optional();
 
@@ -244,6 +250,28 @@ const ResolveBody = z.object({
   query: z.string().min(2).max(1000),
 });
 
+// ─── POST /backtest/suggest-improvements ─────────────────────────────────────
+
+router.post('/suggest-improvements', async (req, res, next) => {
+  try {
+    if (!QUANT_ENGINE_URL) {
+      res.status(503).json({ error: 'Quant engine not configured', code: 'ENGINE_UNCONFIGURED' });
+      return;
+    }
+    const idToken = await getEngineIdToken(QUANT_ENGINE_URL);
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (idToken) headers.Authorization = `Bearer ${idToken}`;
+    const resp = await fetch(`${QUANT_ENGINE_URL}/pipelines/backtest/suggest-improvements`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ result: req.body }),
+      signal: AbortSignal.timeout(30_000),
+    });
+    const json = await resp.json().catch(() => ({}));
+    res.status(resp.status).json(json);
+  } catch (err) { next(err); }
+});
+
 const SIGNAL_ID_MAP: Record<string, string> = {
   macro_regime: 'macro_regime_risk_on',
   yield_spread: 'yield_curve_10y2y',
@@ -251,6 +279,13 @@ const SIGNAL_ID_MAP: Record<string, string> = {
   momentum_12_1: 'ts_momentum_12_1',
   momentum_3_1: 'ts_momentum_63_21',
   momentum_1m_1w: 'ts_momentum_21_5',
+  trend_200d: 'trend_200d_slope',
+  sma_200_trend: 'trend_200d_slope',
+  vol_adjusted_momentum: 'vol_adjusted_momentum',
+  mean_reversion: 'mean_reversion_z',
+  carry: 'carry_factor',
+  yield_curve_score: 'yield_curve_score',
+  cross_asset_momentum: 'cross_asset_momentum',
 };
 
 function normalizeSignalId(signalId: string): string {
@@ -370,9 +405,18 @@ Available signal catalog (use exact signal_id and signal_type):
 - signal_id: "ts_momentum_21_5",     signal_type: "MomentumFactor",    threshold: 0 (Above=positive 1-month momentum excluding the latest week)
 - signal_id: "liquidity_composite",  signal_type: "MacroRegime",       threshold: 0
 - signal_id: "inflation_persistence", signal_type: "MacroRegime",      threshold: 0
+- signal_id: "carry_factor",          signal_type: "CarryFactor",       threshold: 0
+- signal_id: "trend_200d_slope",      signal_type: "TrendFactor",       threshold: 0
+- signal_id: "vol_adjusted_momentum", signal_type: "MomentumFactor",    threshold: 0
+- signal_id: "mean_reversion_z",      signal_type: "MeanReversion",     threshold: 0
+- signal_id: "yield_curve_score",     signal_type: "YieldSpread",       threshold: 0
+- signal_id: "cross_asset_momentum",  signal_type: "CrossAssetMomentum", threshold: 0
 
 Rules:
 - Use shorter momentum signals for shorter or more tactical windows: ts_momentum_21_5 for windows under 2 years, ts_momentum_63_21 for tactical/weekly/3-8 year windows, and ts_momentum_12_1 for long-term windows.
+- Map moving-average/trend prompts to trend_200d_slope unless the prompt explicitly asks for short-term tactical momentum.
+- Map mean reversion, overbought/oversold, and z-score reversal prompts to mean_reversion_z.
+- Prefer 2-4 complementary signals for broad tactical prompts, not a single signal, when the user asks for macro/regime/risk-aware behavior.
 - Exit conditions should be the logical inverse of entry (e.g. entry Above 0 → exit Below 0).
 - Use "VolTarget" sizing for risk-aware ideas, "FixedFractional" for simple ideas.
 - If the user mentions a specific instrument, use it; otherwise default to "SPY".

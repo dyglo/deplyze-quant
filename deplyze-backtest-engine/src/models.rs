@@ -24,6 +24,9 @@ pub enum SignalType {
     VolatilityZScore,
     MomentumFactor,
     CarryFactor,
+    TrendFactor,
+    MeanReversion,
+    CrossAssetMomentum,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -46,6 +49,13 @@ pub enum RebalanceFreq {
     Weekly,
     Monthly,
     OnSignal,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CombinationMethod {
+    WeightedVote,
+    ConfidenceWeighted,
+    RegimeConditional,
 }
 
 // ─── Strategy spec ────────────────────────────────────────────────────────────
@@ -161,6 +171,18 @@ pub struct CostModel {
     /// Half-spread + market-impact slippage, in bps of notional traded.
     #[serde(default = "default_slippage_bps")]
     pub slippage_bps: f64,
+    /// Explicit bid-ask spread assumption, in basis points. Optional so older
+    /// clients using commission_bps + slippage_bps keep their behavior.
+    #[serde(default = "default_spread_bps")]
+    pub spread_bps: f64,
+    /// Fixed commission charged when turnover occurs. Converted into a return
+    /// drag using starting_capital.
+    #[serde(default = "default_commission_per_trade")]
+    pub commission_per_trade: f64,
+    /// Overnight financing rate for leveraged exposure. Long/flat Sprint 1
+    /// books usually pay no financing unless target weight exceeds 1.0.
+    #[serde(default = "default_financing_rate_annual")]
+    pub financing_rate_annual: f64,
 }
 
 impl Default for CostModel {
@@ -168,6 +190,9 @@ impl Default for CostModel {
         Self {
             commission_bps: default_commission_bps(),
             slippage_bps: default_slippage_bps(),
+            spread_bps: default_spread_bps(),
+            commission_per_trade: default_commission_per_trade(),
+            financing_rate_annual: default_financing_rate_annual(),
         }
     }
 }
@@ -177,6 +202,15 @@ fn default_commission_bps() -> f64 {
 }
 fn default_slippage_bps() -> f64 {
     2.0
+}
+fn default_spread_bps() -> f64 {
+    0.0
+}
+fn default_commission_per_trade() -> f64 {
+    0.0
+}
+fn default_financing_rate_annual() -> f64 {
+    0.0
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -311,6 +345,75 @@ pub struct ComparisonResults {
     pub signal_value_score: f64, // 0.0..=1.0 composite of signal value-add
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ExpectancyMetrics {
+    pub expectancy_per_trade: f64,
+    pub expectancy_per_dollar: f64,
+    pub r_multiple_distribution: Vec<f64>,
+    pub system_quality_number: f64,
+    pub avg_win_loss_ratio: f64,
+    pub largest_win_pct: f64,
+    pub largest_loss_pct: f64,
+    pub consecutive_losses_max: u32,
+    pub recovery_factor: f64,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct WalkForwardConfig {
+    pub n_windows: u32,
+    pub train_pct: f64,
+    pub test_pct: f64,
+    pub anchored: bool,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct WalkForwardWindow {
+    pub train_start: String,
+    pub train_end: String,
+    pub test_start: String,
+    pub test_end: String,
+    pub insample_sharpe: f64,
+    pub oos_sharpe: f64,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct WalkForwardResults {
+    pub config: WalkForwardConfig,
+    pub windows: Vec<WalkForwardWindow>,
+    pub insample_sharpe: f64,
+    pub oos_sharpe: f64,
+    pub oos_vs_insample_ratio: f64,
+    pub consistency_score: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub warning: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct TransactionCostSummary {
+    pub gross_cagr: f64,
+    pub net_cagr: f64,
+    pub gross_sharpe: f64,
+    pub net_sharpe: f64,
+    pub annual_return_drag: f64,
+    pub sharpe_drag: f64,
+    pub total_cost_pct: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SignalConfidence {
+    pub signal_id: String,
+    pub avg_confidence_weight: f64,
+    pub risk_on_weight: f64,
+    pub transitional_weight: f64,
+    pub risk_off_weight: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnsembleDiagnostics {
+    pub combination_method: CombinationMethod,
+    pub signals: Vec<SignalConfidence>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BacktestResults {
     pub strategy_id: String,
@@ -323,6 +426,14 @@ pub struct BacktestResults {
     pub comparison: Option<ComparisonResults>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dollar_summary: Option<DollarSummary>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expectancy_metrics: Option<ExpectancyMetrics>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub walk_forward: Option<WalkForwardResults>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transaction_costs: Option<TransactionCostSummary>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ensemble: Option<EnsembleDiagnostics>,
     pub bars: usize,
     pub data_through: String,
 }

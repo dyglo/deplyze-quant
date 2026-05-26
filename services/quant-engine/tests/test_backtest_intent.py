@@ -50,3 +50,25 @@ def test_resolve_short_window_qqq_uses_short_momentum():
     assert spec["instrument"] == "QQQ"
     assert spec["date_range"] == {"start_date": "2024-06-01", "end_date": "2026-05-26"}
     assert {signal["signal_id"] for signal in spec["signals"]} == {"ts_momentum_21_5"}
+
+
+def test_resolve_moving_average_prompt_uses_trend_signal():
+    spec = resolve_intent(
+        "Backtest an AAPL momentum strategy from 2018 to today with $100,000 starting capital. "
+        "Enter when price is above its 50-day moving average and exit when it falls below.",
+        today=datetime(2026, 5, 26, tzinfo=timezone.utc),
+    )
+
+    assert spec["instrument"] == "AAPL"
+    assert {signal["signal_id"] for signal in spec["signals"]} == {"trend_200d_slope"}
+
+
+def test_resolve_real_yields_prompt_uses_carry_signal():
+    spec = resolve_intent(
+        "Backtest a GLD strategy from 2010 to today with $100,000 starting capital. "
+        "Stay invested when real yields are falling or GLD above 100-day MA.",
+        today=datetime(2026, 5, 26, tzinfo=timezone.utc),
+    )
+
+    assert spec["instrument"] == "GLD"
+    assert {"carry_factor", "trend_200d_slope"}.issubset({signal["signal_id"] for signal in spec["signals"]})

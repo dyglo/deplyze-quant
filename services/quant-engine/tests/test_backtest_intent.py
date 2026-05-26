@@ -20,3 +20,33 @@ def test_resolve_gold_momentum_yield_curve_prompt():
     assert spec["exit_logic"]["conditions"] == [
         {"signal_id": "yield_curve_10y2y", "direction": "CrossDown", "threshold": 0.0}
     ]
+
+
+def test_resolve_tactical_spy_uses_macro_and_medium_momentum():
+    spec = resolve_intent(
+        "Backtest a tactical SPY strategy over the last 10 years with $100,000 starting capital. "
+        "Use momentum and macro regime to stay invested during strong markets, reduce exposure "
+        "during risk-off conditions, and compare against buy-and-hold.",
+        today=datetime(2026, 5, 26, tzinfo=timezone.utc),
+    )
+
+    assert spec["instrument"] == "SPY"
+    assert spec["date_range"] == {"start_date": "2016-01-01", "end_date": "2026-05-26"}
+    assert spec["starting_capital"] == 100000.0
+
+    signal_ids = {signal["signal_id"] for signal in spec["signals"]}
+    assert signal_ids == {"ts_momentum_63_21", "macro_regime_risk_on"}
+    assert spec["entry_logic"]["operator"] == "AND"
+    assert spec["exit_logic"]["operator"] == "OR"
+
+
+def test_resolve_short_window_qqq_uses_short_momentum():
+    spec = resolve_intent(
+        "Backtest a QQQ momentum strategy from June 2024 to today with $100,000 starting capital. "
+        "Enter when momentum is positive, exit when momentum turns negative, and compare against buy-and-hold.",
+        today=datetime(2026, 5, 26, tzinfo=timezone.utc),
+    )
+
+    assert spec["instrument"] == "QQQ"
+    assert spec["date_range"] == {"start_date": "2024-06-01", "end_date": "2026-05-26"}
+    assert {signal["signal_id"] for signal in spec["signals"]} == {"ts_momentum_21_5"}

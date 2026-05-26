@@ -25,6 +25,7 @@ from __future__ import annotations
 import asyncio
 import io
 import os
+import re
 from datetime import datetime, timedelta, timezone
 
 import pandas as pd
@@ -54,6 +55,9 @@ DEFAULT_FRED_SERIES: list[str] = [
 ]
 
 MIN_BACKTEST_ROWS = 60
+REQUEST_START_TOLERANCE_DAYS = 31
+REQUEST_END_TOLERANCE_DAYS = 10
+ENGINE_SIGNAL_COLUMNS = ["ts_momentum_12_1", "ts_momentum_63_21", "ts_momentum_21_5"]
 FRED_PRICE_SERIES = {
     "XAUUSD": "GOLDAMGBD228NLBM",  # London Bullion Market, gold PM fix, USD/troy ounce
 }
@@ -283,11 +287,40 @@ def _frame_starts_near_request(df: pd.DataFrame, start_date: str) -> bool:
         return False
     first = datetime.strptime(str(df["date"].iloc[0]), "%Y-%m-%d").date()
     requested = datetime.strptime(start_date, "%Y-%m-%d").date()
-    return first <= requested + timedelta(days=31)
+    return first <= requested + timedelta(days=REQUEST_START_TOLERANCE_DAYS)
 
 
-def _cached_frame_is_usable(df: pd.DataFrame, start_date: str) -> bool:
-    return _frame_starts_near_request(df, start_date) and "ts_momentum_12_1" in df.columns
+def _frame_ends_near_request(df: pd.DataFrame, end_date: str) -> bool:
+    if df is None or df.empty or "date" not in df:
+        return False
+    last = datetime.strptime(str(df["date"].iloc[-1]), "%Y-%m-%d").date()
+    requested = datetime.strptime(end_date, "%Y-%m-%d").date()
+    return last >= requested - timedelta(days=REQUEST_END_TOLERANCE_DAYS)
+
+
+def _cached_frame_is_usable(df: pd.DataFrame, start_date: str, end_date: str) -> bool:
+    return (
+        _frame_starts_near_request(df, start_date)
+        and _frame_ends_near_request(df, end_date)
+        and all(col in df.columns for col in ENGINE_SIGNAL_COLUMNS)
+        and len(df) >= MIN_BACKTEST_ROWS
+    )
+
+
+def _series_covers_request(s: pd.Series, start_date: str | None, end_date: str | None) -> bool:
+    if s.empty:
+        return False
+    if start_date:
+        first = s.index.min().date()
+        requested_start = datetime.strptime(start_date, "%Y-%m-%d").date()
+        if first > requested_start + timedelta(days=REQUEST_START_TOLERANCE_DAYS):
+            return False
+    if end_date:
+        last = s.index.max().date()
+        requested_end = datetime.strptime(end_date, "%Y-%m-%d").date()
+        if last < requested_end - timedelta(days=REQUEST_END_TOLERANCE_DAYS):
+            return False
+    return len(s) >= MIN_BACKTEST_ROWS
 
 
 def _write_parquet_local(df: pd.DataFrame, path: str) -> int:
@@ -302,6 +335,8 @@ def _add_engine_signal_columns(frame: pd.DataFrame) -> None:
     """Add causal columns the deployed Rust signal resolver expects by name."""
     close = frame["asset_close"]
     frame["ts_momentum_12_1"] = (close.shift(21) / close.shift(252) - 1.0).fillna(0.0)
+    frame["ts_momentum_63_21"] = (close.shift(21) / close.shift(63) - 1.0).fillna(0.0)
+    frame["ts_momentum_21_5"] = (close.shift(5) / close.shift(21) - 1.0).fillna(0.0)
 
 
 def run_export(
@@ -424,6 +459,19 @@ def _twelve_data_symbol(symbol: str) -> str:
     return canonical
 
 
+def _stooq_symbol(symbol: str) -> str | None:
+    """Map common US equity/ETF tickers to Stooq daily-history symbols.
+
+    Stooq is intentionally used as a no-key historical fallback. It will not
+    cover every global instrument, but it gives production a resilient path for
+    common US equities and ETFs when paid providers are rate-limited.
+    """
+    canonical = _canonical_symbol(symbol)
+    if re.match(r"^[A-Z]{1,5}$", canonical):
+        return f"{canonical.lower()}.us"
+    return None
+
+
 def _load_ohlcv_from_world_bank_gold(symbol: str, start_date: str, end_date: str) -> pd.Series:
     """World Bank Pink Sheet gold history via DBNomics.
 
@@ -478,6 +526,17 @@ def _merge_long_history(primary: pd.Series, long_history: pd.Series) -> pd.Serie
     if prefix.empty:
         return primary
     merged = pd.concat([prefix, primary]).sort_index()
+    return merged[~merged.index.duplicated(keep="last")]
+
+
+def _merge_provider_with_warehouse(warehouse: pd.Series, provider: pd.Series) -> pd.Series:
+    """Use provider coverage for missing dates, while keeping warehouse values
+    as the preferred source on overlapping dates."""
+    if warehouse.empty:
+        return provider
+    if provider.empty:
+        return warehouse
+    merged = pd.concat([provider, warehouse]).sort_index()
     return merged[~merged.index.duplicated(keep="last")]
 
 
@@ -551,6 +610,62 @@ def _load_ohlcv_from_providers(
         except Exception as e:
             log.warning("backtest.twelve_data_fallback_failed", symbol=symbol, error=str(e))
 
+    # Alpha Vantage
+    if settings.ALPHA_VANTAGE_API_KEY:
+        try:
+            r = httpx.get("https://www.alphavantage.co/query", params={
+                "function": "TIME_SERIES_DAILY_ADJUSTED",
+                "symbol": canonical,
+                "outputsize": "full",
+                "apikey": settings.ALPHA_VANTAGE_API_KEY,
+            }, timeout=30)
+            if r.status_code == 200:
+                data = r.json()
+                series = data.get("Time Series (Daily)", {})
+                if series:
+                    start_ts = pd.Timestamp(from_str)
+                    end_ts = pd.Timestamp(to_str)
+                    s = pd.Series(
+                        {
+                            pd.Timestamp(day): float(row.get("5. adjusted close") or row.get("4. close"))
+                            for day, row in series.items()
+                            if start_ts <= pd.Timestamp(day) <= end_ts
+                        },
+                        dtype="float64",
+                    ).sort_index()
+                    if not s.empty:
+                        log.info("backtest.ohlcv_provider_fallback", provider="alpha_vantage", symbol=canonical, rows=len(s))
+                        return _merge_long_history(s[~s.index.duplicated(keep="last")], world_bank_series)
+        except Exception as e:
+            log.warning("backtest.alpha_vantage_fallback_failed", symbol=symbol, error=str(e))
+
+    # Stooq, no-key fallback for common US equities/ETFs.
+    stooq_symbol = _stooq_symbol(canonical)
+    if stooq_symbol:
+        try:
+            r = httpx.get("https://stooq.com/q/d/l/", params={
+                "s": stooq_symbol,
+                "d1": from_str.replace("-", ""),
+                "d2": to_str.replace("-", ""),
+                "i": "d",
+            }, timeout=30)
+            if r.status_code == 200:
+                df = pd.read_csv(io.StringIO(r.text))
+                if not df.empty and {"Date", "Close"}.issubset(df.columns):
+                    s = pd.Series(
+                        {
+                            pd.Timestamp(row["Date"]): float(row["Close"])
+                            for _, row in df.iterrows()
+                            if pd.notna(row.get("Date")) and pd.notna(row.get("Close"))
+                        },
+                        dtype="float64",
+                    ).sort_index()
+                    if not s.empty:
+                        log.info("backtest.ohlcv_provider_fallback", provider="stooq", symbol=canonical, rows=len(s))
+                        return s[~s.index.duplicated(keep="last")]
+        except Exception as e:
+            log.warning("backtest.stooq_fallback_failed", symbol=symbol, error=str(e))
+
     # FMP
     if settings.FMP_API_KEY:
         try:
@@ -584,13 +699,24 @@ def build_wide_frame_with_fallback(
     start_date: str | None = None,
     end_date: str | None = None,
 ) -> pd.DataFrame:
-    """Like ``build_wide_frame`` but falls back to external providers if the BQ
-    warehouse has no OHLCV data for ``symbol``."""
+    """Like ``build_wide_frame`` but falls back when warehouse data is absent,
+    stale, partial, or too short for the requested range."""
     canonical = _canonical_symbol(symbol)
     close = _load_asset_close(canonical, lookback_days, start_date, end_date)
-    if close.empty:
-        log.info("backtest.bq_miss_trying_providers", symbol=canonical)
-        close = _load_ohlcv_from_providers(canonical, lookback_days, start_date, end_date)
+    warehouse_usable = _series_covers_request(close, start_date, end_date)
+    if close.empty or not warehouse_usable:
+        log.info(
+            "backtest.bq_incomplete_trying_providers",
+            symbol=canonical,
+            warehouse_rows=len(close),
+            warehouse_from=close.index.min().date().isoformat() if not close.empty else None,
+            warehouse_through=close.index.max().date().isoformat() if not close.empty else None,
+            requested_start=start_date,
+            requested_end=end_date,
+        )
+        provider_close = _load_ohlcv_from_providers(canonical, lookback_days, start_date, end_date)
+        if not provider_close.empty:
+            close = _merge_provider_with_warehouse(close, provider_close)
     if close.empty:
         raise ExportError(
             f"Historical data for {canonical} is unavailable for the requested range "
@@ -653,7 +779,7 @@ def run_instrument_export(
 
     started = datetime.now(timezone.utc)
     frame = _download_parquet(settings.GCS_BACKTEST_BUCKET, cache_object_path)
-    cache_hit = frame is not None and _cached_frame_is_usable(frame, range_start)
+    cache_hit = frame is not None and _cached_frame_is_usable(frame, range_start, range_end)
     if frame is not None and not cache_hit:
         log.info(
             "backtest.instrument_cache_incomplete",
@@ -675,6 +801,12 @@ def run_instrument_export(
         data_from = frame["date"].iloc[0] if len(frame) else "unknown"
         raise ExportError(
             f"Historical data for {canonical} only goes back to {data_from} "
+            f"with the current provider; requested {range_start} to {range_end}."
+        )
+    if end_date and not _frame_ends_near_request(frame, range_end):
+        data_through = frame["date"].iloc[-1] if len(frame) else "unknown"
+        raise ExportError(
+            f"Historical data for {canonical} only runs through {data_through} "
             f"with the current provider; requested {range_start} to {range_end}."
         )
     if len(frame) < MIN_BACKTEST_ROWS:

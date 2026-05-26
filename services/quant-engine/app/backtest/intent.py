@@ -59,9 +59,10 @@ def resolve_intent(query: str, *, today: datetime | None = None) -> dict[str, An
     starting_capital = _resolve_starting_capital(q)
     risk_per_trade = _resolve_risk_per_trade(q)
 
-    wants_momentum = bool(re.search(r"\bmomentum\b|\btrend\b", q, re.I))
+    wants_momentum = bool(re.search(r"\bmomentum\b|\btrend\b|\btactical\b|\bstrong\s+markets?\b", q, re.I))
+    wants_macro = bool(re.search(r"\bmacro\b|\bregime\b|\brisk[-\s]?on\b|\brisk[-\s]?off\b|\bstrong\s+markets?\b", q, re.I))
     wants_yield_exit = bool(re.search(r"yield\s+curve|10\s*y\s*[-/]?\s*2\s*y|invert", q, re.I))
-    if not wants_momentum and not wants_yield_exit:
+    if not wants_momentum and not wants_macro and not wants_yield_exit:
         raise IntentResolutionError(
             "Could not identify a supported entry or exit signal in the backtest query.",
             code="NLP_PARSE_FAILED",
@@ -74,13 +75,24 @@ def resolve_intent(query: str, *, today: datetime | None = None) -> dict[str, An
 
     signals: list[dict[str, Any]] = []
     if wants_momentum:
+        momentum_signal = _resolve_momentum_signal(q, start_date, end_date)
         signals.append(
             {
-                "signal_id": "ts_momentum_12_1",
+                "signal_id": momentum_signal,
                 "signal_type": "MomentumFactor",
                 "threshold": 0.0,
                 "direction": "Above",
-                "weight": 0.7 if wants_yield_exit else 1.0,
+                "weight": 1.0,
+            }
+        )
+    if wants_macro:
+        signals.append(
+            {
+                "signal_id": "macro_regime_risk_on",
+                "signal_type": "MacroRegime",
+                "threshold": 0.55,
+                "direction": "Above",
+                "weight": 1.0,
             }
         )
     if wants_yield_exit:
@@ -90,24 +102,32 @@ def resolve_intent(query: str, *, today: datetime | None = None) -> dict[str, An
                 "signal_type": "YieldSpread",
                 "threshold": 0.0,
                 "direction": "CrossDown",
-                "weight": 0.3 if wants_momentum else 1.0,
+                "weight": 1.0,
             }
         )
+    for signal in signals:
+        signal["weight"] = 1.0 / len(signals)
 
-    entry_conditions = [
-        {"signal_id": "ts_momentum_12_1", "direction": "Above", "threshold": 0.0}
-    ] if wants_momentum else [
-        {"signal_id": signals[0]["signal_id"], "direction": "Above", "threshold": 0.0}
-    ]
-    exit_conditions = [
-        {"signal_id": "yield_curve_10y2y", "direction": "CrossDown", "threshold": 0.0}
-    ] if wants_yield_exit else [
-        {"signal_id": entry_conditions[0]["signal_id"], "direction": "Below", "threshold": 0.0}
-    ]
+    entry_conditions: list[dict[str, Any]] = []
+    exit_conditions: list[dict[str, Any]] = []
+    if wants_momentum:
+        entry_conditions.append({"signal_id": momentum_signal, "direction": "Above", "threshold": 0.0})
+        if not wants_yield_exit:
+            exit_conditions.append({"signal_id": momentum_signal, "direction": "Below", "threshold": 0.0})
+    if wants_macro:
+        entry_conditions.append({"signal_id": "macro_regime_risk_on", "direction": "Above", "threshold": 0.55})
+        if not wants_yield_exit:
+            exit_conditions.append({"signal_id": "macro_regime_risk_on", "direction": "Below", "threshold": 0.45})
+    if wants_yield_exit:
+        exit_conditions.append({"signal_id": "yield_curve_10y2y", "direction": "CrossDown", "threshold": 0.0})
+    if not entry_conditions:
+        entry_conditions = [{"signal_id": signals[0]["signal_id"], "direction": "Above", "threshold": signals[0]["threshold"]}]
+    if not exit_conditions:
+        exit_conditions = [{"signal_id": entry_conditions[0]["signal_id"], "direction": "Below", "threshold": 0.0}]
 
     return {
         "id": _slug_strategy(instrument, wants_momentum, wants_yield_exit),
-        "name": _strategy_name(instrument, wants_momentum, wants_yield_exit),
+        "name": _strategy_name(instrument, wants_momentum, wants_yield_exit, wants_macro),
         "instrument": instrument,
         "date_range": {"start_date": start_date, "end_date": end_date},
         "signals": signals,
@@ -139,6 +159,15 @@ def _resolve_instrument(query: str) -> str:
     if match:
         return match.group(1).upper()
 
+    stopwords = {"A", "I", "THE", "AND", "OR", "ON", "FOR", "OVER", "WITH", "USE"}
+    for match in re.finditer(
+        r"\b([A-Z]{1,5})(?:\s+(?:strategy|momentum|trend|tactical|mean|macro)\b|\b)",
+        query,
+    ):
+        candidate = match.group(1).upper()
+        if candidate not in stopwords:
+            return candidate
+
     raise IntentResolutionError(
         "Could not resolve the requested instrument to a known backtest symbol.",
         code="INSTRUMENT_NOT_FOUND",
@@ -149,6 +178,9 @@ def _resolve_instrument(query: str) -> str:
 
 def _resolve_date_range(query: str, instrument: str, today: datetime) -> tuple[str, str]:
     end_date = today.date().isoformat()
+    explicit_start = _resolve_explicit_start(query)
+    if explicit_start:
+        return explicit_start, end_date
     years_match = re.search(r"\b(?:over|for|past|last)\s+(\d{1,2})\s+years?\b", query, re.I)
     if years_match:
         years = int(years_match.group(1))
@@ -159,6 +191,44 @@ def _resolve_date_range(query: str, instrument: str, today: datetime) -> tuple[s
             return "1994-01-01", end_date
         return f"{max(1900, today.year - years)}-01-01", end_date
     return f"{today.year - 10}-01-01", end_date
+
+
+def _resolve_explicit_start(query: str) -> str | None:
+    month_names = {
+        "jan": 1, "january": 1,
+        "feb": 2, "february": 2,
+        "mar": 3, "march": 3,
+        "apr": 4, "april": 4,
+        "may": 5,
+        "jun": 6, "june": 6,
+        "jul": 7, "july": 7,
+        "aug": 8, "august": 8,
+        "sep": 9, "sept": 9, "september": 9,
+        "oct": 10, "october": 10,
+        "nov": 11, "november": 11,
+        "dec": 12, "december": 12,
+    }
+    match = re.search(r"\bfrom\s+([A-Za-z]+)\s+(\d{4})\b", query, re.I)
+    if match:
+        month = month_names.get(match.group(1).lower())
+        if month:
+            return f"{int(match.group(2)):04d}-{month:02d}-01"
+    match = re.search(r"\b(?:from|since)\s+(\d{4})-(\d{1,2})(?:-\d{1,2})?\b", query, re.I)
+    if match:
+        return f"{int(match.group(1)):04d}-{int(match.group(2)):02d}-01"
+    return None
+
+
+def _resolve_momentum_signal(query: str, start_date: str, end_date: str) -> str:
+    start = datetime.strptime(start_date, "%Y-%m-%d").date()
+    end = datetime.strptime(end_date, "%Y-%m-%d").date()
+    days = (end - start).days
+    q = query.lower()
+    if days < 365 * 2 or re.search(r"\bshort[-\s]?term\b|\bswing\b|\b1[-\s]?month\b", q):
+        return "ts_momentum_21_5"
+    if days < 365 * 8 or re.search(r"\btactical\b|\bweekly\b|\bquarter\b|\b3[-\s]?month\b", q):
+        return "ts_momentum_63_21"
+    return "ts_momentum_12_1"
 
 
 def _resolve_starting_capital(query: str) -> float:
@@ -187,10 +257,14 @@ def _slug_strategy(instrument: str, momentum: bool, yield_exit: bool) -> str:
     return "_".join(parts)
 
 
-def _strategy_name(instrument: str, momentum: bool, yield_exit: bool) -> str:
+def _strategy_name(instrument: str, momentum: bool, yield_exit: bool, macro: bool) -> str:
     label = "Gold" if instrument == "XAUUSD" else instrument
     if momentum and yield_exit:
         return f"{label} Momentum with Yield Curve Exit"
+    if momentum and macro:
+        return f"Tactical {label}: Momentum & Macro Regime"
     if momentum:
         return f"{label} Momentum"
+    if macro:
+        return f"{label} Macro Regime Strategy"
     return f"{label} Yield Curve Strategy"

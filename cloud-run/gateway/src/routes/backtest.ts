@@ -249,6 +249,8 @@ const SIGNAL_ID_MAP: Record<string, string> = {
   yield_spread: 'yield_curve_10y2y',
   vol_zscore: 'realized_vol_z',
   momentum_12_1: 'ts_momentum_12_1',
+  momentum_3_1: 'ts_momentum_63_21',
+  momentum_1m_1w: 'ts_momentum_21_5',
 };
 
 function normalizeSignalId(signalId: string): string {
@@ -364,10 +366,13 @@ Available signal catalog (use exact signal_id and signal_type):
 - signal_id: "yield_curve_10y3m",    signal_type: "YieldSpread",       threshold: 0 (CrossDown=inversion)
 - signal_id: "realized_vol_z",       signal_type: "VolatilityZScore",  threshold: 1.0 (Below=low vol, Above=high vol)
 - signal_id: "ts_momentum_12_1",     signal_type: "MomentumFactor",    threshold: 0 (Above=positive momentum)
+- signal_id: "ts_momentum_63_21",    signal_type: "MomentumFactor",    threshold: 0 (Above=positive 3-month momentum excluding the latest month)
+- signal_id: "ts_momentum_21_5",     signal_type: "MomentumFactor",    threshold: 0 (Above=positive 1-month momentum excluding the latest week)
 - signal_id: "liquidity_composite",  signal_type: "MacroRegime",       threshold: 0
 - signal_id: "inflation_persistence", signal_type: "MacroRegime",      threshold: 0
 
 Rules:
+- Use shorter momentum signals for shorter or more tactical windows: ts_momentum_21_5 for windows under 2 years, ts_momentum_63_21 for tactical/weekly/3-8 year windows, and ts_momentum_12_1 for long-term windows.
 - Exit conditions should be the logical inverse of entry (e.g. entry Above 0 → exit Below 0).
 - Use "VolTarget" sizing for risk-aware ideas, "FixedFractional" for simple ideas.
 - If the user mentions a specific instrument, use it; otherwise default to "SPY".

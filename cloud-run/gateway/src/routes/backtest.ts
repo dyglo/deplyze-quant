@@ -15,10 +15,12 @@
 
 import { Router } from 'express';
 import { z } from 'zod';
+import { geminiGenerate } from '../services/gemini';
 
 const router = Router();
 
 const BACKTEST_ENGINE_URL = process.env.BACKTEST_ENGINE_URL ?? '';
+const QUANT_ENGINE_URL = process.env.QUANT_ENGINE_URL ?? '';
 
 // Fetches a short-lived Google-signed OIDC token for service-to-service auth.
 async function getEngineIdToken(audience: string): Promise<string> {
@@ -112,6 +114,10 @@ const StrategySpec = z.object({
   comparison_mode: z.boolean().optional(),
   // tier is server-stamped; ignore any client value.
   cost_model: CostModel,
+  // Instrument selects the per-instrument parquet in GCS.
+  instrument: z.string().min(1).max(20).optional(),
+  // Starting capital for the dollar P&L surface (cosmetic; does not affect ratios).
+  starting_capital: z.number().positive().optional(),
 });
 
 // ─── Proxy helper ───────────────────────────────────────────────────────────────
@@ -181,6 +187,192 @@ router.post('/run', async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+});
+
+// ─── POST /backtest/prepare-instrument ──────────────────────────────────────────
+// Trigger on-demand per-instrument parquet build in quant-engine. The frontend
+// calls this before /run when it detects the instrument has changed.
+
+const PrepareBody = z.object({
+  symbol: z.string().min(1).max(20),
+  lookback_days: z.number().int().positive().optional(),
+});
+
+router.post('/prepare-instrument', async (req, res, next) => {
+  try {
+    if (!QUANT_ENGINE_URL) {
+      res.status(503).json({ error: 'Quant engine not configured', code: 'ENGINE_UNCONFIGURED' });
+      return;
+    }
+    const { symbol, lookback_days } = PrepareBody.parse(req.body);
+    const idToken = await getEngineIdToken(QUANT_ENGINE_URL);
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (idToken) headers['Authorization'] = `Bearer ${idToken}`;
+    const resp = await fetch(`${QUANT_ENGINE_URL}/pipelines/backtest/prepare-instrument`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ symbol: symbol.toUpperCase(), lookback_days }),
+      signal: AbortSignal.timeout(300_000), // 5 min — provider fetch + GCS upload
+    });
+    const json = await resp.json().catch(() => ({}));
+    res.status(resp.status).json(json);
+  } catch (err) { next(err); }
+});
+
+// ─── helpers ────────────────────────────────────────────────────────────────────
+
+function extractJson(s: string): unknown | null {
+  const trimmed = s.trim();
+  const fenceMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/);
+  const candidate = fenceMatch ? fenceMatch[1] : trimmed;
+  try { return JSON.parse(candidate); } catch { /* fall through */ }
+  const a = candidate.indexOf('{');
+  const b = candidate.lastIndexOf('}');
+  if (a >= 0 && b > a) {
+    try { return JSON.parse(candidate.slice(a, b + 1)); } catch { return null; }
+  }
+  return null;
+}
+
+// ─── POST /backtest/resolve ──────────────────────────────────────────────────
+// NLP → StrategySpec: converts a natural-language intent into a structured
+// StrategySpec JSON. Follows the same geminiGenerate pattern as /historical-research/plan.
+
+const ResolveBody = z.object({
+  query: z.string().min(2).max(1000),
+});
+
+const RESOLVE_SYSTEM = `
+You are the Backtesting Strategy Planner for an institutional quantitative research terminal.
+You convert a user's natural-language trading idea into a STRICT JSON StrategySpec that the
+Deplyze backtest engine can execute directly. No prose, no markdown fences, no commentary — output ONE JSON object only.
+
+StrategySpec schema:
+{
+  "id":   string,        // "strat_" + short kebab-case slug of the idea
+  "name": string,        // human-readable name (< 60 chars)
+  "instrument": string,  // uppercase ticker, e.g. "SPY", "QQQ", "GLD", "TLT", "USO", "IWM"
+  "date_range": {
+    "start_date": "YYYY-MM-DD",
+    "end_date":   "YYYY-MM-DD"   // today if user doesn't specify
+  },
+  "signals": [           // 1..4 signals chosen from the available catalog below
+    {
+      "signal_id":   string,   // exact id from catalog
+      "signal_type": string,   // exact type from catalog
+      "threshold":   number,   // e.g. 0.0 for MacroRegime, 1.0 for VolatilityZScore z-score
+      "direction":   "Above" | "Below" | "CrossUp" | "CrossDown",
+      "weight":      number    // 0.0..1.0, sum of weights should be ≈ 1
+    }
+  ],
+  "entry_logic": {
+    "operator": "AND" | "OR",
+    "conditions": [{ "signal_id": string, "direction": "Above"|"Below"|"CrossUp"|"CrossDown", "threshold": number }]
+  },
+  "exit_logic": {
+    "operator": "AND" | "OR",
+    "conditions": [{ "signal_id": string, "direction": "Above"|"Below"|"CrossUp"|"CrossDown", "threshold": number }]
+  },
+  "position_sizing": one of:
+    { "method": "FixedFractional", "fraction": 0.95 }
+    { "method": "Kelly", "kelly_fraction": 0.5 }
+    { "method": "EqualWeight" }
+    { "method": "VolTarget", "target_annual_vol": 0.10 },
+  "risk_params": {
+    "max_drawdown_pct": number,  // e.g. 0.20 for 20% drawdown stop
+    "position_cap_pct": number,  // e.g. 1.0 for 100% max position
+    "rebalance_freq":   "Daily" | "Weekly" | "Monthly" | "OnSignal",
+    "risk_per_trade_pct": number,
+    "min_rr": number
+  },
+  "comparison_mode": boolean,
+  "cost_model": { "commission_bps": number, "slippage_bps": number }
+}
+
+Available signal catalog (use exact signal_id and signal_type):
+- signal_id: "macro_regime",         signal_type: "MacroRegime",       threshold: 0 (Above=risk-on, Below=risk-off)
+- signal_id: "yield_spread",         signal_type: "YieldSpread",       threshold: 0 (Above=positive spread)
+- signal_id: "vol_zscore",           signal_type: "VolatilityZScore",  threshold: 1.0 (Below=low vol, Above=high vol)
+- signal_id: "momentum_12_1",        signal_type: "MomentumFactor",    threshold: 0 (Above=positive momentum)
+- signal_id: "carry_factor",         signal_type: "CarryFactor",       threshold: 0
+- signal_id: "narrative_score",      signal_type: "NarrativeScore",    threshold: 0
+- signal_id: "liquidity_composite",  signal_type: "MacroRegime",       threshold: 0
+
+Rules:
+- Exit conditions should be the logical inverse of entry (e.g. entry Above 0 → exit Below 0).
+- Use "VolTarget" sizing for risk-aware ideas, "FixedFractional" for simple ideas.
+- If the user mentions a specific instrument, use it; otherwise default to "SPY".
+- If the user asks for comparison, set comparison_mode: true.
+- Be conservative: max_drawdown_pct=0.20, position_cap_pct=1.0, commission_bps=1.0, slippage_bps=2.0 unless user specifies.
+- Default date range: past 10 years from today.
+`.trim();
+
+router.post('/resolve', async (req, res, next) => {
+  try {
+    const { query } = ResolveBody.parse(req.body);
+    const today = new Date().toISOString().slice(0, 10);
+    const raw = await geminiGenerate({
+      systemInstruction: RESOLVE_SYSTEM,
+      prompt: `Today is ${today}.\n\nUser strategy idea: ${query}\n\nReturn the StrategySpec JSON now.`,
+      temperature: 0.1,
+    });
+    const spec = extractJson(raw);
+    if (!spec) {
+      res.status(502).json({ error: 'Resolver returned unparseable output', raw });
+      return;
+    }
+    res.json({ spec });
+  } catch (err) { next(err); }
+});
+
+// ─── POST /backtest/commentary ───────────────────────────────────────────────
+// Given completed backtest results + the original query, produce a short
+// institutional commentary. Follows the same pattern as /historical-research/reason.
+
+const CommentaryBody = z.object({
+  query: z.string().min(2).max(500),
+  metrics: z.record(z.union([z.string(), z.number()])),
+  context: z.string().max(2000).optional(),
+});
+
+const COMMENTARY_SYSTEM = `
+You produce a short institutional backtesting commentary on quantitative strategy results.
+
+Hard rules:
+- 3 to 6 sentences. No headings, no bullets, no markdown.
+- Reference ONLY the metrics you are given. Never introduce a number, ticker, or date
+  not in the metrics object.
+- Tone: calm, evidence-oriented, probabilistic. No "buy/sell" language. No guarantees.
+  Prefer "historically", "over the tested window", "the strategy tended to", "regime-conditional".
+- Address: Sharpe quality (is it statistically meaningful?), drawdown profile, regime
+  performance differences (if provided), and the signal contribution narrative.
+- If Deflated Sharpe < 0 or PSR < 0.5, note the strategy may not be robust.
+- Conclude with a one-sentence forward-looking caution grounded in the regime context.
+`.trim();
+
+router.post('/commentary', async (req, res, next) => {
+  try {
+    const body = CommentaryBody.parse(req.body);
+    const metricsLines = Object.entries(body.metrics)
+      .map(([k, v]) => `- ${k}: ${v}`)
+      .join('\n');
+
+    const prompt = [
+      `User strategy idea: ${body.query}`,
+      body.context ? `Strategy context: ${body.context}` : '',
+      'Backtest metrics:',
+      metricsLines || '(none)',
+      '',
+      'Write the institutional commentary now.',
+    ].filter(Boolean).join('\n');
+
+    const narrative = await geminiGenerate({
+      systemInstruction: COMMENTARY_SYSTEM,
+      prompt,
+      temperature: 0.2,
+    });
+    res.json({ narrative });
+  } catch (err) { next(err); }
 });
 
 export default router;

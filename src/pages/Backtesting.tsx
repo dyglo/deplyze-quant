@@ -1,30 +1,33 @@
-import React, { useEffect, useMemo, useState } from 'react';
+/**
+ * Backtesting — Cowork-inspired 3-column shell.
+ *
+ * Left rail   (240px) : history list + new strategy
+ * Center canvas (flex) : dot-grid canvas, landing tiles, results, sticky input bar
+ * Right panel (280px) : collapsible Progress · Artifacts · Context accordion
+ */
+
+import React, {
+  useCallback, useEffect, useMemo, useRef, useState,
+} from 'react';
 import {
-  ComposedChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  ReferenceArea,
+  ComposedChart, Line, Area,
+  XAxis, YAxis, CartesianGrid,
+  Tooltip as RechartsTip,
+  ResponsiveContainer, BarChart, Bar, Cell,
 } from 'recharts';
 import {
-  Play,
-  Plus,
-  X,
-  AlertTriangle,
-  Loader2,
-  FlaskConical,
-  TrendingUp,
-  TrendingDown,
+  Plus, X, Loader2, TrendingUp,
+  AlertTriangle, BarChart2, DollarSign,
+  Activity, BookOpen, Lock, ChevronDown,
+  ChevronRight, ArrowRight, Zap, BarChart as BarIcon,
+  LineChart, Shield, Layers, PanelLeft,
+  SlidersHorizontal,
 } from 'lucide-react';
-import { PageHeader } from '../components/quant/PageHeader';
 import { Disclaimer } from '../components/quant/Disclaimer';
+import { useBacktest } from '../hooks/useBacktest';
 import {
   getSignalLibrary,
-  validateStrategy,
-  runBacktest,
+  requestCommentary,
   regimeColor,
   REGIME_LABELS,
   type SignalLibrary,
@@ -35,35 +38,56 @@ import {
   type Operator,
   type PositionSizing,
   type BacktestResults,
-  type ValidationResult,
   type AggregateMetrics,
   type PartitionMetrics,
 } from '../services/backtest';
 
-// ─── Spec helpers ───────────────────────────────────────────────────────────────
+// ─── Design tokens — use DS CSS vars, no hardcoded brand hex ───────────────────
+const RAIL_W  = 240;
+const PANEL_W = 300;
 
+// Subtle dot-grid on plain background — no color tint
+const canvasBg: React.CSSProperties = {
+  background: 'var(--background)',
+  backgroundImage: 'radial-gradient(circle, color-mix(in srgb, var(--muted-foreground) 20%, transparent) 1px, transparent 1px)',
+  backgroundSize: '24px 24px',
+};
+
+// ─── Constants ───────────────────────────────────────────────────────────────────
 const TODAY = new Date().toISOString().slice(0, 10);
 
+// ─── Types ───────────────────────────────────────────────────────────────────────
+interface HistoryEntry {
+  id: string;
+  name: string;
+  instrument: string;
+  sharpe: number;
+  cagr: number;
+  ts: number;
+  spec: StrategySpec;
+}
+
+type CanvasState = 'landing' | 'building' | 'running' | 'results';
+type YAxisMode   = 'dollar' | 'pct';
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────────
 function invert(d: Direction): Direction {
   switch (d) {
-    case 'Above':
-      return 'Below';
-    case 'Below':
-      return 'Above';
-    case 'CrossUp':
-      return 'CrossDown';
-    case 'CrossDown':
-      return 'CrossUp';
+    case 'Above': return 'Below';
+    case 'Below': return 'Above';
+    case 'CrossUp': return 'CrossDown';
+    case 'CrossDown': return 'CrossUp';
   }
 }
 
 function buildSpec(
   base: Partial<StrategySpec>,
   signals: SignalConfig[],
-  entryOp: Operator,
-  exitOp: Operator,
+  entryOp: Operator, exitOp: Operator,
   sizing: PositionSizing,
   comparison: boolean,
+  instrument: string,
+  startingCapital: number,
 ): StrategySpec {
   return {
     id: base.id ?? `strat_${Date.now()}`,
@@ -79,878 +103,1188 @@ function buildSpec(
       conditions: signals.map((s) => ({ signal_id: s.signal_id, direction: invert(s.direction), threshold: s.threshold })),
     },
     position_sizing: sizing,
-    risk_params: base.risk_params ?? {
-      max_drawdown_pct: 25,
-      position_cap_pct: 100,
-      rebalance_freq: 'Daily',
-      risk_per_trade_pct: 1,
-      min_rr: 2,
-    },
+    risk_params: base.risk_params ?? { max_drawdown_pct: 0.25, position_cap_pct: 1.0, rebalance_freq: 'Daily', risk_per_trade_pct: 1.0, min_rr: 2.0 },
     comparison_mode: comparison,
     cost_model: base.cost_model ?? { commission_bps: 1, slippage_bps: 2 },
+    instrument,
+    starting_capital: startingCapital,
   };
 }
 
+const fmt = {
+  dollar: (x: number) => x >= 1_000_000 ? `$${(x/1_000_000).toFixed(2)}M` : x >= 1_000 ? `$${(x/1_000).toFixed(1)}K` : `$${x.toFixed(0)}`,
+  pct:  (x: number) => `${(x * 100).toFixed(1)}%`,
+  f2:   (x: number) => isFinite(x) ? x.toFixed(2) : '—',
+  f3:   (x: number) => isFinite(x) ? x.toFixed(3) : '—',
+  int:  (x: number) => isFinite(x) ? Math.round(x).toLocaleString() : '—',
+  rel:  (ts: number) => {
+    const d = Math.floor((Date.now() - ts) / 86400000);
+    return d === 0 ? 'Today' : d === 1 ? 'Yesterday' : `${d}d ago`;
+  },
+};
+
+// ─── Templates ───────────────────────────────────────────────────────────────────
 interface Template {
-  key: string;
-  name: string;
-  blurb: string;
+  key: string; name: string; blurb: string;
+  icon: React.ReactNode;
   signals: SignalConfig[];
   sizing: PositionSizing;
-  entryOp: Operator;
-  exitOp: Operator;
+  entryOp: Operator; exitOp: Operator;
 }
 
 const TEMPLATES: Template[] = [
   {
-    key: 'risk_on_trend',
-    name: 'Risk-On Regime Trend',
-    blurb: 'Hold while the HMM filtered probability of the risk-on regime is dominant. Vol-targeted.',
+    key: 'risk_on_trend', name: 'Risk-On Regime', blurb: 'Hold while HMM posteriors favour risk-on. Vol-targeted.',
+    icon: <TrendingUp size={14} />,
     signals: [{ signal_id: 'macro_regime_risk_on', signal_type: 'MacroRegime', threshold: 0.5, direction: 'Above', weight: 1 }],
-    sizing: { method: 'VolTarget', target_annual_vol: 0.1 },
-    entryOp: 'AND',
-    exitOp: 'OR',
+    sizing: { method: 'VolTarget', target_annual_vol: 0.10 }, entryOp: 'AND', exitOp: 'OR',
   },
   {
-    key: 'curve_defensive',
-    name: 'Yield-Curve Defensive',
-    blurb: 'Reduce exposure when the 10y-2y term spread inverts. Half-Kelly sizing.',
+    key: 'yield_curve', name: 'Yield Curve Defensive', blurb: 'Exit when 10y-2y spread inverts. Half-Kelly sizing.',
+    icon: <LineChart size={14} />,
     signals: [{ signal_id: 'yield_curve_10y2y', signal_type: 'YieldSpread', threshold: 0, direction: 'Above', weight: 1 }],
-    sizing: { method: 'Kelly', kelly_fraction: 0.5 },
-    entryOp: 'AND',
-    exitOp: 'OR',
+    sizing: { method: 'Kelly', kelly_fraction: 0.5 }, entryOp: 'AND', exitOp: 'OR',
   },
   {
-    key: 'liquidity_macro',
-    name: 'Liquidity + Regime',
-    blurb: 'Hold when net liquidity is expanding AND the macro regime is risk-on.',
+    key: 'low_vol_mom', name: 'Low-Vol Momentum', blurb: 'Long when vol is below 1σ and 12-1 momentum is positive.',
+    icon: <BarIcon size={14} />,
+    signals: [
+      { signal_id: 'realized_vol_z', signal_type: 'VolatilityZScore', threshold: 1.0, direction: 'Below', weight: 0.5 },
+      { signal_id: 'ts_momentum_12_1', signal_type: 'MomentumFactor', threshold: 0, direction: 'Above', weight: 0.5 },
+    ],
+    sizing: { method: 'VolTarget', target_annual_vol: 0.12 }, entryOp: 'AND', exitOp: 'OR',
+  },
+  {
+    key: 'liquidity_macro', name: 'Liquidity + Regime', blurb: 'Hold when net liquidity expands AND macro is risk-on.',
+    icon: <Layers size={14} />,
     signals: [
       { signal_id: 'liquidity_composite', signal_type: 'MacroRegime', threshold: 0, direction: 'Above', weight: 0.5 },
       { signal_id: 'macro_regime_risk_on', signal_type: 'MacroRegime', threshold: 0.5, direction: 'Above', weight: 0.5 },
     ],
-    sizing: { method: 'VolTarget', target_annual_vol: 0.12 },
-    entryOp: 'AND',
-    exitOp: 'OR',
+    sizing: { method: 'VolTarget', target_annual_vol: 0.12 }, entryOp: 'AND', exitOp: 'OR',
+  },
+  {
+    key: 'inflation', name: 'Inflation Persistence', blurb: 'Defensive posture when inflation composite is elevated.',
+    icon: <Shield size={14} />,
+    signals: [{ signal_id: 'inflation_persistence', signal_type: 'MacroRegime', threshold: 0, direction: 'Below', weight: 1 }],
+    sizing: { method: 'VolTarget', target_annual_vol: 0.08 }, entryOp: 'AND', exitOp: 'OR',
+  },
+  {
+    key: 'custom', name: 'Custom strategy', blurb: 'Open the builder and compose from scratch.',
+    icon: <Zap size={14} />,
+    signals: [],
+    sizing: { method: 'VolTarget', target_annual_vol: 0.10 }, entryOp: 'AND', exitOp: 'OR',
   },
 ];
 
-// ─── Formatting ─────────────────────────────────────────────────────────────────
-
-const f2 = (x?: number) => (x === undefined || !isFinite(x) ? '—' : x.toFixed(2));
-const fPct = (x?: number) => (x === undefined || !isFinite(x) ? '—' : `${(x * 100).toFixed(1)}%`);
-const fProb = (x?: number) => (x === undefined || !isFinite(x) ? '—' : `${(x * 100).toFixed(0)}%`);
-const num: React.CSSProperties = { fontVariantNumeric: 'tabular-nums' };
-
-// ─── UI atoms ───────────────────────────────────────────────────────────────────
-
-const Pill: React.FC<{ children: React.ReactNode; tone?: 'neutral' | 'brand' | 'gain' | 'loss' }> = ({
-  children,
-  tone = 'neutral',
+// ─── Accordion (right panel) ──────────────────────────────────────────────────────
+const Accordion: React.FC<{ title: string; defaultOpen?: boolean; children: React.ReactNode }> = ({
+  title, defaultOpen = true, children,
 }) => {
-  const cls =
-    tone === 'brand' ? 'ds-pill-critical' : tone === 'gain' ? 'ds-pill-low' : tone === 'loss' ? 'ds-pill-high' : 'ds-pill-neutral';
+  const [open, setOpen] = useState(defaultOpen);
   return (
-    <span className={`ds-tag ${cls}`} style={{ textTransform: 'uppercase' }}>
-      {children}
-    </span>
+    <div style={{ borderBottom: '1px solid var(--border)' }}>
+      <button
+        onClick={() => setOpen(!open)}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer',
+          color: 'var(--foreground)',
+        }}
+      >
+        <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--muted-foreground)' }}>{title}</span>
+        {open
+          ? <ChevronDown size={12} style={{ color: 'var(--muted-foreground)' }} />
+          : <ChevronRight size={12} style={{ color: 'var(--muted-foreground)' }} />}
+      </button>
+      {open && <div style={{ padding: '0 14px 12px' }}>{children}</div>}
+    </div>
   );
 };
 
-function Segmented<T extends string>({
-  options,
-  value,
-  onChange,
-}: {
-  options: { value: T; label: string }[];
-  value: T;
-  onChange: (v: T) => void;
-}) {
-  return (
-    <div style={{ display: 'inline-flex', borderRadius: 7, border: '1px solid var(--border)', overflow: 'hidden', background: 'var(--card)' }}>
-      {options.map((o) => {
-        const active = o.value === value;
-        return (
-          <button
-            key={o.value}
-            onClick={() => onChange(o.value)}
-            style={{
-              padding: '5px 11px',
-              fontSize: 11.5,
-              fontWeight: 600,
-              background: active ? 'var(--primary)' : 'transparent',
-              color: active ? 'var(--primary-foreground)' : 'var(--muted-foreground)',
-              border: 'none',
-              cursor: 'pointer',
-            }}
-          >
-            {o.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
+// ─── Step chain (Progress section) ───────────────────────────────────────────────
+const StepChain: React.FC<{ steps: ReturnType<typeof useBacktest>['state']['steps'] }> = ({ steps }) => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+    {steps.map((step) => {
+      const done   = step.state === 'done';
+      const active = step.state === 'active';
+      const failed = step.state === 'failed';
+      const color  = failed ? 'var(--ds-loss)' : done ? 'var(--primary)' : active ? 'var(--foreground)' : 'var(--muted-foreground)';
+      return (
+        <div key={step.id} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+          <div style={{
+            width: 18, height: 18, borderRadius: '50%', flexShrink: 0, marginTop: 1,
+            border: `1.5px solid ${color}`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: done ? 'var(--primary)' : 'transparent',
+          }}>
+            {active && <Loader2 size={9} style={{ color, animation: 'spin 1s linear infinite' }} />}
+            {done  && <span style={{ fontSize: 8, color: 'var(--primary-foreground)', fontWeight: 700 }}>✓</span>}
+            {failed && <span style={{ fontSize: 8, color }}>✗</span>}
+          </div>
+          <div style={{ flex: 1 }}>
+            <span style={{ fontSize: 11, color, fontWeight: active ? 600 : 400 }}>{step.label}</span>
+            {step.detail && <p style={{ fontSize: 10, color: 'var(--muted-foreground)', margin: '2px 0 0' }}>{step.detail}</p>}
+            {step.error  && <p style={{ fontSize: 10, color: 'var(--ds-loss)', margin: '2px 0 0' }}>{step.error}</p>}
+          </div>
+        </div>
+      );
+    })}
+  </div>
+);
 
-/** Hero KPI tile — the headline result numbers. */
-const Kpi: React.FC<{ label: string; value: string; sub?: string; tone?: 'gain' | 'loss' | 'neutral'; accent?: boolean }> = ({
-  label,
-  value,
-  sub,
-  tone = 'neutral',
-  accent,
+// ─── Commentary modal ─────────────────────────────────────────────────────────────
+const CommentaryModal: React.FC<{ title: string; narrative: string | null; onClose: () => void }> = ({
+  title, narrative, onClose,
+}) => (
+  <div
+    onClick={onClose}
+    style={{
+      position: 'fixed', inset: 0, zIndex: 200,
+      background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(3px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }}
+  >
+    <div
+      onClick={(e) => e.stopPropagation()}
+      style={{
+        background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 14,
+        maxWidth: 520, width: '100%', margin: '0 20px', padding: '22px 24px',
+        boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+        <span style={{ fontSize: 13, fontWeight: 600 }}>{title}</span>
+        <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted-foreground)', display: 'flex' }}>
+          <X size={14} />
+        </button>
+      </div>
+      {narrative
+        ? <p style={{ fontSize: 13, lineHeight: 1.7, margin: 0, color: 'var(--foreground)' }}>{narrative}</p>
+        : <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--muted-foreground)', fontSize: 12 }}>
+            <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> Generating…
+          </div>}
+    </div>
+  </div>
+);
+
+// ─── Tier gate ────────────────────────────────────────────────────────────────────
+const TierGate: React.FC<{ tier: string; children: React.ReactNode }> = ({ tier, children }) => (
+  <div style={{ position: 'relative' }}>
+    <div style={{ filter: 'blur(3px)', pointerEvents: 'none', userSelect: 'none' }}>{children}</div>
+    <div style={{
+      position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+      background: 'color-mix(in srgb, var(--card) 70%, transparent)', borderRadius: 8,
+    }}>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 600, color: 'var(--muted-foreground)', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 6, padding: '4px 10px' }}>
+        <Lock size={10} /> {tier}+
+      </span>
+    </div>
+  </div>
+);
+
+// ─── Metric row (right panel Artifacts) ──────────────────────────────────────────
+const MetricRow: React.FC<{ label: string; value: string; tone?: 'gain' | 'loss' | 'neutral' }> = ({
+  label, value, tone = 'neutral',
 }) => {
   const color = tone === 'gain' ? 'var(--ds-gain)' : tone === 'loss' ? 'var(--ds-loss)' : 'var(--foreground)';
   return (
-    <div
-      className="ds-surface"
-      style={{
-        padding: '13px 15px',
-        borderRadius: 10,
-        display: 'grid',
-        gap: 5,
-        background: accent ? 'color-mix(in srgb, var(--primary) 5%, var(--card))' : 'var(--card)',
-        borderColor: accent ? 'color-mix(in srgb, var(--primary) 30%, var(--border))' : 'var(--border)',
-      }}
-    >
-      <span className="ds-label">{label}</span>
-      <span style={{ ...num, fontSize: 23, fontWeight: 650, letterSpacing: '-0.02em', color, lineHeight: 1.1 }}>{value}</span>
-      {sub && <span className="ds-caption" style={{ fontSize: 10 }}>{sub}</span>}
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: '1px solid color-mix(in srgb, var(--border) 50%, transparent)' }}>
+      <span style={{ fontSize: 11, color: 'var(--muted-foreground)' }}>{label}</span>
+      <span style={{ fontSize: 11, fontWeight: 600, color, fontVariantNumeric: 'tabular-nums' }}>{value}</span>
     </div>
   );
 };
 
-const fieldLabel: React.CSSProperties = { display: 'block', marginBottom: 5 };
+// ─── Equity chart ─────────────────────────────────────────────────────────────────
+const EquityChart: React.FC<{ results: BacktestResults; yMode: YAxisMode; onToggleY: () => void }> = ({
+  results, yMode, onToggleY,
+}) => {
+  const ds = results.dollar_summary;
+  const hasBaseline = results.comparison !== undefined;
 
-// ─── Signal Library ─────────────────────────────────────────────────────────────
+  const data = useMemo(() => {
+    if (yMode === 'dollar' && ds) {
+      return ds.curve.map((p) => ({ ts: p.timestamp, enhanced: p.enhanced, buy_hold: p.buy_hold, baseline: p.baseline }));
+    }
+    return results.equity_curve.map((p) => ({ ts: p.timestamp, enhanced: p.value, buy_hold: undefined as number | undefined, baseline: undefined as number | undefined }));
+  }, [results, ds, yMode]);
 
-const SignalLibraryPanel: React.FC<{ library: SignalLibrary | null; onAdd: (s: SignalMeta) => void; activeIds: Set<string> }> = ({
-  library,
-  onAdd,
-  activeIds,
-}) => (
-  <section className="ds-panel">
-    <div className="ds-panel-header">
-      <span className="ds-heading">Signal Library</span>
-      <span className="ds-caption">{library?.signals.length ?? 0} signals</span>
+  const tickFmt = (v: number) => yMode === 'dollar' ? fmt.dollar(v) : `${((v - 1) * 100).toFixed(0)}%`;
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--muted-foreground)' }}>
+          {[['var(--primary)', 'Strategy'], ['var(--ds-gain)', 'Buy-Hold'], ...(hasBaseline ? [['#C9A227', 'Baseline']] : [])].map(([c, l]) => (
+            <span key={l} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <span style={{ width: 14, height: 2, background: c as string, borderRadius: 1, display: 'inline-block' }} />{l}
+            </span>
+          ))}
+        </div>
+        <button onClick={onToggleY} style={{ fontSize: 11, background: 'var(--muted)', border: '1px solid var(--border)', borderRadius: 5, padding: '2px 8px', cursor: 'pointer', color: 'var(--foreground)' }}>
+          {yMode === 'dollar' ? '% returns' : '$ value'}
+        </button>
+      </div>
+      <ResponsiveContainer width="100%" height={220}>
+        <ComposedChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: 8 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" strokeOpacity={0.4} />
+          <XAxis dataKey="ts" tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+          <YAxis tickFormatter={tickFmt} tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} tickLine={false} axisLine={false} width={52} />
+          <RechartsTip
+            contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 11 }}
+            formatter={(v: number, name: string) => [yMode === 'dollar' ? fmt.dollar(v) : fmt.pct(v - 1), name === 'enhanced' ? 'Strategy' : name === 'buy_hold' ? 'Buy-Hold' : 'Baseline']}
+          />
+          {yMode === 'dollar' && ds && <>
+            <Line type="monotone" dataKey="buy_hold" stroke="var(--ds-gain)" strokeWidth={1.5} dot={false} strokeDasharray="4 3" />
+            {hasBaseline && <Line type="monotone" dataKey="baseline" stroke="#C9A227" strokeWidth={1.5} dot={false} strokeDasharray="4 3" />}
+            <Line type="monotone" dataKey="enhanced" stroke="var(--primary)" strokeWidth={2} dot={false} />
+          </>}
+          {yMode === 'pct' && <Area type="monotone" dataKey="enhanced" stroke="var(--primary)" strokeWidth={2} fill="color-mix(in srgb, var(--primary) 10%, transparent)" dot={false} />}
+        </ComposedChart>
+      </ResponsiveContainer>
     </div>
-    <div style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 340, overflowY: 'auto' }}>
-      {!library && <p className="ds-caption">Loading signals…</p>}
-      {library?.signals.map((s) => {
-        const active = activeIds.has(s.signal_id);
+  );
+};
+
+// ─── Metrics grid ─────────────────────────────────────────────────────────────────
+const MetricsGrid: React.FC<{ metrics: AggregateMetrics; onRow: (k: string) => void }> = ({ metrics: m, onRow }) => {
+  const rows = [
+    { k: 'Sharpe', label: 'Sharpe (Lo-adj.)', value: fmt.f3(m.sharpe_ratio), tone: m.sharpe_ratio > 0.5 ? 'gain' : m.sharpe_ratio < 0 ? 'loss' : 'neutral' },
+    { k: 'DSR',    label: 'Deflated Sharpe',   value: fmt.f3(m.deflated_sharpe_ratio), tone: m.deflated_sharpe_ratio > 0 ? 'gain' : 'loss' },
+    { k: 'PSR',    label: 'PSR',                value: fmt.pct(m.probabilistic_sharpe_ratio), tone: m.probabilistic_sharpe_ratio > 0.8 ? 'gain' : 'neutral' },
+    { k: 'Sortino',label: 'Sortino',            value: fmt.f2(m.sortino_ratio), tone: m.sortino_ratio > 0 ? 'gain' : 'loss' },
+    { k: 'Calmar', label: 'Calmar',             value: fmt.f2(m.calmar_ratio), tone: m.calmar_ratio > 0.5 ? 'gain' : 'neutral' },
+    { k: 'CAGR',   label: 'CAGR',               value: fmt.pct(m.cagr), tone: m.cagr > 0 ? 'gain' : 'loss' },
+    { k: 'Vol',    label: 'Ann. Volatility',    value: fmt.pct(m.annual_volatility), tone: 'neutral' },
+    { k: 'MDD',    label: 'Max Drawdown',       value: fmt.pct(m.max_drawdown), tone: m.max_drawdown > 0.3 ? 'loss' : 'neutral' },
+    { k: 'WR',     label: 'Win Rate',           value: fmt.pct(m.win_rate), tone: m.win_rate > 0.5 ? 'gain' : 'neutral' },
+    { k: 'PF',     label: 'Profit Factor',      value: fmt.f2(m.profit_factor), tone: m.profit_factor > 1.5 ? 'gain' : m.profit_factor < 1 ? 'loss' : 'neutral' },
+    { k: 'Trades', label: 'Total Trades',       value: fmt.int(m.total_trades), tone: 'neutral' },
+    { k: 'Dur',    label: 'Avg Duration',       value: `${m.avg_trade_duration_days.toFixed(0)}d`, tone: 'neutral' },
+    { k: 'Skew',   label: 'Skewness',           value: fmt.f2(m.skewness), tone: m.skewness > 0 ? 'gain' : 'neutral' },
+    { k: 'Kurt',   label: 'Excess Kurtosis',    value: fmt.f2(m.excess_kurtosis), tone: 'neutral' },
+  ] as const;
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
+      {rows.map((row, i) => {
+        const color = row.tone === 'gain' ? 'var(--ds-gain)' : row.tone === 'loss' ? 'var(--ds-loss)' : 'var(--foreground)';
         return (
-          <div key={s.signal_id} className="ds-surface-ghost ds-transition-fast" style={{ padding: 11, borderRadius: 9 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-              <span className="ds-heading" style={{ fontSize: 12.5 }}>{s.label}</span>
-              <Pill tone="brand">{s.min_tier}</Pill>
-            </div>
-            <p className="ds-caption" style={{ margin: '6px 0', lineHeight: 1.45 }}>{s.description}</p>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-              <code style={{ fontSize: 9.5, color: 'var(--muted-foreground)', fontFamily: 'var(--font-mono)' }}>
-                {s.source_columns.slice(0, 3).join(' · ')}
-              </code>
-              <button
-                className={active ? 'ds-btn ds-btn-ghost' : 'ds-btn ds-btn-outline'}
-                onClick={() => onAdd(s)}
-                disabled={active}
-                style={{ height: 26, padding: '0 10px', fontSize: 11 }}
-              >
-                <Plus size={12} /> {active ? 'Added' : 'Add'}
-              </button>
-            </div>
+          <div
+            key={row.k}
+            onClick={() => onRow(row.k)}
+            title="Click for commentary"
+            style={{
+              padding: '8px 12px', cursor: 'pointer',
+              borderBottom: i < rows.length - 2 ? '1px solid var(--border)' : 'none',
+              borderRight: i % 2 === 0 ? '1px solid var(--border)' : 'none',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            }}
+          >
+            <span style={{ fontSize: 11, color: 'var(--muted-foreground)' }}>{row.label}</span>
+            <span style={{ fontSize: 11, fontWeight: 600, color, fontVariantNumeric: 'tabular-nums' }}>{row.value}</span>
           </div>
         );
       })}
     </div>
-  </section>
-);
-
-// ─── Strategy Builder ───────────────────────────────────────────────────────────
-
-type BuilderTab = 'templates' | 'composer' | 'advanced';
-
-const StrategyBuilder: React.FC<{
-  tab: BuilderTab;
-  setTab: (t: BuilderTab) => void;
-  name: string;
-  setName: (s: string) => void;
-  dateRange: { start_date: string; end_date: string };
-  setDateRange: (r: { start_date: string; end_date: string }) => void;
-  signals: SignalConfig[];
-  setSignals: (s: SignalConfig[]) => void;
-  entryOp: Operator;
-  setEntryOp: (o: Operator) => void;
-  exitOp: Operator;
-  setExitOp: (o: Operator) => void;
-  sizing: PositionSizing;
-  setSizing: (s: PositionSizing) => void;
-  comparison: boolean;
-  setComparison: (b: boolean) => void;
-  maxDD: number;
-  setMaxDD: (n: number) => void;
-  onApplyTemplate: (t: Template) => void;
-  advancedJson: string;
-  setAdvancedJson: (s: string) => void;
-}> = (p) => {
-  const updateSignal = (i: number, patch: Partial<SignalConfig>) => {
-    const next = p.signals.slice();
-    next[i] = { ...next[i], ...patch };
-    p.setSignals(next);
-  };
-  const removeSignal = (i: number) => p.setSignals(p.signals.filter((_, j) => j !== i));
-
-  return (
-    <section className="ds-panel">
-      <div className="ds-panel-header" style={{ flexWrap: 'wrap', gap: 8 }}>
-        <span className="ds-heading">Strategy Builder</span>
-        <Segmented
-          value={p.tab}
-          onChange={p.setTab}
-          options={[
-            { value: 'templates', label: 'Templates' },
-            { value: 'composer', label: 'Composer' },
-            { value: 'advanced', label: 'Advanced' },
-          ]}
-        />
-      </div>
-
-      <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 13 }}>
-        {p.tab === 'templates' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-            {TEMPLATES.map((t) => (
-              <button
-                key={t.key}
-                onClick={() => p.onApplyTemplate(t)}
-                className="ds-surface-ghost ds-transition-fast"
-                style={{ textAlign: 'left', padding: 12, borderRadius: 9, cursor: 'pointer' }}
-              >
-                <div className="ds-heading">{t.name}</div>
-                <p className="ds-caption" style={{ margin: '6px 0 0', lineHeight: 1.45 }}>{t.blurb}</p>
-                <div style={{ display: 'flex', gap: 5, marginTop: 8, flexWrap: 'wrap' }}>
-                  {t.signals.map((s) => (
-                    <Pill key={s.signal_id}>{s.signal_id}</Pill>
-                  ))}
-                  <Pill tone="brand">{t.sizing.method}</Pill>
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {p.tab === 'composer' && (
-          <>
-            <div>
-              <label className="ds-label" style={fieldLabel}>Strategy name</label>
-              <input className="ds-input" value={p.name} onChange={(e) => p.setName(e.target.value)} />
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <div>
-                <label className="ds-label" style={fieldLabel}>Start</label>
-                <input className="ds-input" type="date" value={p.dateRange.start_date} onChange={(e) => p.setDateRange({ ...p.dateRange, start_date: e.target.value })} />
-              </div>
-              <div>
-                <label className="ds-label" style={fieldLabel}>End</label>
-                <input className="ds-input" type="date" value={p.dateRange.end_date} onChange={(e) => p.setDateRange({ ...p.dateRange, end_date: e.target.value })} />
-              </div>
-            </div>
-
-            <div>
-              <label className="ds-label" style={fieldLabel}>Signals ({p.signals.length})</label>
-              {p.signals.length === 0 && <p className="ds-caption">Add signals from the library below.</p>}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {p.signals.map((s, i) => (
-                  <div key={s.signal_id} className="ds-surface-inset" style={{ padding: 9 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <code style={{ fontSize: 11.5, fontWeight: 600, fontFamily: 'var(--font-mono)' }}>{s.signal_id}</code>
-                      <button className="ds-btn ds-btn-ghost" onClick={() => removeSignal(i)} style={{ height: 22, width: 22, padding: 0 }}>
-                        <X size={12} />
-                      </button>
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr 0.8fr', gap: 6, marginTop: 7 }}>
-                      <div>
-                        <label className="ds-label" style={fieldLabel}>Dir</label>
-                        <select className="ds-input" value={s.direction} onChange={(e) => updateSignal(i, { direction: e.target.value as Direction })}>
-                          {(['Above', 'Below', 'CrossUp', 'CrossDown'] as Direction[]).map((d) => (
-                            <option key={d} value={d}>{d}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="ds-label" style={fieldLabel}>Threshold</label>
-                        <input className="ds-input" type="number" step="0.01" value={s.threshold} onChange={(e) => updateSignal(i, { threshold: Number(e.target.value) })} />
-                      </div>
-                      <div>
-                        <label className="ds-label" style={fieldLabel}>Weight</label>
-                        <input className="ds-input" type="number" step="0.1" min="0" max="1" value={s.weight} onChange={(e) => updateSignal(i, { weight: Number(e.target.value) })} />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <div>
-                <label className="ds-label" style={fieldLabel}>Entry combine</label>
-                <Segmented value={p.entryOp} onChange={p.setEntryOp} options={[{ value: 'AND', label: 'AND' }, { value: 'OR', label: 'OR' }]} />
-              </div>
-              <div>
-                <label className="ds-label" style={fieldLabel}>Exit combine</label>
-                <Segmented value={p.exitOp} onChange={p.setExitOp} options={[{ value: 'AND', label: 'AND' }, { value: 'OR', label: 'OR' }]} />
-              </div>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <div>
-                <label className="ds-label" style={fieldLabel}>Position sizing</label>
-                <select
-                  className="ds-input"
-                  value={p.sizing.method}
-                  onChange={(e) => {
-                    const m = e.target.value as PositionSizing['method'];
-                    if (m === 'FixedFractional') p.setSizing({ method: m, fraction: 0.5 });
-                    else if (m === 'Kelly') p.setSizing({ method: m, kelly_fraction: 0.5 });
-                    else if (m === 'VolTarget') p.setSizing({ method: m, target_annual_vol: 0.1 });
-                    else p.setSizing({ method: 'EqualWeight' });
-                  }}
-                >
-                  <option value="VolTarget">Vol Target</option>
-                  <option value="Kelly">Fractional Kelly</option>
-                  <option value="FixedFractional">Fixed Fractional</option>
-                  <option value="EqualWeight">Equal Weight</option>
-                </select>
-              </div>
-              <div>
-                <label className="ds-label" style={fieldLabel}>Max drawdown %</label>
-                <input className="ds-input" type="number" step="1" value={p.maxDD} onChange={(e) => p.setMaxDD(Number(e.target.value))} />
-              </div>
-            </div>
-
-            {p.sizing.method === 'VolTarget' && (
-              <div>
-                <label className="ds-label" style={fieldLabel}>Target annual vol</label>
-                <input className="ds-input" type="number" step="0.01" value={p.sizing.target_annual_vol ?? 0.1} onChange={(e) => p.setSizing({ method: 'VolTarget', target_annual_vol: Number(e.target.value) })} />
-              </div>
-            )}
-            {p.sizing.method === 'Kelly' && (
-              <div>
-                <label className="ds-label" style={fieldLabel}>Kelly fraction</label>
-                <input className="ds-input" type="number" step="0.05" min="0" max="1" value={p.sizing.kelly_fraction ?? 0.5} onChange={(e) => p.setSizing({ method: 'Kelly', kelly_fraction: Number(e.target.value) })} />
-              </div>
-            )}
-            {p.sizing.method === 'FixedFractional' && (
-              <div>
-                <label className="ds-label" style={fieldLabel}>Fraction</label>
-                <input className="ds-input" type="number" step="0.05" min="0" max="1" value={p.sizing.fraction} onChange={(e) => p.setSizing({ method: 'FixedFractional', fraction: Number(e.target.value) })} />
-              </div>
-            )}
-
-            <label className="ds-body" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, cursor: 'pointer' }}>
-              <input type="checkbox" checked={p.comparison} onChange={(e) => p.setComparison(e.target.checked)} />
-              Compare against 12-1 momentum baseline
-            </label>
-          </>
-        )}
-
-        {p.tab === 'advanced' && (
-          <div>
-            <label className="ds-label" style={fieldLabel}>StrategySpec JSON</label>
-            <textarea
-              spellCheck={false}
-              className="ds-input"
-              style={{ height: 440, padding: 10, fontFamily: 'var(--font-mono)', fontSize: 11.5, lineHeight: 1.55, resize: 'vertical' }}
-              value={p.advancedJson}
-              onChange={(e) => p.setAdvancedJson(e.target.value)}
-            />
-            <p className="ds-caption" style={{ marginTop: 6 }}>Edited JSON is used verbatim on Run. Switch tabs to regenerate from the composer.</p>
-          </div>
-        )}
-      </div>
-    </section>
   );
 };
 
-// ─── Equity chart ───────────────────────────────────────────────────────────────
-
-interface ChartDatum {
-  t: string;
-  equity: number;
-  drawdown: number;
-  state: number;
-}
-
-const ChartTooltip: React.FC<{ active?: boolean; payload?: { payload: ChartDatum }[] }> = ({ active, payload }) => {
-  if (!active || !payload?.length) return null;
-  const d = payload[0].payload;
-  return (
-    <div className="ds-surface" style={{ padding: '8px 10px', background: 'var(--popover)', boxShadow: '0 4px 14px rgba(0,0,0,0.12)' }}>
-      <div className="ds-caption" style={{ marginBottom: 4 }}>{d.t}</div>
-      <div style={{ ...num, display: 'grid', gap: 2, fontSize: 11.5 }}>
-        <span><strong>{d.equity.toFixed(3)}</strong> equity</span>
-        <span style={{ color: 'var(--ds-loss)' }}>{(d.drawdown * 100).toFixed(1)}% drawdown</span>
-        <span style={{ color: regimeColor(d.state) }}>{REGIME_LABELS[d.state] ?? d.state}</span>
-      </div>
-    </div>
-  );
-};
-
-const EquityChart: React.FC<{ results: BacktestResults }> = ({ results }) => {
-  const data = useMemo<ChartDatum[]>(
-    () => results.equity_curve.map((p) => ({ t: p.timestamp, equity: p.value, drawdown: p.drawdown, state: p.regime_state })),
-    [results],
-  );
-  const segments = useMemo(() => {
-    const segs: { x1: string; x2: string; state: number }[] = [];
-    const ec = results.equity_curve;
-    if (!ec.length) return segs;
-    let start = 0;
-    for (let i = 1; i <= ec.length; i++) {
-      if (i === ec.length || ec[i].regime_state !== ec[start].regime_state) {
-        segs.push({ x1: ec[start].timestamp, x2: ec[i - 1].timestamp, state: ec[start].regime_state });
-        start = i;
-      }
-    }
-    return segs;
-  }, [results]);
-
-  return (
-    <>
-      <ResponsiveContainer width="100%" height={300}>
-        <ComposedChart data={data} margin={{ top: 6, right: 14, left: 0, bottom: 0 }} syncId="bt">
-          <defs>
-            <linearGradient id="eqFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--chart-1)" stopOpacity={0.18} />
-              <stop offset="100%" stopColor="var(--chart-1)" stopOpacity={0} />
-            </linearGradient>
-          </defs>
-          <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false} />
-          {segments.map((s, i) => (
-            <ReferenceArea key={i} x1={s.x1} x2={s.x2} fill={regimeColor(s.state)} fillOpacity={0.07} stroke="none" />
-          ))}
-          <XAxis dataKey="t" tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} tickFormatter={(t: string) => (t ?? '').slice(0, 7)} minTickGap={56} tickLine={false} axisLine={{ stroke: 'var(--border)' }} />
-          <YAxis tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} tickFormatter={(v: number) => v.toFixed(2)} domain={['auto', 'auto']} width={46} tickLine={false} axisLine={false} />
-          <Tooltip content={<ChartTooltip />} />
-          <Area dataKey="equity" stroke="var(--chart-1)" strokeWidth={1.8} fill="url(#eqFill)" dot={false} />
-        </ComposedChart>
-      </ResponsiveContainer>
-      {/* Underwater (drawdown) plot */}
-      <ResponsiveContainer width="100%" height={84}>
-        <ComposedChart data={data} margin={{ top: 2, right: 14, left: 0, bottom: 0 }} syncId="bt">
-          <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false} />
-          <XAxis dataKey="t" hide />
-          <YAxis tick={{ fontSize: 9, fill: 'var(--muted-foreground)' }} tickFormatter={(v: number) => `${(v * 100).toFixed(0)}%`} width={46} tickLine={false} axisLine={false} />
-          <Tooltip content={<ChartTooltip />} />
-          <Area dataKey="drawdown" stroke="var(--ds-loss)" strokeWidth={1.2} fill="var(--ds-loss)" fillOpacity={0.14} dot={false} />
-        </ComposedChart>
-      </ResponsiveContainer>
-    </>
-  );
-};
-
-// ─── Regime distribution ribbon ─────────────────────────────────────────────────
-
-const RegimeRibbon: React.FC<{ results: BacktestResults }> = ({ results }) => {
-  const counts = [0, 0, 0];
-  for (const p of results.equity_curve) if (p.regime_state < 3) counts[p.regime_state]++;
-  const total = counts.reduce((a, b) => a + b, 0) || 1;
-  return (
-    <div style={{ marginTop: 10 }}>
-      <div style={{ display: 'flex', height: 6, borderRadius: 3, overflow: 'hidden', border: '1px solid var(--border)' }}>
-        {counts.map((c, i) => (
-          <div key={i} style={{ width: `${(c / total) * 100}%`, background: regimeColor(i), opacity: 0.7 }} />
-        ))}
-      </div>
-      <div style={{ display: 'flex', gap: 16, marginTop: 8, flexWrap: 'wrap' }}>
-        {REGIME_LABELS.map((l, i) => (
-          <span key={l} className="ds-caption" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ width: 10, height: 10, borderRadius: 2, background: regimeColor(i), opacity: 0.7 }} />
-            {l} <span style={{ ...num, color: 'var(--foreground)' }}>{((counts[i] / total) * 100).toFixed(0)}%</span>
-          </span>
-        ))}
-      </div>
-    </div>
-  );
-};
-
-// ─── Detailed metrics table ─────────────────────────────────────────────────────
-
-const MetricsTable: React.FC<{ m: AggregateMetrics }> = ({ m }) => {
-  const rows: [string, string, string?][] = [
-    ['Sharpe (Lo-adjusted)', f2(m.sharpe_ratio)],
-    ['Deflated Sharpe', fProb(m.deflated_sharpe_ratio), 'P(true SR > expected-max)'],
-    ['Probabilistic Sharpe', fProb(m.probabilistic_sharpe_ratio), 'P(SR > 0)'],
-    ['Sortino', f2(m.sortino_ratio)],
-    ['Calmar', f2(m.calmar_ratio)],
-    ['Annual volatility', fPct(m.annual_volatility)],
-    ['Profit factor', f2(m.profit_factor)],
-    ['Avg trade duration', `${m.avg_trade_duration_days.toFixed(0)}d`],
-    ['Skewness', f2(m.skewness)],
-    ['Excess kurtosis', f2(m.excess_kurtosis)],
-  ];
-  return (
-    <table className="ds-table">
-      <tbody>
-        {rows.map(([k, v, hint]) => (
-          <tr key={k}>
-            <td style={{ color: 'var(--muted-foreground)' }}>
-              {k}
-              {hint && <span className="ds-caption" style={{ display: 'block', fontSize: 9.5 }}>{hint}</span>}
-            </td>
-            <td style={{ ...num, textAlign: 'right', fontWeight: 600 }}>{v}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-};
-
-const ComparisonPanel: React.FC<{ results: BacktestResults }> = ({ results }) => {
-  const c = results.comparison;
-  if (!c) return null;
-  const better = c.sharpe_delta >= 0;
-  return (
-    <section className="ds-panel">
-      <div className="ds-panel-header">
-        <span className="ds-heading">Signal Value vs 12-1 Momentum</span>
-        <Pill tone={c.signal_value_score >= 0.5 ? 'gain' : 'loss'}>value {fProb(c.signal_value_score)}</Pill>
-      </div>
-      <div style={{ padding: 14 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-          {better ? <TrendingUp size={18} style={{ color: 'var(--ds-gain)' }} /> : <TrendingDown size={18} style={{ color: 'var(--ds-loss)' }} />}
-          <span style={{ ...num, fontSize: 20, fontWeight: 650, color: better ? 'var(--ds-gain)' : 'var(--ds-loss)' }}>
-            {c.sharpe_delta >= 0 ? '+' : ''}{f2(c.sharpe_delta)}
-          </span>
-          <span className="ds-caption">Sharpe vs baseline · {c.drawdown_reduction_pct >= 0 ? '−' : '+'}{Math.abs(c.drawdown_reduction_pct).toFixed(0)}% drawdown</span>
-        </div>
-        <table className="ds-table">
-          <thead>
-            <tr>
-              <th>Metric</th>
-              <th style={{ textAlign: 'right' }}>Enhanced</th>
-              <th style={{ textAlign: 'right' }}>Baseline</th>
-            </tr>
-          </thead>
-          <tbody>
-            {([
-              ['Sharpe', f2(c.enhanced_metrics.sharpe_ratio), f2(c.baseline_metrics.sharpe_ratio)],
-              ['CAGR', fPct(c.enhanced_metrics.cagr), fPct(c.baseline_metrics.cagr)],
-              ['Max drawdown', fPct(c.enhanced_metrics.max_drawdown), fPct(c.baseline_metrics.max_drawdown)],
-              ['Sortino', f2(c.enhanced_metrics.sortino_ratio), f2(c.baseline_metrics.sortino_ratio)],
-            ] as [string, string, string][]).map(([k, e, b]) => (
-              <tr key={k}>
-                <td style={{ color: 'var(--muted-foreground)' }}>{k}</td>
-                <td style={{ ...num, textAlign: 'right', fontWeight: 600 }}>{e}</td>
-                <td style={{ ...num, textAlign: 'right', color: 'var(--muted-foreground)' }}>{b}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  );
-};
-
-const RegimeBreakdown: React.FC<{ results: BacktestResults }> = ({ results }) => {
+// ─── Regime table ─────────────────────────────────────────────────────────────────
+const RegimeTable: React.FC<{ results: BacktestResults }> = ({ results }) => {
   const rows: { label: string; m: PartitionMetrics; state: number }[] = [
-    { label: REGIME_LABELS[0], m: results.regime_metrics.risk_on, state: 0 },
-    { label: REGIME_LABELS[1], m: results.regime_metrics.transitional, state: 1 },
-    { label: REGIME_LABELS[2], m: results.regime_metrics.risk_off, state: 2 },
+    { label: REGIME_LABELS[0], m: results.regime_metrics.risk_on,       state: 0 },
+    { label: REGIME_LABELS[1], m: results.regime_metrics.transitional,  state: 1 },
+    { label: REGIME_LABELS[2], m: results.regime_metrics.risk_off,      state: 2 },
   ];
   return (
-    <section className="ds-panel">
-      <div className="ds-panel-header"><span className="ds-heading">Performance by Regime</span></div>
-      <div style={{ padding: '4px 6px', overflowX: 'auto' }}>
-        <table className="ds-table">
-          <thead>
-            <tr>
-              <th>Regime</th>
-              <th style={{ textAlign: 'right' }}>Days</th>
-              <th style={{ textAlign: 'right' }}>Sharpe</th>
-              <th style={{ textAlign: 'right' }}>Ann. Return</th>
-              <th style={{ textAlign: 'right' }}>Max DD</th>
-              <th style={{ textAlign: 'right' }}>Win Rate</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.label}>
-                <td style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: 2, background: regimeColor(r.state) }} />
-                  {r.label}
-                </td>
-                <td style={{ ...num, textAlign: 'right' }}>{r.m.days_in_regime}</td>
-                <td style={{ ...num, textAlign: 'right', fontWeight: 600 }}>{f2(r.m.sharpe_ratio)}</td>
-                <td style={{ ...num, textAlign: 'right', color: r.m.annualized_return >= 0 ? 'var(--ds-gain)' : 'var(--ds-loss)' }}>{fPct(r.m.annualized_return)}</td>
-                <td style={{ ...num, textAlign: 'right' }}>{fPct(r.m.max_drawdown)}</td>
-                <td style={{ ...num, textAlign: 'right' }}>{fPct(r.m.win_rate)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  );
-};
-
-const TradeLog: React.FC<{ results: BacktestResults }> = ({ results }) => (
-  <section className="ds-panel">
-    <div className="ds-panel-header">
-      <span className="ds-heading">Trade Log</span>
-      <span className="ds-caption">{results.trade_log.length} trades</span>
-    </div>
-    <div style={{ padding: '4px 6px', maxHeight: 340, overflowY: 'auto' }}>
-      <table className="ds-table">
+    <div style={{ overflowX: 'auto' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
         <thead>
-          <tr>
-            <th>Entry</th>
-            <th>Exit</th>
-            <th style={{ textAlign: 'right' }}>Days</th>
-            <th>Regime @ entry</th>
-            <th style={{ textAlign: 'right' }}>PnL</th>
+          <tr style={{ borderBottom: '1px solid var(--border)' }}>
+            {['Regime', 'Days', 'Sharpe', 'MDD', 'Win Rate', 'Ann. Return'].map((h) => (
+              <th key={h} style={{ padding: '6px 10px', textAlign: h === 'Regime' ? 'left' : 'right', color: 'var(--muted-foreground)', fontWeight: 600, fontSize: 11 }}>{h}</th>
+            ))}
           </tr>
         </thead>
         <tbody>
-          {results.trade_log.slice(0, 250).map((t, i) => (
-            <tr key={i}>
-              <td style={num}>{t.entry_ts}</td>
-              <td style={num}>{t.exit_ts}</td>
-              <td style={{ ...num, textAlign: 'right' }}>{t.duration_days.toFixed(0)}</td>
-              <td>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ width: 7, height: 7, borderRadius: 2, background: regimeColor(t.regime_at_entry) }} />
-                  {REGIME_LABELS[t.regime_at_entry] ?? t.regime_at_entry}
-                </span>
+          {rows.map(({ label, m, state }) => (
+            <tr key={label} style={{ borderBottom: '1px solid var(--border)' }}>
+              <td style={{ padding: '7px 10px', display: 'flex', alignItems: 'center', gap: 7 }}>
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: regimeColor(state), display: 'inline-block', flexShrink: 0 }} />{label}
               </td>
-              <td style={{ ...num, textAlign: 'right', fontWeight: 600, color: t.pnl_pct >= 0 ? 'var(--ds-gain)' : 'var(--ds-loss)' }}>{fPct(t.pnl_pct)}</td>
+              <td style={{ padding: '7px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{m.days_in_regime}</td>
+              <td style={{ padding: '7px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: m.sharpe_ratio > 0 ? 'var(--ds-gain)' : m.sharpe_ratio < 0 ? 'var(--ds-loss)' : undefined }}>{fmt.f2(m.sharpe_ratio)}</td>
+              <td style={{ padding: '7px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: m.max_drawdown > 0.25 ? 'var(--ds-loss)' : undefined }}>{fmt.pct(m.max_drawdown)}</td>
+              <td style={{ padding: '7px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmt.pct(m.win_rate)}</td>
+              <td style={{ padding: '7px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: m.annualized_return > 0 ? 'var(--ds-gain)' : m.annualized_return < 0 ? 'var(--ds-loss)' : undefined }}>{fmt.pct(m.annualized_return)}</td>
             </tr>
           ))}
         </tbody>
       </table>
     </div>
-  </section>
-);
-
-// ─── Results zone ───────────────────────────────────────────────────────────────
-
-const ResultsZone: React.FC<{ results: BacktestResults }> = ({ results }) => {
-  const m = results.aggregate_metrics;
-  return (
-    <>
-      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(132px, 1fr))', gap: 10 }}>
-        <Kpi label="CAGR" value={fPct(m.cagr)} tone={m.cagr >= 0 ? 'gain' : 'loss'} accent />
-        <Kpi label="Sharpe" value={f2(m.sharpe_ratio)} sub="Lo-adjusted" tone={m.sharpe_ratio >= 1 ? 'gain' : 'neutral'} />
-        <Kpi label="Deflated SR" value={fProb(m.deflated_sharpe_ratio)} sub="probability" />
-        <Kpi label="Max Drawdown" value={fPct(m.max_drawdown)} tone="loss" />
-        <Kpi label="Sortino" value={f2(m.sortino_ratio)} />
-        <Kpi label="Calmar" value={f2(m.calmar_ratio)} />
-        <Kpi label="Win Rate" value={fPct(m.win_rate)} sub={`${m.total_trades} trades`} />
-      </section>
-
-      <section className="ds-surface" style={{ padding: 16, borderRadius: 10 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6, flexWrap: 'wrap', gap: 8 }}>
-          <span className="ds-heading">Equity Curve · regime-shaded</span>
-          <span className="ds-caption" style={num}>{results.bars} bars · through {results.data_through}</span>
-        </div>
-        <EquityChart results={results} />
-        <RegimeRibbon results={results} />
-      </section>
-
-      <div style={{ display: 'grid', gridTemplateColumns: results.comparison ? '1fr 1fr' : '1fr', gap: 16, alignItems: 'start' }}>
-        <section className="ds-panel">
-          <div className="ds-panel-header"><span className="ds-heading">Risk-Adjusted Metrics</span></div>
-          <div style={{ padding: '4px 6px' }}><MetricsTable m={m} /></div>
-        </section>
-        <ComparisonPanel results={results} />
-      </div>
-
-      <RegimeBreakdown results={results} />
-      <TradeLog results={results} />
-    </>
   );
 };
 
-// ─── Page ───────────────────────────────────────────────────────────────────────
-
-export const Backtesting: React.FC = () => {
-  const [library, setLibrary] = useState<SignalLibrary | null>(null);
-
-  const [tab, setTab] = useState<BuilderTab>('templates');
-  const [name, setName] = useState('Risk-On Regime Trend');
-  const [dateRange, setDateRange] = useState({ start_date: '2015-01-01', end_date: TODAY });
-  const [signals, setSignals] = useState<SignalConfig[]>(TEMPLATES[0].signals);
-  const [entryOp, setEntryOp] = useState<Operator>('AND');
-  const [exitOp, setExitOp] = useState<Operator>('OR');
-  const [sizing, setSizing] = useState<PositionSizing>(TEMPLATES[0].sizing);
-  const [comparison, setComparison] = useState(true);
-  const [maxDD, setMaxDD] = useState(25);
-  const [advancedJson, setAdvancedJson] = useState('');
-
-  const [running, setRunning] = useState(false);
-  const [validation, setValidation] = useState<ValidationResult | null>(null);
-  const [results, setResults] = useState<BacktestResults | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    getSignalLibrary().then(setLibrary).catch(() => setLibrary({ signals: [] }));
-  }, []);
-
-  const currentSpec = useMemo(
-    () =>
-      buildSpec(
-        { name, date_range: dateRange, risk_params: { max_drawdown_pct: maxDD, position_cap_pct: 100, rebalance_freq: 'Daily', risk_per_trade_pct: 1, min_rr: 2 } },
-        signals,
-        entryOp,
-        exitOp,
-        sizing,
-        comparison,
-      ),
-    [name, dateRange, signals, entryOp, exitOp, sizing, comparison, maxDD],
+// ─── Attribution chart ────────────────────────────────────────────────────────────
+const AttributionChart: React.FC<{ results: BacktestResults; onBar: (id: string) => void }> = ({ results, onBar }) => {
+  const data = [...results.signal_attribution].sort((a, b) => b.marginal_sharpe - a.marginal_sharpe);
+  return (
+    <ResponsiveContainer width="100%" height={Math.max(100, data.length * 42)}>
+      <BarChart data={data} layout="vertical" margin={{ left: 80, right: 20, top: 0, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" strokeOpacity={0.5} horizontal={false} />
+        <XAxis type="number" tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} tickLine={false} axisLine={false} />
+        <YAxis type="category" dataKey="signal_id" tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} tickLine={false} axisLine={false} />
+        <RechartsTip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 11 }} formatter={(v: number) => [v.toFixed(3), 'Marginal Sharpe']} />
+        <Bar dataKey="marginal_sharpe" radius={[0, 4, 4, 0]} onClick={(d) => onBar(d.signal_id)}>
+          {data.map((e) => <Cell key={e.signal_id} fill={e.marginal_sharpe >= 0 ? 'var(--ds-gain)' : 'var(--ds-loss)'} style={{ cursor: 'pointer' }} />)}
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
   );
+};
 
-  const goTab = (t: BuilderTab) => {
-    if (t === 'advanced') setAdvancedJson(JSON.stringify(currentSpec, null, 2));
-    setTab(t);
-  };
+// ─── Trade log ────────────────────────────────────────────────────────────────────
+const TradeLog: React.FC<{ results: BacktestResults }> = ({ results }) => {
+  const [expanded, setExpanded] = useState(false);
+  const trades = results.trade_log;
+  const shown = expanded ? trades : trades.slice(0, 6);
+  return (
+    <div>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+        <thead>
+          <tr style={{ borderBottom: '1px solid var(--border)' }}>
+            {['Entry', 'Exit', 'Dur.', 'P&L', 'Regime'].map((h) => (
+              <th key={h} style={{ padding: '6px 10px', textAlign: 'left', color: 'var(--muted-foreground)', fontWeight: 600, fontSize: 11 }}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {shown.map((t, i) => {
+            const pos = t.pnl_pct > 0.005;
+            const neg = t.pnl_pct < -0.005;
+            return (
+              <tr key={i} style={{ borderBottom: '1px solid color-mix(in srgb, var(--border) 50%, transparent)' }}>
+                <td style={{ padding: '6px 10px', fontVariantNumeric: 'tabular-nums' }}>{t.entry_ts}</td>
+                <td style={{ padding: '6px 10px', fontVariantNumeric: 'tabular-nums' }}>{t.exit_ts}</td>
+                <td style={{ padding: '6px 10px' }}>{t.duration_days.toFixed(0)}d</td>
+                <td style={{ padding: '6px 10px', fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: pos ? 'var(--ds-gain)' : neg ? 'var(--ds-loss)' : undefined }}>{fmt.pct(t.pnl_pct)}</td>
+                <td style={{ padding: '6px 10px' }}><span style={{ fontSize: 10, color: regimeColor(t.regime_at_entry) }}>{REGIME_LABELS[t.regime_at_entry]}</span></td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      {trades.length > 6 && (
+        <button onClick={() => setExpanded(!expanded)} style={{ marginTop: 8, width: '100%', fontSize: 11, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted-foreground)', padding: '6px 0' }}>
+          {expanded ? 'Show fewer' : `Show all ${trades.length} trades`}
+        </button>
+      )}
+    </div>
+  );
+};
 
-  const applyTemplate = (t: Template) => {
-    setName(t.name);
-    setSignals(t.signals);
-    setSizing(t.sizing);
-    setEntryOp(t.entryOp);
-    setExitOp(t.exitOp);
-    setTab('composer');
-  };
+// ─── Section header (canvas content) ─────────────────────────────────────────────
+const SH: React.FC<{ icon: React.ReactNode; title: string; sub?: string }> = ({ icon, title, sub }) => (
+  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+    <span style={{ color: 'var(--primary)', display: 'flex', flexShrink: 0 }}>{icon}</span>
+    <span style={{ fontSize: 13, fontWeight: 600 }}>{title}</span>
+    {sub && <span style={{ fontSize: 11, color: 'var(--muted-foreground)', marginLeft: 4 }}>{sub}</span>}
+  </div>
+);
 
-  const addSignal = (s: SignalMeta) => {
-    if (signals.some((x) => x.signal_id === s.signal_id)) return;
-    const threshold = s.signal_type === 'MacroRegime' && s.unit === 'probability' ? 0.5 : 0;
-    setSignals([...signals, { signal_id: s.signal_id, signal_type: s.signal_type, threshold, direction: 'Above', weight: 1 }]);
-    if (tab === 'templates') setTab('composer');
-  };
-
-  const onRun = async () => {
-    setError(null);
-    setValidation(null);
-    let spec: StrategySpec;
-    try {
-      spec = tab === 'advanced' ? (JSON.parse(advancedJson) as StrategySpec) : currentSpec;
-    } catch {
-      setError('Advanced JSON is not valid JSON.');
-      return;
-    }
-    setRunning(true);
-    try {
-      const v = await validateStrategy(spec);
-      setValidation(v);
-      if (!v.valid) {
-        setRunning(false);
-        return;
-      }
-      const res = await runBacktest(spec);
-      setResults(res);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Backtest failed.');
-    } finally {
-      setRunning(false);
-    }
-  };
-
-  const activeIds = useMemo(() => new Set(signals.map((s) => s.signal_id)), [signals]);
-  const hasValidationNotes =
-    validation && (validation.errors.length > 0 || validation.warnings.length > 0 || validation.tier_requirements.length > 0);
+// ─── Composer (Quick Build form) ──────────────────────────────────────────────────
+const Composer: React.FC<{
+  signals: SignalConfig[]; setSignals: (s: SignalConfig[]) => void;
+  entryOp: Operator; setEntryOp: (o: Operator) => void;
+  exitOp: Operator; setExitOp: (o: Operator) => void;
+  sizing: PositionSizing; setSizing: (p: PositionSizing) => void;
+  name: string; setName: (s: string) => void;
+  instrument: string; setInstrument: (s: string) => void;
+  dateRange: { start_date: string; end_date: string }; setDateRange: (r: { start_date: string; end_date: string }) => void;
+  startingCapital: number; setStartingCapital: (n: number) => void;
+  comparison: boolean; setComparison: (b: boolean) => void;
+  library: SignalLibrary | null;
+}> = ({
+  signals, setSignals, entryOp, setEntryOp, exitOp, setExitOp,
+  sizing, setSizing, name, setName, instrument, setInstrument,
+  dateRange, setDateRange, startingCapital, setStartingCapital,
+  comparison, setComparison, library,
+}) => {
+  const lbl: React.CSSProperties = { display: 'block', fontSize: 11, color: 'var(--muted-foreground)', marginBottom: 4, fontWeight: 600 };
+  const inp: React.CSSProperties = { padding: '7px 10px', fontSize: 12, background: 'var(--background)', border: '1px solid var(--border)', borderRadius: 7, color: 'var(--foreground)', width: '100%', boxSizing: 'border-box' };
+  const activeIds = new Set(signals.map((s) => s.signal_id));
 
   return (
-    <div style={{ padding: '0 24px 36px', maxWidth: 1520, margin: '0 auto' }}>
-      <PageHeader
-        title="Backtesting"
-        subtitle="Regime-conditioned strategy backtesting on the institutional execution engine — Lo-adjusted Sharpe, Deflated Sharpe, causal HMM regimes, and realistic transaction costs."
-        actions={
-          <button className="ds-btn ds-btn-primary" onClick={onRun} disabled={running} style={{ height: '2.375rem', padding: '0 18px', fontSize: 13 }}>
-            {running ? <Loader2 size={15} style={{ animation: 'spin 0.7s linear infinite' }} /> : <Play size={15} />}
-            {running ? 'Running…' : 'Run Backtest'}
-          </button>
-        }
-      />
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(360px, 400px) 1fr', gap: 18, alignItems: 'start' }}>
-        {/* Left: builder + library */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, position: 'sticky', top: 16 }}>
-          <StrategyBuilder
-            tab={tab}
-            setTab={goTab}
-            name={name}
-            setName={setName}
-            dateRange={dateRange}
-            setDateRange={setDateRange}
-            signals={signals}
-            setSignals={setSignals}
-            entryOp={entryOp}
-            setEntryOp={setEntryOp}
-            exitOp={exitOp}
-            setExitOp={setExitOp}
-            sizing={sizing}
-            setSizing={setSizing}
-            comparison={comparison}
-            setComparison={setComparison}
-            maxDD={maxDD}
-            setMaxDD={setMaxDD}
-            onApplyTemplate={applyTemplate}
-            advancedJson={advancedJson}
-            setAdvancedJson={setAdvancedJson}
-          />
-          <SignalLibraryPanel library={library} onAdd={addSignal} activeIds={activeIds} />
+    <div style={{ display: 'flex', gap: 24 }}>
+      {/* Left: form fields */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <div><label style={lbl}>Strategy name</label><input style={inp} value={name} onChange={(e) => setName(e.target.value)} /></div>
+          <div><label style={lbl}>Instrument</label><input style={inp} value={instrument} onChange={(e) => setInstrument(e.target.value.toUpperCase())} placeholder="SPY" /></div>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+          <div><label style={lbl}>Start date</label><input type="date" style={inp} value={dateRange.start_date} onChange={(e) => setDateRange({ ...dateRange, start_date: e.target.value })} /></div>
+          <div><label style={lbl}>End date</label><input type="date" style={inp} value={dateRange.end_date} onChange={(e) => setDateRange({ ...dateRange, end_date: e.target.value })} /></div>
+          <div><label style={lbl}>Capital ($)</label><input type="number" style={inp} value={startingCapital} min={1000} step={1000} onChange={(e) => setStartingCapital(Math.max(1000, Number(e.target.value)))} /></div>
         </div>
 
-        {/* Right: results */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {hasValidationNotes && (
-            <section className="ds-panel" style={{ padding: 14, display: 'grid', gap: 5 }}>
-              {validation!.errors.map((e, i) => (
-                <div key={`e${i}`} className="ds-sev-critical" style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12.5 }}>
-                  <AlertTriangle size={14} /> {e}
-                </div>
-              ))}
-              {validation!.warnings.map((w, i) => (
-                <div key={`w${i}`} className="ds-sev-medium" style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12.5 }}>
-                  <AlertTriangle size={14} /> {w}
-                </div>
-              ))}
-              {validation!.tier_requirements.map((t, i) => (
-                <div key={`t${i}`} className="ds-caption">{t}</div>
-              ))}
-            </section>
+        {/* Active signals */}
+        <div>
+          <span style={lbl}>Active signals</span>
+          {signals.length === 0 && (
+            <p style={{ fontSize: 11, color: 'var(--muted-foreground)', margin: 0, padding: '10px 12px', border: '1px dashed var(--border)', borderRadius: 7, textAlign: 'center' }}>
+              Pick signals from the library →
+            </p>
           )}
-
-          {error && (
-            <section className="ds-panel ds-sev-critical" style={{ padding: 14, fontSize: 13, display: 'flex', gap: 8, alignItems: 'center' }}>
-              <AlertTriangle size={16} /> {error}
-            </section>
-          )}
-
-          {running && !results && (
-            <section className="ds-panel ds-empty">
-              <div className="ds-spinner" style={{ width: 26, height: 26 }} />
-              <p className="ds-heading">Running backtest…</p>
-              <p className="ds-caption" style={{ maxWidth: 420 }}>Fitting the regime model and simulating execution with realistic costs. This can take a few seconds on a cold engine.</p>
-            </section>
-          )}
-
-          {!results && !running && !error && !hasValidationNotes && (
-            <section className="ds-panel">
-              <div className="ds-empty">
-                <div className="ds-empty-icon"><FlaskConical size={22} /></div>
-                <p className="ds-heading">No backtest run yet</p>
-                <p className="ds-caption" style={{ maxWidth: 440 }}>
-                  Pick a template or compose a strategy on the left, then Run Backtest. Results are computed on the Rust execution engine with causal regime labels and realistic costs.
-                </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {signals.map((s) => (
+              <div key={s.signal_id} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '7px 10px', background: 'var(--muted)', borderRadius: 7 }}>
+                <code style={{ fontSize: 10, flex: 1, color: 'var(--muted-foreground)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.signal_id}</code>
+                <select style={{ ...inp, width: 90 }} value={s.direction} onChange={(e) => setSignals(signals.map((x) => x.signal_id === s.signal_id ? { ...x, direction: e.target.value as Direction } : x))}>
+                  {(['Above','Below','CrossUp','CrossDown'] as Direction[]).map((d) => <option key={d}>{d}</option>)}
+                </select>
+                <input type="number" style={{ ...inp, width: 68 }} value={s.threshold} step={0.1} onChange={(e) => setSignals(signals.map((x) => x.signal_id === s.signal_id ? { ...x, threshold: Number(e.target.value) } : x))} />
+                <button onClick={() => setSignals(signals.filter((x) => x.signal_id !== s.signal_id))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted-foreground)', display: 'flex' }}><X size={12} /></button>
               </div>
-            </section>
-          )}
+            ))}
+          </div>
+        </div>
 
-          {results && <ResultsZone results={results} />}
+        {/* Logic + sizing */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+          <div><label style={lbl}>Entry logic</label><select style={inp} value={entryOp} onChange={(e) => setEntryOp(e.target.value as Operator)}><option>AND</option><option>OR</option></select></div>
+          <div><label style={lbl}>Exit logic</label><select style={inp} value={exitOp} onChange={(e) => setExitOp(e.target.value as Operator)}><option>AND</option><option>OR</option></select></div>
+          <div><label style={lbl}>Position sizing</label>
+            <select style={inp} value={sizing.method} onChange={(e) => {
+              const m = e.target.value as PositionSizing['method'];
+              setSizing(m === 'FixedFractional' ? { method: 'FixedFractional', fraction: 0.95 } : m === 'Kelly' ? { method: 'Kelly', kelly_fraction: 0.5 } : m === 'VolTarget' ? { method: 'VolTarget', target_annual_vol: 0.10 } : { method: 'EqualWeight' });
+            }}>
+              <option value="FixedFractional">Fixed Frac.</option>
+              <option value="Kelly">Kelly</option>
+              <option value="VolTarget">Vol Target</option>
+              <option value="EqualWeight">Equal Weight</option>
+            </select>
+          </div>
+        </div>
 
-          <Disclaimer />
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12, color: 'var(--muted-foreground)' }}>
+          <input type="checkbox" checked={comparison} onChange={(e) => setComparison(e.target.checked)} />
+          Compare to 12-1 momentum baseline
+        </label>
+      </div>
+
+      {/* Right: signal library */}
+      <div style={{ width: 210, flexShrink: 0 }}>
+        <span style={lbl}>Signal library</span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 5, maxHeight: 340, overflowY: 'auto' }}>
+          {!library && <p style={{ fontSize: 11, color: 'var(--muted-foreground)' }}>Loading…</p>}
+          {library?.signals.map((s) => {
+            const active = activeIds.has(s.signal_id);
+            return (
+              <div key={s.signal_id} style={{ padding: '8px 10px', borderRadius: 8, border: `1px solid ${active ? 'var(--primary)' : 'var(--border)'}`, background: active ? 'color-mix(in srgb, var(--primary) 6%, var(--card))' : 'var(--card)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 11, fontWeight: 600 }}>{s.label}</span>
+                  <button
+                    disabled={active}
+                    onClick={() => !active && setSignals([...signals, { signal_id: s.signal_id, signal_type: s.signal_type, threshold: 0, direction: 'Above', weight: 1 / (signals.length + 1) }])}
+                    style={{ fontSize: 10, background: active ? 'transparent' : 'var(--primary)', color: active ? 'var(--primary)' : 'var(--primary-foreground)', border: active ? 'none' : 'none', borderRadius: 5, padding: '2px 7px', cursor: active ? 'default' : 'pointer', flexShrink: 0, fontWeight: 600 }}
+                  >
+                    {active ? '✓' : '+'}
+                  </button>
+                </div>
+                <p style={{ fontSize: 10, color: 'var(--muted-foreground)', margin: '3px 0 0', lineHeight: 1.4 }}>{s.description}</p>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
   );
 };
+
+// ─── Bottom input bar ─────────────────────────────────────────────────────────────
+const BottomBar: React.FC<{
+  onSubmit: (q: string) => void;
+  busy: boolean;
+  showingBuilder: boolean;
+  onToggleBuilder: () => void;
+  onRunBuilder: () => void;
+  builderDisabled: boolean;
+}> = ({ onSubmit, busy, showingBuilder, onToggleBuilder, onRunBuilder, builderDisabled }) => {
+  const [value, setValue] = useState('');
+  const ref = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+  }, [value]);
+
+  const submit = () => {
+    const v = value.trim();
+    if (!v || busy) return;
+    onSubmit(v);
+    setValue('');
+  };
+
+  return (
+    <div style={{
+      padding: '12px 20px 16px',
+    }}>
+      {/* Input container */}
+      <div style={{
+        display: 'flex', alignItems: 'flex-end', gap: 8,
+        background: 'var(--background)',
+        border: '1px solid var(--border)',
+        borderRadius: 12,
+        padding: '8px 10px 8px 12px',
+        boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.04)',
+        transition: 'border-color 0.15s',
+      }}
+        onFocus={() => {}}
+      >
+        {/* Quick Build toggle */}
+        <button
+          onClick={onToggleBuilder}
+          title={showingBuilder ? 'Close builder' : 'Quick Build — configure signals manually'}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 5,
+            padding: '4px 9px', borderRadius: 7, border: '1px solid var(--border)',
+            background: showingBuilder ? 'var(--primary)' : 'var(--muted)',
+            color: showingBuilder ? 'var(--primary-foreground)' : 'var(--muted-foreground)',
+            cursor: 'pointer', fontSize: 11, fontWeight: 600, flexShrink: 0,
+            alignSelf: 'flex-end', marginBottom: 2,
+            transition: 'background 0.15s, color 0.15s',
+          }}
+        >
+          {showingBuilder ? <X size={11} /> : <SlidersHorizontal size={11} />}
+          <span>{showingBuilder ? 'Close' : 'Quick Build'}</span>
+        </button>
+
+        {/* Textarea */}
+        <textarea
+          ref={ref}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); } }}
+          placeholder={showingBuilder ? 'Configure your strategy above, then press Run →' : 'Describe a strategy — instrument, signals, logic, time window…'}
+          rows={1}
+          disabled={busy || showingBuilder}
+          style={{
+            flex: 1, resize: 'none', border: 'none', outline: 'none',
+            background: 'transparent', color: showingBuilder ? 'var(--muted-foreground)' : 'var(--foreground)',
+            font: 'inherit', fontSize: 13.5, lineHeight: 1.5,
+            padding: '4px 0', minHeight: 28, maxHeight: 120,
+          }}
+        />
+
+        {/* Run button */}
+        <button
+          onClick={showingBuilder ? onRunBuilder : submit}
+          disabled={busy || (showingBuilder ? builderDisabled : !value.trim())}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            padding: '6px 14px',
+            background: 'var(--primary)', color: 'var(--primary-foreground)',
+            border: 'none', borderRadius: 8,
+            fontSize: 12, fontWeight: 600,
+            cursor: (busy || (showingBuilder ? builderDisabled : !value.trim())) ? 'not-allowed' : 'pointer',
+            opacity: (busy || (showingBuilder ? builderDisabled : !value.trim())) ? 0.45 : 1,
+            flexShrink: 0, alignSelf: 'flex-end', marginBottom: 2,
+            transition: 'opacity 0.15s',
+          }}
+        >
+          {busy
+            ? <><Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> Running…</>
+            : <><span>Run</span><ArrowRight size={12} /></>}
+        </button>
+      </div>
+      <p style={{ fontSize: 10, color: 'var(--muted-foreground)', margin: '6px 0 0 2px' }}>
+        Research intelligence only — not financial advice.
+      </p>
+    </div>
+  );
+};
+
+// ─── Landing state ────────────────────────────────────────────────────────────────
+const Landing: React.FC<{ onTemplate: (t: Template) => void }> = ({ onTemplate }) => (
+  <div style={{
+    flex: 1, display: 'flex', flexDirection: 'column',
+    alignItems: 'center', justifyContent: 'center',
+    padding: '48px 32px 24px', textAlign: 'center',
+  }}>
+    <Zap size={28} style={{ color: 'var(--primary)', marginBottom: 14 }} />
+    <h2 style={{ fontSize: 22, fontWeight: 700, margin: '0 0 6px', letterSpacing: '-0.02em', color: 'var(--foreground)' }}>
+      What strategy do you want to backtest?
+    </h2>
+    <p style={{ fontSize: 13, color: 'var(--muted-foreground)', margin: '0 0 28px', maxWidth: 400, lineHeight: 1.6 }}>
+      Describe your idea below, or choose a starting template.
+    </p>
+
+    {/* Compact template list — two columns */}
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, maxWidth: 580, width: '100%' }}>
+      {TEMPLATES.map((t) => (
+        <button
+          key={t.key}
+          onClick={() => onTemplate(t)}
+          style={{
+            background: 'var(--card)',
+            border: '1px solid var(--border)',
+            borderRadius: 9,
+            padding: '10px 14px',
+            cursor: 'pointer',
+            textAlign: 'left',
+            display: 'flex', alignItems: 'center', gap: 10,
+            transition: 'border-color 0.12s, background 0.12s',
+          }}
+          onMouseEnter={(e) => {
+            const el = e.currentTarget as HTMLElement;
+            el.style.borderColor = 'var(--primary)';
+            el.style.background = 'color-mix(in srgb, var(--primary) 5%, var(--card))';
+          }}
+          onMouseLeave={(e) => {
+            const el = e.currentTarget as HTMLElement;
+            el.style.borderColor = 'var(--border)';
+            el.style.background = 'var(--card)';
+          }}
+        >
+          <span style={{ color: 'var(--primary)', display: 'flex', flexShrink: 0 }}>{t.icon}</span>
+          <div style={{ minWidth: 0 }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--foreground)', display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.name}</span>
+            <span style={{ fontSize: 10.5, color: 'var(--muted-foreground)', lineHeight: 1.4, display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.blurb}</span>
+          </div>
+        </button>
+      ))}
+    </div>
+  </div>
+);
+
+// ─── History row (left rail) ──────────────────────────────────────────────────────
+const HistoryRow: React.FC<{ entry: HistoryEntry; active: boolean; onClick: () => void }> = ({
+  entry, active, onClick,
+}) => (
+  <button
+    onClick={onClick}
+    style={{
+      width: '100%', textAlign: 'left',
+      background: active ? 'color-mix(in srgb, var(--primary) 8%, var(--card))' : 'none',
+      border: 'none', borderRadius: 8, padding: '8px 10px', cursor: 'pointer',
+      borderLeft: active ? '2px solid var(--primary)' : '2px solid transparent',
+    }}
+  >
+    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--foreground)', marginBottom: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{entry.name}</div>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: 'var(--muted-foreground)' }}>
+      <span style={{ background: 'var(--muted)', borderRadius: 4, padding: '1px 5px', fontFamily: 'var(--font-mono)' }}>{entry.instrument}</span>
+      <span>SR {entry.sharpe.toFixed(2)}</span>
+      <span style={{ marginLeft: 'auto' }}>{fmt.rel(entry.ts)}</span>
+    </div>
+  </button>
+);
+
+// ─── Main page ────────────────────────────────────────────────────────────────────
+export function Backtesting() {
+  const { state: bt, runFromQuery, runFromSpec, reset } = useBacktest();
+
+  // Composer state
+  const [signals, setSignals]           = useState<SignalConfig[]>([]);
+  const [entryOp, setEntryOp]           = useState<Operator>('AND');
+  const [exitOp, setExitOp]             = useState<Operator>('OR');
+  const [sizing, setSizing]             = useState<PositionSizing>({ method: 'VolTarget', target_annual_vol: 0.10 });
+  const [name, setName]                 = useState('My Strategy');
+  const [instrument, setInstrument]     = useState('SPY');
+  const [startingCapital, setStartingCapital] = useState(10_000);
+  const [comparison, setComparison]     = useState(false);
+  const [dateRange, setDateRange]       = useState({ start_date: '2015-01-01', end_date: TODAY });
+
+  // UI state
+  const [canvasState, setCanvasState]   = useState<CanvasState>('landing');
+  const [showBuilder, setShowBuilder]   = useState(false);
+  const [yMode, setYMode]               = useState<YAxisMode>('dollar');
+  const [panelOpen, setPanelOpen]       = useState(true);
+  const [railOpen, setRailOpen]         = useState(true);
+
+  // History
+  const [history, setHistory]           = useState<HistoryEntry[]>([]);
+  const resultsCache                    = useRef<Map<string, BacktestResults>>(new Map());
+  const [activeHistoryId, setActiveHistoryId] = useState<string | null>(null);
+  const [cachedDisplay, setCachedDisplay] = useState<BacktestResults | null>(null);
+
+  // Commentary
+  const [commentaryModal, setCommentaryModal] = useState<{ title: string; narrative: string | null } | null>(null);
+  const commentaryCache = useRef<Map<string, string>>(new Map());
+
+  // Signal library
+  const [library, setLibrary]           = useState<SignalLibrary | null>(null);
+  useEffect(() => { getSignalLibrary().then(setLibrary).catch(() => {}); }, []);
+
+  // Drive canvas state from bt state
+  useEffect(() => {
+    if (bt.isRunning) { setCanvasState('running'); return; }
+    if (bt.results) { setCanvasState('results'); return; }
+    if (canvasState === 'running') setCanvasState('landing');
+  }, [bt.isRunning, bt.results]);
+
+  // Record completed run to history
+  useEffect(() => {
+    if (!bt.results || bt.isRunning) return;
+    const id = bt.resolvedSpec?.id ?? `h_${Date.now()}`;
+    if (resultsCache.current.has(id)) return;
+    const entry: HistoryEntry = {
+      id,
+      name: bt.resolvedSpec?.name ?? 'Strategy',
+      instrument: bt.resolvedSpec?.instrument ?? 'SPY',
+      sharpe: bt.results.aggregate_metrics.sharpe_ratio,
+      cagr: bt.results.aggregate_metrics.cagr,
+      ts: Date.now(),
+      spec: bt.resolvedSpec!,
+    };
+    resultsCache.current.set(id, bt.results);
+    setHistory((h) => [entry, ...h.filter((x) => x.id !== id)].slice(0, 20));
+    setActiveHistoryId(id);
+  }, [bt.results, bt.isRunning]);
+
+  const openCommentary = useCallback(async (title: string, query: string, metrics: Record<string, string | number>) => {
+    const cached = commentaryCache.current.get(title);
+    if (cached) { setCommentaryModal({ title, narrative: cached }); return; }
+    setCommentaryModal({ title, narrative: null });
+    try {
+      const { narrative } = await requestCommentary({ query, metrics });
+      commentaryCache.current.set(title, narrative);
+      setCommentaryModal({ title, narrative });
+    } catch {
+      setCommentaryModal({ title, narrative: 'Commentary unavailable.' });
+    }
+  }, []);
+
+  const handleTemplate = (t: Template) => {
+    if (t.key === 'custom') { setShowBuilder(true); setCanvasState('building'); return; }
+    setSignals(t.signals);
+    setSizing(t.sizing);
+    setEntryOp(t.entryOp);
+    setExitOp(t.exitOp);
+    setName(t.name);
+    setShowBuilder(true);
+    setCanvasState('building');
+  };
+
+  const handleBuilderRun = () => {
+    if (signals.length === 0) return;
+    setShowBuilder(false);
+    const spec = buildSpec({ name, date_range: dateRange }, signals, entryOp, exitOp, sizing, comparison, instrument, startingCapital);
+    runFromSpec(spec, name);
+  };
+
+  const handleHistoryClick = (entry: HistoryEntry) => {
+    const r = resultsCache.current.get(entry.id);
+    if (!r) return;
+    reset();
+    setActiveHistoryId(entry.id);
+    setCachedDisplay(r);
+    setCanvasState('results');
+  };
+
+  const displayResults = bt.results ?? cachedDisplay;
+
+  const handleNewStrategy = () => {
+    reset();
+    setCachedDisplay(null);
+    setActiveHistoryId(null);
+    setCanvasState('landing');
+    setShowBuilder(false);
+  };
+
+  const isRunning = bt.isRunning;
+  const steps     = bt.steps;
+
+  // ── Render ──────────────────────────────────────────────────────────────────
+  return (
+    <div style={{ display: 'flex', height: '100%', overflow: 'hidden', background: 'var(--background)' }}>
+
+      {/* ── Left rail ── */}
+      <aside style={{
+        width: railOpen ? RAIL_W : 40, flexShrink: 0,
+        background: 'var(--card)',
+        borderRight: '1px solid var(--border)',
+        display: 'flex', flexDirection: 'column',
+        overflow: 'hidden',
+        transition: 'width 0.2s ease',
+      }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: railOpen ? '12px 12px 10px' : '12px 8px 10px',
+          borderBottom: '1px solid var(--border)',
+          flexShrink: 0,
+        }}>
+          {railOpen && (
+            <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.08em', margin: 0 }}>Backtesting</p>
+          )}
+          <button
+            onClick={() => setRailOpen((o) => !o)}
+            title={railOpen ? 'Collapse panel' : 'Expand panel'}
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: 'var(--muted-foreground)', display: 'flex', padding: 4, borderRadius: 6,
+              marginLeft: railOpen ? 'auto' : 0,
+            }}
+          >
+            <PanelLeft size={15} />
+          </button>
+        </div>
+
+        {railOpen && (
+          <>
+            <div style={{ padding: '8px 8px 4px' }}>
+              <button
+                onClick={handleNewStrategy}
+                style={{
+                  width: '100%', display: 'flex', alignItems: 'center', gap: 7,
+                  padding: '7px 10px', borderRadius: 8,
+                  background: 'var(--primary)', color: 'var(--primary-foreground)',
+                  border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600,
+                }}
+              >
+                <Plus size={12} /> New strategy
+              </button>
+            </div>
+
+            <div style={{ flex: 1, overflowY: 'auto', padding: '4px 4px' }}>
+              {history.length === 0 && (
+                <p style={{ fontSize: 11, color: 'var(--muted-foreground)', padding: '12px 10px', margin: 0, lineHeight: 1.6 }}>
+                  Completed runs appear here.
+                </p>
+              )}
+              {history.map((entry) => (
+                <HistoryRow
+                  key={entry.id}
+                  entry={entry}
+                  active={entry.id === activeHistoryId}
+                  onClick={() => handleHistoryClick(entry)}
+                />
+              ))}
+            </div>
+
+            <div style={{ padding: '10px 12px', borderTop: '1px solid var(--border)', flexShrink: 0 }}>
+              <p style={{ fontSize: 10, color: 'var(--muted-foreground)', margin: 0, lineHeight: 1.5 }}>
+                Causal HMM · t+1 lag · Lo Sharpe · DSR
+              </p>
+            </div>
+          </>
+        )}
+      </aside>
+
+      {/* ── Center canvas ── */}
+      <main style={{
+        flex: 1, display: 'flex', flexDirection: 'column',
+        minWidth: 0, ...canvasBg, overflow: 'hidden',
+      }}>
+        {/* Scrollable canvas body */}
+        <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+
+          {/* Landing */}
+          {canvasState === 'landing' && !showBuilder && (
+            <Landing onTemplate={handleTemplate} />
+          )}
+
+          {/* Quick Build form */}
+          {showBuilder && canvasState !== 'running' && canvasState !== 'results' && (
+            <div style={{ padding: '20px 24px', flex: 1 }}>
+              <div style={{
+                background: 'var(--card)', border: '1px solid var(--border)',
+                borderRadius: 12, padding: '20px 22px',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 18 }}>
+                  <SlidersHorizontal size={14} style={{ color: 'var(--primary)' }} />
+                  <span style={{ fontSize: 13, fontWeight: 700 }}>Quick Build</span>
+                  <span style={{ fontSize: 11, color: 'var(--muted-foreground)', marginLeft: 4 }}>configure signals &amp; parameters manually</span>
+                </div>
+                <Composer
+                  signals={signals} setSignals={setSignals}
+                  entryOp={entryOp} setEntryOp={setEntryOp}
+                  exitOp={exitOp} setExitOp={setExitOp}
+                  sizing={sizing} setSizing={setSizing}
+                  name={name} setName={setName}
+                  instrument={instrument} setInstrument={setInstrument}
+                  dateRange={dateRange} setDateRange={setDateRange}
+                  startingCapital={startingCapital} setStartingCapital={setStartingCapital}
+                  comparison={comparison} setComparison={setComparison}
+                  library={library}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Running */}
+          {canvasState === 'running' && (
+            <div style={{ flex: 1, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '48px 24px' }}>
+              <div style={{
+                background: 'var(--card)', border: '1px solid var(--border)',
+                borderRadius: 14, padding: '24px 28px',
+                maxWidth: 460, width: '100%',
+                boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
+              }}>
+                <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 16px' }}>
+                  Execution trace · {steps.filter((s) => s.state === 'done').length}/{steps.length} steps
+                </p>
+                <StepChain steps={steps} />
+              </div>
+            </div>
+          )}
+
+          {/* Results */}
+          {canvasState === 'results' && displayResults && (
+            <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+              {bt.error && (
+                <div style={{ background: 'color-mix(in srgb, var(--ds-loss) 10%, var(--card))', border: '1px solid var(--ds-loss)', borderRadius: 10, padding: '12px 16px', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                  <AlertTriangle size={14} style={{ color: 'var(--ds-loss)', marginTop: 1, flexShrink: 0 }} />
+                  <p style={{ fontSize: 12, margin: 0, color: 'var(--ds-loss)' }}>{bt.error}</p>
+                </div>
+              )}
+
+              {/* Dollar hero */}
+              {displayResults.dollar_summary && (() => {
+                const ds = displayResults.dollar_summary!;
+                const enhPnl = ds.enhanced_final - ds.starting_capital;
+                const bhPnl  = ds.buy_hold_final - ds.starting_capital;
+                const alpha  = enhPnl - bhPnl;
+                const query  = bt.resolvedSpec?.name ?? 'Strategy';
+                return (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+                    {[
+                      { label: 'Strategy P&L', val: fmt.dollar(Math.abs(enhPnl)), sub: `${fmt.pct(displayResults.aggregate_metrics.cagr)} CAGR`, tone: enhPnl >= 0 ? 'gain' : 'loss', accent: true, key: 'Performance' },
+                      { label: 'Buy-Hold P&L', val: fmt.dollar(Math.abs(bhPnl)), sub: `from ${fmt.dollar(ds.starting_capital)}`, tone: bhPnl >= 0 ? 'gain' : 'loss', key: 'BH' },
+                      { label: 'Alpha vs B&H', val: fmt.dollar(Math.abs(alpha)), sub: `${alpha >= 0 ? '+' : ''}${fmt.pct(alpha / ds.starting_capital)}`, tone: alpha >= 0 ? 'gain' : 'loss', key: 'Alpha' },
+                    ].map(({ label, val, sub, tone, accent, key }) => {
+                      const color = tone === 'gain' ? 'var(--ds-gain)' : 'var(--ds-loss)';
+                      return (
+                        <div
+                          key={key}
+                          onClick={() => openCommentary(label, query, { CAGR: fmt.pct(displayResults.aggregate_metrics.cagr), 'Max DD': fmt.pct(displayResults.aggregate_metrics.max_drawdown) })}
+                          style={{ background: 'var(--card)', border: `1px solid ${accent ? 'var(--primary)' : 'var(--border)'}`, borderRadius: 11, padding: '14px 16px', cursor: 'pointer' }}
+                        >
+                          <p style={{ fontSize: 11, color: 'var(--muted-foreground)', margin: '0 0 6px', fontWeight: 600 }}>{label}</p>
+                          <p style={{ fontSize: 22, fontWeight: 700, margin: '0 0 4px', letterSpacing: '-0.02em', color, fontVariantNumeric: 'tabular-nums' }}>{val}</p>
+                          <p style={{ fontSize: 10, color: 'var(--muted-foreground)', margin: 0 }}>{sub}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+
+              {/* Equity chart */}
+              <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 11, padding: '16px 18px' }}>
+                <SH icon={<TrendingUp size={13} />} title="Equity curve" sub={`through ${displayResults.data_through}`} />
+                <EquityChart results={displayResults} yMode={yMode} onToggleY={() => setYMode((m) => m === 'dollar' ? 'pct' : 'dollar')} />
+              </div>
+
+              {/* Metrics */}
+              <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 11, padding: '16px 18px' }}>
+                <SH icon={<BarChart2 size={13} />} title="Aggregate metrics" sub="click any row for commentary" />
+                <MetricsGrid
+                  metrics={displayResults.aggregate_metrics}
+                  onRow={(k) => openCommentary(k, bt.resolvedSpec?.name ?? 'Strategy', { metric: k })}
+                />
+              </div>
+
+              {/* Regime breakdown */}
+              <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 11, padding: '16px 18px' }}>
+                <SH icon={<Activity size={13} />} title="Regime performance" />
+                <RegimeTable results={displayResults} />
+              </div>
+
+              {/* Attribution */}
+              {displayResults.signal_attribution.length > 0 && (
+                <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 11, padding: '16px 18px' }}>
+                  <SH icon={<BarChart2 size={13} />} title="Signal attribution" sub="marginal Sharpe · leave-one-out" />
+                  <AttributionChart
+                    results={displayResults}
+                    onBar={(id) => openCommentary(`Signal: ${id}`, bt.resolvedSpec?.name ?? 'Strategy', { signal: id })}
+                  />
+                </div>
+              )}
+
+              {/* Trade log */}
+              <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 11, padding: '16px 18px' }}>
+                <SH icon={<BookOpen size={13} />} title="Trade log" sub={`${displayResults.trade_log.length} trades`} />
+                <TradeLog results={displayResults} />
+              </div>
+
+              {/* AI commentary */}
+              {bt.narrative && (
+                <div style={{ background: 'color-mix(in srgb, var(--primary) 5%, var(--card))', border: '1px solid color-mix(in srgb, var(--primary) 30%, var(--border))', borderRadius: 11, padding: '16px 18px' }}>
+                  <SH icon={<DollarSign size={13} />} title="Institutional commentary" />
+                  <p style={{ fontSize: 13, lineHeight: 1.75, color: 'var(--foreground)', margin: '0 0 10px' }}>{bt.narrative}</p>
+                  <p style={{ fontSize: 10, color: 'var(--muted-foreground)', margin: 0 }}>Research intelligence only. Not financial advice.</p>
+                </div>
+              )}
+
+              {/* Forward context gate */}
+              <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 11, padding: '16px 18px' }}>
+                <SH icon={<Lock size={13} />} title="Forward context" sub="Institutional" />
+                <TierGate tier="Institutional">
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    <div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)' }}>
+                      <p style={{ fontSize: 11, color: 'var(--muted-foreground)', margin: '0 0 4px' }}>Walk-forward efficiency</p>
+                      <p style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>—</p>
+                    </div>
+                    <div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)' }}>
+                      <p style={{ fontSize: 11, color: 'var(--muted-foreground)', margin: '0 0 4px' }}>Out-of-sample Sharpe</p>
+                      <p style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>—</p>
+                    </div>
+                  </div>
+                </TierGate>
+              </div>
+
+              <Disclaimer />
+            </div>
+          )}
+        </div>
+
+        {/* ── Bottom input bar — always visible, never inside scroll ── */}
+        <BottomBar
+          onSubmit={runFromQuery}
+          busy={isRunning}
+          showingBuilder={showBuilder && canvasState !== 'results' && canvasState !== 'running'}
+          onToggleBuilder={() => {
+            const next = !showBuilder;
+            setShowBuilder(next);
+            if (next && canvasState === 'landing') setCanvasState('building');
+            if (!next && canvasState === 'building') setCanvasState('landing');
+          }}
+          onRunBuilder={handleBuilderRun}
+          builderDisabled={signals.length === 0}
+        />
+      </main>
+
+      {/* ── Right panel ── */}
+      <aside style={{
+        width: panelOpen ? PANEL_W : 40, flexShrink: 0,
+        background: 'var(--card)',
+        borderLeft: '1px solid var(--border)',
+        display: 'flex', flexDirection: 'column',
+        overflowY: panelOpen ? 'auto' : 'hidden',
+        overflowX: 'hidden',
+        transition: 'width 0.2s ease',
+      }}>
+        {/* Panel header + toggle */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: panelOpen ? '12px 14px 10px' : '12px 8px 10px',
+          borderBottom: '1px solid var(--border)',
+          flexShrink: 0,
+        }}>
+          {panelOpen && (
+            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+              Run details
+            </span>
+          )}
+          <button
+            onClick={() => setPanelOpen((o) => !o)}
+            title={panelOpen ? 'Collapse panel' : 'Expand panel'}
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: 'var(--muted-foreground)', display: 'flex', padding: 4, borderRadius: 6,
+              marginLeft: panelOpen ? 'auto' : 0,
+            }}
+          >
+            <PanelLeft size={15} style={{ transform: 'scaleX(-1)' }} />
+          </button>
+        </div>
+
+        {panelOpen && (
+          <>
+            {/* Progress */}
+            <Accordion title="Progress">
+              {steps.every((s) => s.state === 'pending') ? (
+                <p style={{ fontSize: 11, color: 'var(--muted-foreground)', margin: 0, lineHeight: 1.6 }}>Steps appear as the run executes.</p>
+              ) : (
+                <StepChain steps={steps} />
+              )}
+            </Accordion>
+
+            {/* Signals */}
+            <Accordion title="Signals" defaultOpen={false}>
+              {(bt.resolvedSpec?.signals ?? signals).length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {(bt.resolvedSpec?.signals ?? signals).map((s) => (
+                    <div key={s.signal_id} style={{ padding: '7px 9px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--background)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                        <code style={{ fontSize: 10, color: 'var(--primary)', fontWeight: 600 }}>{s.signal_id}</code>
+                        <span style={{ fontSize: 10, color: 'var(--muted-foreground)', background: 'var(--muted)', borderRadius: 4, padding: '1px 5px' }}>{s.direction}</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, fontSize: 10, color: 'var(--muted-foreground)' }}>
+                        <span>threshold {s.threshold}</span>
+                        <span>weight {s.weight.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p style={{ fontSize: 11, color: 'var(--muted-foreground)', margin: 0 }}>No signals configured yet.</p>
+              )}
+            </Accordion>
+
+            {/* Artifacts */}
+            <Accordion title="Artifacts">
+              {displayResults ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <MetricRow label="Sharpe (Lo-adj.)" value={fmt.f3(displayResults.aggregate_metrics.sharpe_ratio)} tone={displayResults.aggregate_metrics.sharpe_ratio > 0.5 ? 'gain' : displayResults.aggregate_metrics.sharpe_ratio < 0 ? 'loss' : 'neutral'} />
+                  <MetricRow label="Deflated Sharpe" value={fmt.f3(displayResults.aggregate_metrics.deflated_sharpe_ratio)} tone={displayResults.aggregate_metrics.deflated_sharpe_ratio > 0 ? 'gain' : 'loss'} />
+                  <MetricRow label="CAGR" value={fmt.pct(displayResults.aggregate_metrics.cagr)} tone={displayResults.aggregate_metrics.cagr > 0 ? 'gain' : 'loss'} />
+                  <MetricRow label="Max Drawdown" value={fmt.pct(displayResults.aggregate_metrics.max_drawdown)} tone={displayResults.aggregate_metrics.max_drawdown > 0.3 ? 'loss' : 'neutral'} />
+                  <MetricRow label="Win Rate" value={fmt.pct(displayResults.aggregate_metrics.win_rate)} />
+                  <MetricRow label="Total Trades" value={fmt.int(displayResults.aggregate_metrics.total_trades)} />
+                  <MetricRow label="Bars" value={displayResults.bars.toLocaleString()} />
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '8px 0' }}>
+                  <BarChart2 size={24} style={{ color: 'var(--border)' }} />
+                  <p style={{ fontSize: 11, color: 'var(--muted-foreground)', margin: 0, textAlign: 'center', lineHeight: 1.5 }}>Outputs appear after the run completes.</p>
+                </div>
+              )}
+            </Accordion>
+
+            {/* Context */}
+            <Accordion title="Context" defaultOpen={false}>
+              {bt.resolvedSpec || displayResults ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  {[
+                    ['Strategy', bt.resolvedSpec?.name ?? '—'],
+                    ['Instrument', bt.resolvedSpec?.instrument ?? '—'],
+                    ['Start', bt.resolvedSpec?.date_range.start_date ?? '—'],
+                    ['End', bt.resolvedSpec?.date_range.end_date ?? '—'],
+                    ['Signals', bt.resolvedSpec?.signals.length ? `${bt.resolvedSpec.signals.length} configured` : '—'],
+                    ['Sizing', bt.resolvedSpec?.position_sizing.method ?? '—'],
+                    ['Data through', displayResults?.data_through ?? '—'],
+                  ].map(([k, v]) => (
+                    <MetricRow key={k} label={k} value={v} />
+                  ))}
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '8px 0' }}>
+                  <Activity size={24} style={{ color: 'var(--border)' }} />
+                  <p style={{ fontSize: 11, color: 'var(--muted-foreground)', margin: 0, textAlign: 'center', lineHeight: 1.5 }}>Strategy config tracks here as it runs.</p>
+                </div>
+              )}
+            </Accordion>
+          </>
+        )}
+      </aside>
+
+      {commentaryModal && (
+        <CommentaryModal
+          title={commentaryModal.title}
+          narrative={commentaryModal.narrative}
+          onClose={() => setCommentaryModal(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+export default Backtesting;

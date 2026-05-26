@@ -160,6 +160,8 @@ fn macro_spec(comparison: bool) -> StrategySpec {
             commission_bps: 1.0,
             slippage_bps: 2.0,
         },
+        instrument: "SPY".to_string(),
+        starting_capital: 10_000.0,
     }
 }
 

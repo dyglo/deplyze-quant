@@ -22,6 +22,7 @@ serving an empty book).
 
 from __future__ import annotations
 
+import asyncio
 import io
 import os
 from datetime import datetime, timezone
@@ -264,4 +265,179 @@ def run_export(
 
     summary["duration_s"] = round((datetime.now(timezone.utc) - started).total_seconds(), 2)
     log.info("backtest.export_complete", **summary)
+    return summary
+
+
+# ─── Provider fallback for instruments not in the warehouse ──────────────────
+
+def _load_ohlcv_from_providers(symbol: str, lookback_days: int) -> pd.Series:
+    """Fetch OHLCV from external providers (EODHD → Twelve Data → FMP) when the
+    BQ warehouse has no data for ``symbol``. Returns adjusted-close indexed by date.
+    Mirrors the provider chain in the gateway market route."""
+    from datetime import timedelta
+    import httpx
+
+    end_dt = datetime.now(timezone.utc).date()
+    start_dt = end_dt - timedelta(days=lookback_days)
+    from_str = start_dt.strftime("%Y-%m-%d")
+    to_str = end_dt.strftime("%Y-%m-%d")
+
+    # EODHD
+    if settings.EODHD_API_KEY:
+        try:
+            ticker = symbol.upper()
+            if "." not in ticker:
+                ticker = f"{ticker}.US"
+            url = f"https://eodhd.com/api/eod/{ticker}"
+            r = httpx.get(url, params={
+                "api_token": settings.EODHD_API_KEY,
+                "fmt": "json",
+                "period": "d",
+                "from": from_str,
+                "to": to_str,
+            }, timeout=30)
+            if r.status_code == 200:
+                rows = r.json()
+                if isinstance(rows, list) and rows:
+                    s = pd.Series(
+                        {pd.Timestamp(row["date"]): float(row.get("adjusted_close") or row["close"])
+                         for row in rows if row.get("date")},
+                        dtype="float64",
+                    ).sort_index()
+                    if not s.empty:
+                        log.info("backtest.ohlcv_provider_fallback", provider="eodhd", symbol=symbol, rows=len(s))
+                        return s[~s.index.duplicated(keep="last")]
+        except Exception as e:
+            log.warning("backtest.eodhd_fallback_failed", symbol=symbol, error=str(e))
+
+    # Twelve Data
+    if settings.TWELVE_DATA_API_KEY:
+        try:
+            r = httpx.get("https://api.twelvedata.com/time_series", params={
+                "symbol": symbol,
+                "interval": "1day",
+                "start_date": from_str,
+                "end_date": to_str,
+                "outputsize": 5000,
+                "apikey": settings.TWELVE_DATA_API_KEY,
+            }, timeout=30)
+            if r.status_code == 200:
+                data = r.json()
+                values = data.get("values", [])
+                if values:
+                    s = pd.Series(
+                        {pd.Timestamp(row["datetime"]): float(row["close"]) for row in values if row.get("datetime")},
+                        dtype="float64",
+                    ).sort_index()
+                    if not s.empty:
+                        log.info("backtest.ohlcv_provider_fallback", provider="twelve_data", symbol=symbol, rows=len(s))
+                        return s[~s.index.duplicated(keep="last")]
+        except Exception as e:
+            log.warning("backtest.twelve_data_fallback_failed", symbol=symbol, error=str(e))
+
+    # FMP
+    if settings.FMP_API_KEY:
+        try:
+            r = httpx.get(f"https://financialmodelingprep.com/api/v3/historical-price-full/{symbol}", params={
+                "apikey": settings.FMP_API_KEY,
+                "from": from_str,
+                "to": to_str,
+            }, timeout=30)
+            if r.status_code == 200:
+                data = r.json()
+                historical = data.get("historical", [])
+                if historical:
+                    s = pd.Series(
+                        {pd.Timestamp(row["date"]): float(row.get("adjClose") or row["close"])
+                         for row in historical if row.get("date")},
+                        dtype="float64",
+                    ).sort_index()
+                    if not s.empty:
+                        log.info("backtest.ohlcv_provider_fallback", provider="fmp", symbol=symbol, rows=len(s))
+                        return s[~s.index.duplicated(keep="last")]
+        except Exception as e:
+            log.warning("backtest.fmp_fallback_failed", symbol=symbol, error=str(e))
+
+    return pd.Series(dtype="float64")
+
+
+def build_wide_frame_with_fallback(symbol: str, series_ids: list[str], lookback_days: int) -> pd.DataFrame:
+    """Like ``build_wide_frame`` but falls back to external providers if the BQ
+    warehouse has no OHLCV data for ``symbol``."""
+    close = _load_asset_close(symbol, lookback_days)
+    if close.empty:
+        log.info("backtest.bq_miss_trying_providers", symbol=symbol)
+        close = _load_ohlcv_from_providers(symbol, lookback_days)
+    if close.empty:
+        raise ExportError(f"no OHLCV data for symbol '{symbol}' in warehouse or external providers")
+
+    returns = _load_asset_returns(symbol, lookback_days)
+    macro = _load_macro_wide(series_ids, lookback_days)
+
+    spine = close.index
+    frame = pd.DataFrame(index=spine)
+    frame["asset_close"] = close
+
+    if not returns.empty:
+        frame["asset_return"] = returns.reindex(spine)
+    derived = frame["asset_close"].pct_change()
+    if "asset_return" in frame:
+        frame["asset_return"] = frame["asset_return"].fillna(derived)
+    else:
+        frame["asset_return"] = derived
+    frame["asset_return"] = frame["asset_return"].fillna(0.0)
+
+    if not macro.empty:
+        macro_ff = macro.reindex(macro.index.union(spine)).sort_index().ffill()
+        macro_on_spine = macro_ff.reindex(spine)
+        for col in macro.columns:
+            frame[col] = macro_on_spine[col]
+
+    frame = frame.dropna(subset=["asset_close"]).copy()
+    frame.insert(0, "date", [ts.strftime("%Y-%m-%d") for ts in frame.index])
+    frame = frame.reset_index(drop=True)
+    return frame
+
+
+def run_instrument_export(
+    symbol: str,
+    series_ids: list[str] | None = None,
+    lookback_days: int | None = None,
+) -> dict:
+    """Build and upload a per-instrument parquet to GCS at ``instruments/{SYMBOL}.parquet``.
+
+    Called on-demand by the gateway when a user selects an instrument for
+    backtesting. Uses the same warehouse-first, provider-fallback data path as the
+    gateway market route. Returns a summary dict; raises ``ExportError`` on failure.
+    """
+    if not settings.GCS_BACKTEST_BUCKET:
+        raise ExportError("GCS_BACKTEST_BUCKET is not configured")
+
+    series_ids = series_ids or DEFAULT_FRED_SERIES
+    lookback_days = lookback_days or settings.BACKTEST_INSTRUMENT_LOOKBACK_DAYS
+    object_path = f"instruments/{symbol.upper()}.parquet"
+
+    started = datetime.now(timezone.utc)
+    frame = build_wide_frame_with_fallback(symbol.upper(), series_ids, lookback_days)
+    if len(frame) < MIN_BACKTEST_ROWS:
+        raise ExportError(
+            f"insufficient OHLCV data for symbol '{symbol}': {len(frame)} rows "
+            f"(need >= {MIN_BACKTEST_ROWS})"
+        )
+    macro_cols = [c for c in frame.columns if c not in ("date", "asset_close", "asset_return")]
+    size = _upload_parquet(frame, settings.GCS_BACKTEST_BUCKET, object_path)
+
+    summary = {
+        "status": "ok",
+        "symbol": symbol.upper(),
+        "rows": int(len(frame)),
+        "macro_columns": sorted(macro_cols),
+        "macro_column_count": len(macro_cols),
+        "data_from": frame["date"].iloc[0] if len(frame) else None,
+        "data_through": frame["date"].iloc[-1] if len(frame) else None,
+        "gcs_uri": f"gs://{settings.GCS_BACKTEST_BUCKET}/{object_path}",
+        "bytes_written": size,
+        "duration_s": round((datetime.now(timezone.utc) - started).total_seconds(), 2),
+    }
+    log.info("backtest.instrument_export_complete", **summary)
     return summary

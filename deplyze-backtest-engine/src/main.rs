@@ -166,8 +166,8 @@ async fn run_handler(
         return Err(ApiError::BadRequest(format!("invalid strategy: {}", v.errors.join("; "))));
     }
 
-    // 2) Load the wide parquet (GCS or local).
-    let md = load_market_data(&cfg).await?;
+    // 2) Load the wide parquet — per-instrument path if instrument is set.
+    let md = load_market_data(&cfg, &spec.instrument).await?;
 
     // 3) Heavy compute off the async executor.
     let result = tokio::task::spawn_blocking(move || compute(spec, md))
@@ -179,7 +179,8 @@ async fn run_handler(
 
 // ─── Orchestration ──────────────────────────────────────────────────────────────
 
-async fn load_market_data(cfg: &AppConfig) -> Result<MarketData, ApiError> {
+async fn load_market_data(cfg: &AppConfig, instrument: &str) -> Result<MarketData, ApiError> {
+    // Local path always takes priority (dev mode).
     if let Some(path) = &cfg.local_path {
         return Ok(loader::load_from_path(path)?);
     }
@@ -187,7 +188,18 @@ async fn load_market_data(cfg: &AppConfig) -> Result<MarketData, ApiError> {
         .bucket
         .as_ref()
         .ok_or_else(|| ApiError::Internal("no BACKTEST_PARQUET_BUCKET or BACKTEST_PARQUET_LOCAL configured".into()))?;
-    let bytes = loader::fetch_gcs_bytes(bucket, &cfg.object).await?;
+    // Per-instrument parquet at instruments/{SYMBOL}.parquet; fall back to the
+    // legacy single-asset object when the instrument path would be the same.
+    let object = format!("instruments/{}.parquet", instrument.to_uppercase());
+    let bytes = loader::fetch_gcs_bytes(bucket, &object).await;
+    let bytes = match bytes {
+        Ok(b) => b,
+        Err(LoaderError::ParquetNotReady) => {
+            // Fall back to legacy path if per-instrument file doesn't exist yet.
+            loader::fetch_gcs_bytes(bucket, &cfg.object).await?
+        }
+        Err(e) => return Err(e.into()),
+    };
     loader::parse_wide_parquet(bytes).map_err(Into::into)
 }
 

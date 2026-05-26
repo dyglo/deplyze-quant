@@ -342,6 +342,8 @@ mod tests {
             comparison_mode: true,
             tier: UserTier::Pro,
             cost_model: CostModel::default(),
+            instrument: "SPY".to_string(),
+            starting_capital: 10_000.0,
         }
     }
 

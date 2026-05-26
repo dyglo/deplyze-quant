@@ -80,6 +80,8 @@ export interface StrategySpec {
   comparison_mode?: boolean;
   tier?: UserTier; // server-stamped; optional on the client
   cost_model?: CostModel;
+  instrument?: string;
+  starting_capital?: number;
 }
 
 export interface EquityPoint {
@@ -146,6 +148,21 @@ export interface ComparisonResults {
   signal_value_score: number;
 }
 
+export interface DollarPoint {
+  timestamp: string;
+  enhanced: number;
+  buy_hold: number;
+  baseline?: number;
+}
+
+export interface DollarSummary {
+  starting_capital: number;
+  enhanced_final: number;
+  buy_hold_final: number;
+  baseline_final?: number;
+  curve: DollarPoint[];
+}
+
 export interface BacktestResults {
   strategy_id: string;
   equity_curve: EquityPoint[];
@@ -154,6 +171,7 @@ export interface BacktestResults {
   regime_metrics: RegimeMetrics;
   signal_attribution: SignalAttribution[];
   comparison?: ComparisonResults;
+  dollar_summary?: DollarSummary;
   bars: number;
   data_through: string;
 }
@@ -229,6 +247,30 @@ export async function runBacktest(spec: StrategySpec): Promise<BacktestResults> 
   } finally {
     clearTimeout(timer);
   }
+}
+
+// ─── NLP + preparation client calls ────────────────────────────────────────────
+
+/** Convert a natural-language strategy idea into a StrategySpec. */
+export function resolveIntent(query: string): Promise<{ spec: StrategySpec }> {
+  return gatewayPost<{ spec: StrategySpec }>('/backtest/resolve', { query });
+}
+
+/** Generate institutional commentary for completed backtest results. */
+export function requestCommentary(opts: {
+  query: string;
+  metrics: Record<string, string | number>;
+  context?: string;
+}): Promise<{ narrative: string }> {
+  return gatewayPost<{ narrative: string }>('/backtest/commentary', opts);
+}
+
+/** Trigger per-instrument parquet preparation in quant-engine before running. */
+export function prepareInstrument(symbol: string): Promise<{ status: string; rows?: number; gcs_uri?: string }> {
+  return gatewayPost<{ status: string; rows?: number; gcs_uri?: string }>(
+    '/backtest/prepare-instrument',
+    { symbol: symbol.toUpperCase() },
+  );
 }
 
 // ─── Regime display helpers ─────────────────────────────────────────────────────

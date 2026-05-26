@@ -44,17 +44,53 @@ def suggest_improvements(payload: dict[str, Any]) -> dict[str, Any]:
     costs = payload.get("transaction_costs") or {}
     attribution = payload.get("signal_attribution") or []
     regimes = payload.get("regime_metrics") or {}
+    dollar = payload.get("dollar_summary") or {}
 
     sharpe = _num(metrics, "sharpe_ratio")
     dsr = _num(metrics, "deflated_sharpe_ratio")
     mdd = _num(metrics, "max_drawdown")
     profit_factor = _num(metrics, "profit_factor")
+    total_trades = _num(metrics, "total_trades")
+    avg_duration = _num(metrics, "avg_trade_duration_days")
     sqn = _num(expectancy, "system_quality_number")
     recovery = _num(expectancy, "recovery_factor")
     oos_ratio = _num(walk, "oos_vs_insample_ratio", 1.0)
     cost_sharpe_drag = _num(costs, "sharpe_drag")
+    enhanced_final = _num(dollar, "enhanced_final")
+    buy_hold_final = _num(dollar, "buy_hold_final")
+    underperforms_buy_hold = enhanced_final > 0 and buy_hold_final > 0 and enhanced_final < buy_hold_final
+    poor_quality = sharpe <= 0.0 or profit_factor < 1.0 or sqn < 1.0 or underperforms_buy_hold
+    many_trades = total_trades >= 40 or (total_trades >= 20 and avg_duration > 0 and avg_duration < 15)
 
     suggestions: list[dict[str, Any]] = []
+
+    if many_trades and poor_quality:
+        slower = total_trades >= 80 or avg_duration < 8
+        suggestions.append(
+            {
+                "rank": 1,
+                "category": "ExecutionControls",
+                "title": "Slow the execution clock",
+                "explanation": (
+                    "The strategy is trading frequently while the quality metrics are weak. "
+                    "Rerun with a slower rebalance cadence, minimum holding period, signal persistence, "
+                    "and wider ensemble exit buffer before changing the signal set."
+                ),
+                "expected_impact": "Targets lower turnover and fewer exits caused by small signal-score changes; it does not assume returns improve.",
+                "action": "Apply anti-churn controls and rerun.",
+                "action_patch": {
+                    "type": "set_execution_controls",
+                    "rebalance_freq": "Monthly" if slower else "Weekly",
+                    "min_holding_period_bars": 21 if slower else 10,
+                    "signal_confirmation_bars": 3 if slower else 2,
+                    "exit_confirmation_bars": 2,
+                    "cooldown_bars": 5 if slower else 3,
+                    "entry_score_threshold": 0.10 if slower else 0.05,
+                    "exit_score_threshold": 0.25 if slower else 0.15,
+                    "min_weight_change_pct": 0.02 if slower else 0.01,
+                },
+            }
+        )
 
     negative_signal = None
     for item in attribution:
@@ -77,6 +113,33 @@ def suggest_improvements(payload: dict[str, Any]) -> dict[str, Any]:
                 "expected_impact": "Potential Sharpe improvement and lower turnover if the signal was noisy.",
                 "action": f"Remove {sid} from the strategy signals.",
                 "action_patch": {"type": "remove_signal", "signal_id": sid},
+            }
+        )
+
+    if underperforms_buy_hold:
+        gap = buy_hold_final - enhanced_final
+        suggestions.append(
+            {
+                "rank": len(suggestions) + 1,
+                "category": "AbandonStrategy",
+                "title": "Do not ignore buy-and-hold underperformance",
+                "explanation": (
+                    f"The strategy finished below buy-and-hold by approximately ${gap:,.0f}. "
+                    "If anti-churn controls and signal simplification do not close that gap, the honest conclusion is to abandon this variant."
+                ),
+                "expected_impact": "Improves research discipline by treating benchmark failure as a reject signal, not a tuning challenge.",
+                "action": "Rerun with conservative execution controls before deciding whether to retire the idea.",
+                "action_patch": {
+                    "type": "set_execution_controls",
+                    "rebalance_freq": "Monthly",
+                    "min_holding_period_bars": 21,
+                    "signal_confirmation_bars": 3,
+                    "exit_confirmation_bars": 2,
+                    "cooldown_bars": 5,
+                    "entry_score_threshold": 0.10,
+                    "exit_score_threshold": 0.25,
+                    "min_weight_change_pct": 0.02,
+                },
             }
         )
 
@@ -124,8 +187,18 @@ def suggest_improvements(payload: dict[str, Any]) -> dict[str, Any]:
                 "title": "Simplify before trusting the edge",
                 "explanation": "Out-of-sample Sharpe is materially below the in-sample profile, which is a classic overfitting warning.",
                 "expected_impact": "Improves robustness by lowering parameter sensitivity.",
-                "action": "Use weekly rebalancing and wider signal thresholds before rerunning.",
-                "action_patch": {"type": "set_rebalance_freq", "value": "Weekly"},
+                "action": "Use weekly rebalancing, signal persistence, and wider ensemble exit thresholds before rerunning.",
+                "action_patch": {
+                    "type": "set_execution_controls",
+                    "rebalance_freq": "Weekly",
+                    "min_holding_period_bars": 10,
+                    "signal_confirmation_bars": 2,
+                    "exit_confirmation_bars": 2,
+                    "cooldown_bars": 3,
+                    "entry_score_threshold": 0.05,
+                    "exit_score_threshold": 0.15,
+                    "min_weight_change_pct": 0.01,
+                },
             }
         )
 
@@ -137,8 +210,18 @@ def suggest_improvements(payload: dict[str, Any]) -> dict[str, Any]:
                 "title": "Reduce turnover cost drag",
                 "explanation": "Transaction costs are consuming a large share of Sharpe; slower rebalancing can preserve more edge.",
                 "expected_impact": f"Targets a reduction in the {cost_sharpe_drag:.2f} Sharpe cost drag.",
-                "action": "Change rebalance frequency to Weekly.",
-                "action_patch": {"type": "set_rebalance_freq", "value": "Weekly"},
+                "action": "Change rebalance frequency to Weekly and ignore small target-weight changes.",
+                "action_patch": {
+                    "type": "set_execution_controls",
+                    "rebalance_freq": "Weekly",
+                    "min_holding_period_bars": 5,
+                    "signal_confirmation_bars": 1,
+                    "exit_confirmation_bars": 1,
+                    "cooldown_bars": 0,
+                    "entry_score_threshold": 0.0,
+                    "exit_score_threshold": 0.0,
+                    "min_weight_change_pct": 0.02,
+                },
             }
         )
 
@@ -171,6 +254,7 @@ def suggest_improvements(payload: dict[str, Any]) -> dict[str, Any]:
     verdict = (
         f"Strategy quality is {'strong' if sqn > 2 and dsr > 0.7 else 'mixed' if sharpe > 0 else 'weak'}: "
         f"SQN {sqn:.2f}, DSR {dsr:.2f}, profit factor {profit_factor:.2f}. "
+        f"{'It underperformed buy-and-hold; simplify or abandon it if reruns do not improve the evidence. ' if underperforms_buy_hold else ''}"
         "Treat expectancy and out-of-sample behavior as more important than win rate."
     )
     out = {"result_id": key, "verdict": verdict, "suggestions": suggestions[:3]}
@@ -191,7 +275,8 @@ def _llm_refine(payload: dict[str, Any], fallback: dict[str, Any]) -> dict[str, 
         prompt = {
             "instruction": (
                 "Return strict JSON only. Improve the wording of this backtest improvement report. "
-                "Do not invent metrics. Keep at most three suggestions. Preserve each action_patch exactly."
+                "Do not invent metrics. Keep at most three suggestions. Preserve each action_patch exactly. "
+                "Keep categories within RegimeFilter, SignalRemoval, Rebalance, PositionSizing, Overfitting, ExecutionControls, AbandonStrategy."
             ),
             "result_excerpt": {
                 "aggregate_metrics": payload.get("aggregate_metrics"),

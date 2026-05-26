@@ -37,6 +37,7 @@ import {
   type Direction,
   type Operator,
   type PositionSizing,
+  type RiskParams,
   type BacktestResults,
   type AggregateMetrics,
   type PartitionMetrics,
@@ -57,6 +58,20 @@ const canvasBg: React.CSSProperties = {
 
 // ─── Constants ───────────────────────────────────────────────────────────────────
 const TODAY = new Date().toISOString().slice(0, 10);
+const DEFAULT_RISK_PARAMS: RiskParams = {
+  max_drawdown_pct: 0.25,
+  position_cap_pct: 1.0,
+  rebalance_freq: 'Weekly',
+  risk_per_trade_pct: 1.0,
+  min_rr: 2.0,
+  min_holding_period_bars: 5,
+  signal_confirmation_bars: 2,
+  exit_confirmation_bars: 1,
+  cooldown_bars: 3,
+  entry_score_threshold: 0.05,
+  exit_score_threshold: 0.15,
+  min_weight_change_pct: 0.01,
+};
 
 // ─── Types ───────────────────────────────────────────────────────────────────────
 interface HistoryEntry {
@@ -105,7 +120,7 @@ function buildSpec(
       conditions: signals.map((s) => ({ signal_id: s.signal_id, direction: invert(s.direction), threshold: s.threshold })),
     },
     position_sizing: sizing,
-    risk_params: base.risk_params ?? { max_drawdown_pct: 0.25, position_cap_pct: 1.0, rebalance_freq: 'Daily', risk_per_trade_pct: 1.0, min_rr: 2.0 },
+    risk_params: base.risk_params ?? DEFAULT_RISK_PARAMS,
     comparison_mode: comparison,
     cost_model: base.cost_model ?? { commission_bps: 1, slippage_bps: 2 },
     instrument,
@@ -534,39 +549,57 @@ const AttributionChart: React.FC<{ results: BacktestResults; onBar: (id: string)
 
 // ─── Trade log ────────────────────────────────────────────────────────────────────
 const TradeLog: React.FC<{ results: BacktestResults }> = ({ results }) => {
-  const [expanded, setExpanded] = useState(false);
+  const pageSize = 25;
+  const [visibleCount, setVisibleCount] = useState(pageSize);
+  useEffect(() => {
+    setVisibleCount(pageSize);
+  }, [results.strategy_id, results.trade_log.length]);
   const trades = results.trade_log;
-  const shown = expanded ? trades : trades.slice(0, 6);
+  const shown = trades.slice(0, visibleCount);
   return (
     <div>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-        <thead>
-          <tr style={{ borderBottom: '1px solid var(--border)' }}>
-            {['Entry', 'Exit', 'Dur.', 'P&L', 'Regime'].map((h) => (
-              <th key={h} style={{ padding: '6px 10px', textAlign: 'left', color: 'var(--muted-foreground)', fontWeight: 600, fontSize: 11 }}>{h}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {shown.map((t, i) => {
-            const pos = t.pnl_pct > 0.005;
-            const neg = t.pnl_pct < -0.005;
-            return (
-              <tr key={i} style={{ borderBottom: '1px solid color-mix(in srgb, var(--border) 50%, transparent)' }}>
-                <td style={{ padding: '6px 10px', fontVariantNumeric: 'tabular-nums' }}>{t.entry_ts}</td>
-                <td style={{ padding: '6px 10px', fontVariantNumeric: 'tabular-nums' }}>{t.exit_ts}</td>
-                <td style={{ padding: '6px 10px' }}>{t.duration_days.toFixed(0)}d</td>
-                <td style={{ padding: '6px 10px', fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: pos ? 'var(--ds-gain)' : neg ? 'var(--ds-loss)' : undefined }}>{fmt.pct(t.pnl_pct)}</td>
-                <td style={{ padding: '6px 10px' }}><span style={{ fontSize: 10, color: regimeColor(t.regime_at_entry) }}>{REGIME_LABELS[t.regime_at_entry]}</span></td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-      {trades.length > 6 && (
-        <button onClick={() => setExpanded(!expanded)} style={{ marginTop: 8, width: '100%', fontSize: 11, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted-foreground)', padding: '6px 0' }}>
-          {expanded ? 'Show fewer' : `Show all ${trades.length} trades`}
-        </button>
+      <div style={{ maxHeight: 420, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 8 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+          <thead style={{ position: 'sticky', top: 0, background: 'var(--card)', zIndex: 1 }}>
+            <tr style={{ borderBottom: '1px solid var(--border)' }}>
+              {['Entry', 'Exit', 'Dur.', 'P&L', 'Regime'].map((h) => (
+                <th key={h} style={{ padding: '6px 10px', textAlign: 'left', color: 'var(--muted-foreground)', fontWeight: 600, fontSize: 11 }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {shown.map((t, i) => {
+              const pos = t.pnl_pct > 0.005;
+              const neg = t.pnl_pct < -0.005;
+              return (
+                <tr key={`${t.entry_ts}-${t.exit_ts}-${i}`} style={{ borderBottom: '1px solid color-mix(in srgb, var(--border) 50%, transparent)' }}>
+                  <td style={{ padding: '6px 10px', fontVariantNumeric: 'tabular-nums' }}>{t.entry_ts}</td>
+                  <td style={{ padding: '6px 10px', fontVariantNumeric: 'tabular-nums' }}>{t.exit_ts}</td>
+                  <td style={{ padding: '6px 10px' }}>{t.duration_days.toFixed(0)}d</td>
+                  <td style={{ padding: '6px 10px', fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: pos ? 'var(--ds-gain)' : neg ? 'var(--ds-loss)' : undefined }}>{fmt.pct(t.pnl_pct)}</td>
+                  <td style={{ padding: '6px 10px' }}><span style={{ fontSize: 10, color: regimeColor(t.regime_at_entry) }}>{REGIME_LABELS[t.regime_at_entry]}</span></td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      {trades.length > pageSize && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+          <span style={{ fontSize: 11, color: 'var(--muted-foreground)' }}>
+            Showing {Math.min(visibleCount, trades.length)} of {trades.length}
+          </span>
+          {visibleCount < trades.length && (
+            <button onClick={() => setVisibleCount((n) => Math.min(n + pageSize, trades.length))} style={{ marginLeft: 'auto', fontSize: 11, background: 'none', border: '1px solid var(--border)', borderRadius: 7, cursor: 'pointer', color: 'var(--foreground)', padding: '5px 8px' }}>
+              Show more
+            </button>
+          )}
+          {visibleCount > pageSize && (
+            <button onClick={() => setVisibleCount(pageSize)} style={{ fontSize: 11, background: 'none', border: '1px solid var(--border)', borderRadius: 7, cursor: 'pointer', color: 'var(--muted-foreground)', padding: '5px 8px' }}>
+              Reset
+            </button>
+          )}
+        </div>
       )}
     </div>
   );
@@ -986,6 +1019,19 @@ export function Backtesting() {
     }
     if (patch.type === 'set_rebalance_freq' && patch.value) {
       nextRisk = { ...nextRisk, rebalance_freq: patch.value };
+    }
+    if (patch.type === 'set_execution_controls') {
+      nextRisk = {
+        ...nextRisk,
+        rebalance_freq: patch.rebalance_freq ?? patch.value ?? nextRisk.rebalance_freq,
+        min_holding_period_bars: patch.min_holding_period_bars ?? nextRisk.min_holding_period_bars,
+        signal_confirmation_bars: patch.signal_confirmation_bars ?? nextRisk.signal_confirmation_bars,
+        exit_confirmation_bars: patch.exit_confirmation_bars ?? nextRisk.exit_confirmation_bars,
+        cooldown_bars: patch.cooldown_bars ?? nextRisk.cooldown_bars,
+        entry_score_threshold: patch.entry_score_threshold ?? nextRisk.entry_score_threshold,
+        exit_score_threshold: patch.exit_score_threshold ?? nextRisk.exit_score_threshold,
+        min_weight_change_pct: patch.min_weight_change_pct ?? nextRisk.min_weight_change_pct,
+      };
     }
     if (patch.type === 'set_position_sizing') {
       if (patch.method === 'Kelly') nextSizing = { method: 'Kelly', kelly_fraction: patch.kelly_fraction ?? 0.5 };
@@ -1417,6 +1463,8 @@ export function Backtesting() {
                     ['End', bt.resolvedSpec?.date_range.end_date ?? '—'],
                     ['Signals', bt.resolvedSpec?.signals.length ? `${bt.resolvedSpec.signals.length} configured` : '—'],
                     ['Sizing', bt.resolvedSpec?.position_sizing.method ?? '—'],
+                    ['Rebalance', bt.resolvedSpec?.risk_params.rebalance_freq ?? '—'],
+                    ['Min hold', bt.resolvedSpec?.risk_params.min_holding_period_bars ? `${bt.resolvedSpec.risk_params.min_holding_period_bars} bars` : '—'],
                     ['Data through', displayResults?.data_through ?? '—'],
                   ].map(([k, v]) => (
                     <MetricRow key={k} label={k} value={v} />

@@ -18,7 +18,7 @@
 
 use std::collections::HashMap;
 
-use chrono::NaiveDate;
+use chrono::{Datelike, NaiveDate};
 
 use crate::metrics;
 use crate::models::*;
@@ -71,7 +71,8 @@ pub fn run(inputs: &EngineInputs) -> BacktestResults {
     let aggregate_metrics = aggregate(&sim, n);
     let regime_metrics = partition_by_regime(&sim, inputs.regime);
     let signal_attribution = attribution(inputs, &entry, &exit, &sim);
-    let expectancy_metrics = expectancy(&sim, spec.starting_capital, aggregate_metrics.max_drawdown);
+    let expectancy_metrics =
+        expectancy(&sim, spec.starting_capital, aggregate_metrics.max_drawdown);
     let walk_forward = walk_forward(inputs, &sim);
     let transaction_costs = transaction_cost_summary(&sim);
 
@@ -203,21 +204,76 @@ fn eval_logic(
     eval_logic_skip(expr, spec, series, n, None)
 }
 
-/// Long/flat gate state machine: enter on entry, exit on exit, otherwise hold.
-fn build_gate(entry: &[bool], exit: &[bool]) -> Vec<bool> {
+fn confirmed(flags: &[bool], t: usize, bars: u32) -> bool {
+    let bars = bars.max(1) as usize;
+    if bars == 1 {
+        return flags.get(t).copied().unwrap_or(false);
+    }
+    if t + 1 < bars {
+        return false;
+    }
+    flags[t + 1 - bars..=t].iter().all(|v| *v)
+}
+
+fn has_event_conditions(expr: &LogicExpression) -> bool {
+    expr.conditions
+        .iter()
+        .any(|c| matches!(c.direction, Some(Direction::CrossUp | Direction::CrossDown)))
+}
+
+/// Long/flat gate with causal anti-churn controls. Entries can require
+/// persistence, ordinary exits can require persistence and a minimum hold, and
+/// re-entry can be delayed after a signal exit. Crossover exits remain
+/// immediate because they are one-bar events by construction.
+fn build_churn_controlled_gate(
+    spec: &StrategySpec,
+    entry: &[bool],
+    exit: &[bool],
+    event_exit: Option<&[bool]>,
+) -> Vec<bool> {
     let n = entry.len();
+    let risk = &spec.risk_params;
+    let entry_confirm = risk.signal_confirmation_bars.max(1);
+    let exit_confirm = if event_exit.is_some() {
+        1
+    } else {
+        risk.exit_confirmation_bars.max(1)
+    };
+    let min_hold = risk.min_holding_period_bars as usize;
+    let cooldown_bars = risk.cooldown_bars as usize;
+
     let mut gate = vec![false; n];
     let mut in_mkt = false;
+    let mut entry_idx = 0usize;
+    let mut cooldown = 0usize;
+
     for t in 0..n {
-        if in_mkt {
-            if exit[t] {
-                in_mkt = false;
-            }
-        } else if entry[t] {
-            in_mkt = true;
+        if !in_mkt && cooldown > 0 {
+            cooldown -= 1;
         }
+
+        let entry_ok = confirmed(entry, t, entry_confirm);
+        let event_exit_now = event_exit.and_then(|v| v.get(t)).copied().unwrap_or(false);
+        let exit_ok = if event_exit_now {
+            true
+        } else {
+            confirmed(exit, t, exit_confirm)
+        };
+
+        if in_mkt {
+            let held = t.saturating_sub(entry_idx);
+            if exit_ok && (event_exit_now || held >= min_hold) {
+                in_mkt = false;
+                cooldown = cooldown_bars;
+            }
+        } else if cooldown == 0 && entry_ok {
+            in_mkt = true;
+            entry_idx = t;
+        }
+
         gate[t] = in_mkt;
     }
+
     gate
 }
 
@@ -227,12 +283,22 @@ fn build_signal_gate(
     exit: &[bool],
 ) -> (Vec<bool>, Option<EnsembleDiagnostics>) {
     if inputs.spec.signals.len() <= 1 {
-        return (build_gate(entry, exit), None);
+        return (
+            build_churn_controlled_gate(
+                inputs.spec,
+                entry,
+                exit,
+                has_event_conditions(&inputs.spec.exit_logic).then_some(exit),
+            ),
+            None,
+        );
     }
     let n = inputs.returns.len();
     let mut scored: Vec<(&SignalConfig, Vec<f64>)> = Vec::new();
     for sig in &inputs.spec.signals {
-        let Some(series) = inputs.signal_series.get(&sig.signal_id) else { continue };
+        let Some(series) = inputs.signal_series.get(&sig.signal_id) else {
+            continue;
+        };
         let signed: Vec<f64> = series
             .iter()
             .map(|v| {
@@ -249,20 +315,42 @@ fn build_signal_gate(
         scored.push((sig, trailing_zscore(&signed, 60)));
     }
     if scored.is_empty() {
-        return (build_gate(entry, exit), None);
+        return (
+            build_churn_controlled_gate(
+                inputs.spec,
+                entry,
+                exit,
+                has_event_conditions(&inputs.spec.exit_logic).then_some(exit),
+            ),
+            None,
+        );
     }
 
-    let mut in_mkt = false;
-    let mut gate = vec![false; n];
+    let mut ensemble_entry = vec![false; n];
+    let mut ensemble_exit = vec![false; n];
     let mut weight_sums: Vec<[f64; 3]> = vec![[0.0; 3]; scored.len()];
     let mut weight_counts: Vec<[u32; 3]> = vec![[0; 3]; scored.len()];
+    let entry_score_threshold = inputs.spec.risk_params.entry_score_threshold.max(0.0);
+    let exit_score_threshold = inputs.spec.risk_params.exit_score_threshold.max(0.0);
 
     for t in 0..n {
-        let regime = inputs.regime.filtered_state.get(t).copied().unwrap_or(0).min(2) as usize;
+        let regime = inputs
+            .regime
+            .filtered_state
+            .get(t)
+            .copied()
+            .unwrap_or(0)
+            .min(2) as usize;
         let raw_weights: Vec<f64> = scored
             .iter()
             .map(|(sig, score)| {
-                let learned = trailing_regime_sharpe(score, inputs.returns, &inputs.regime.filtered_state, t, regime);
+                let learned = trailing_regime_sharpe(
+                    score,
+                    inputs.returns,
+                    &inputs.regime.filtered_state,
+                    t,
+                    regime,
+                );
                 sig.weight.max(0.0) * learned.max(0.0)
             })
             .collect();
@@ -270,22 +358,31 @@ fn build_signal_gate(
         let mut denom = 0.0;
         let mut combined = 0.0;
         for (i, (sig, score)) in scored.iter().enumerate() {
-            let w = if fallback { sig.weight.max(0.0) } else { raw_weights[i] };
+            let w = if fallback {
+                sig.weight.max(0.0)
+            } else {
+                raw_weights[i]
+            };
             denom += w.abs();
             combined += w * score[t];
             weight_sums[i][regime] += w;
             weight_counts[i][regime] += 1;
         }
-        let ensemble_entry = denom > 1e-12 && combined / denom > 0.0;
-        if in_mkt {
-            if exit[t] || !ensemble_entry {
-                in_mkt = false;
-            }
-        } else if entry[t] || ensemble_entry {
-            in_mkt = true;
+        if denom > 1e-12 {
+            let score = combined / denom;
+            ensemble_entry[t] = score > entry_score_threshold;
+            ensemble_exit[t] = score < -exit_score_threshold;
         }
-        gate[t] = in_mkt;
     }
+
+    let entry_trigger: Vec<bool> = (0..n).map(|t| entry[t] && ensemble_entry[t]).collect();
+    let exit_trigger: Vec<bool> = (0..n).map(|t| exit[t] || ensemble_exit[t]).collect();
+    let gate = build_churn_controlled_gate(
+        inputs.spec,
+        &entry_trigger,
+        &exit_trigger,
+        has_event_conditions(&inputs.spec.exit_logic).then_some(exit),
+    );
 
     let diagnostics = scored
         .iter()
@@ -321,7 +418,11 @@ fn trailing_zscore(values: &[f64], window: usize) -> Vec<f64> {
     let mut out = vec![0.0; values.len()];
     for t in 0..values.len() {
         let lo = (t + 1).saturating_sub(window);
-        let slice: Vec<f64> = values[lo..=t].iter().copied().filter(|v| v.is_finite()).collect();
+        let slice: Vec<f64> = values[lo..=t]
+            .iter()
+            .copied()
+            .filter(|v| v.is_finite())
+            .collect();
         if slice.len() < 10 {
             continue;
         }
@@ -414,6 +515,41 @@ fn trailing_mean_var(returns: &[f64], t: usize) -> (f64, f64) {
     (m.mean, m.variance)
 }
 
+fn should_rebalance(dates: &[String], t: usize, freq: RebalanceFreq) -> bool {
+    if t == 0 {
+        return true;
+    }
+    match freq {
+        RebalanceFreq::Daily => true,
+        RebalanceFreq::OnSignal => false,
+        RebalanceFreq::Weekly => match (
+            dates
+                .get(t - 1)
+                .and_then(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok()),
+            dates
+                .get(t)
+                .and_then(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok()),
+        ) {
+            (Some(prev), Some(cur)) => {
+                prev.iso_week().year() != cur.iso_week().year()
+                    || prev.iso_week().week() != cur.iso_week().week()
+            }
+            _ => t % 5 == 0,
+        },
+        RebalanceFreq::Monthly => match (
+            dates
+                .get(t - 1)
+                .and_then(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok()),
+            dates
+                .get(t)
+                .and_then(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok()),
+        ) {
+            (Some(prev), Some(cur)) => prev.year() != cur.year() || prev.month() != cur.month(),
+            _ => t % 21 == 0,
+        },
+    }
+}
+
 fn simulate(inputs: &EngineInputs, gate: &[bool]) -> SimResult {
     let returns = inputs.returns;
     let n = returns.len();
@@ -430,6 +566,7 @@ fn simulate(inputs: &EngineInputs, gate: &[bool]) -> SimResult {
         0.0
     };
     let financing_daily = spec.cost_model.financing_rate_annual / 252.0;
+    let min_weight_change = as_fraction(spec.risk_params.min_weight_change_pct).abs();
 
     let mut weights = vec![0.0f64; n];
     let mut gross_returns = vec![0.0f64; n];
@@ -443,15 +580,36 @@ fn simulate(inputs: &EngineInputs, gate: &[bool]) -> SimResult {
     let mut prev_w = 0.0f64;
 
     for t in 0..n {
-        // Decide target weight from info available at bar t.
-        let mut target = if gate[t] {
+        // Decide target weight from info available at bar t. Rebalance frequency
+        // governs sizing changes while already invested; signal transitions still
+        // enter/exit immediately after the gate accepts them.
+        let gate_changed = t == 0 || gate.get(t - 1).copied().unwrap_or(false) != gate[t];
+        let needs_entry_weight = gate[t] && prev_w <= 1e-9;
+        let rebalance_due = gate_changed
+            || needs_entry_weight
+            || should_rebalance(inputs.dates, t, spec.risk_params.rebalance_freq);
+        let mut target = if gate[t] && rebalance_due {
             sized_weight(returns, t, &spec.position_sizing, cap)
+        } else if gate[t] {
+            prev_w
         } else {
             0.0
         };
+        if gate[t]
+            && prev_w > 1e-9
+            && target > 1e-9
+            && min_weight_change > 0.0
+            && (target - prev_w).abs() < min_weight_change
+        {
+            target = prev_w;
+        }
 
         // Circuit breaker: if drawdown already breached, flatten + cooldown.
-        let dd = if peak > 0.0 { (peak - equity[t]) / peak } else { 0.0 };
+        let dd = if peak > 0.0 {
+            (peak - equity[t]) / peak
+        } else {
+            0.0
+        };
         if cooldown > 0 {
             target = 0.0;
             cooldown -= 1;
@@ -464,7 +622,11 @@ fn simulate(inputs: &EngineInputs, gate: &[bool]) -> SimResult {
 
         // Turnover cost charged at t for moving prev_w -> target.
         let turnover = (target - prev_w).abs();
-        let fixed = if turnover > 1e-9 { fixed_commission_return } else { 0.0 };
+        let fixed = if turnover > 1e-9 {
+            fixed_commission_return
+        } else {
+            0.0
+        };
         let financing = target.max(1.0) - 1.0;
         let financing_cost = financing.max(0.0) * financing_daily;
         let cost = turnover * cost_rate + fixed + financing_cost;
@@ -491,7 +653,15 @@ fn simulate(inputs: &EngineInputs, gate: &[bool]) -> SimResult {
 
     let trades = extract_trades(inputs, &weights, &net_returns);
 
-    SimResult { gross_returns, net_returns, equity, gross_equity, weights, trades, total_cost }
+    SimResult {
+        gross_returns,
+        net_returns,
+        equity,
+        gross_equity,
+        weights,
+        trades,
+        total_cost,
+    }
 }
 
 /// Reconstruct trades from the realized weight path (entry when weight goes
@@ -587,18 +757,22 @@ fn aggregate(sim: &SimResult, _n: usize) -> AggregateMetrics {
     let calmar = if mdd > 1e-9 { cagr / mdd } else { 0.0 };
     let ann_vol = metrics::annual_volatility(&r);
 
-    let (wins, losses, gross_win, gross_loss) = sim.trades.iter().fold(
-        (0u32, 0u32, 0.0f64, 0.0f64),
-        |(w, l, gw, gl), t| {
-            if t.pnl_pct > 0.0 {
-                (w + 1, l, gw + t.pnl_pct, gl)
-            } else {
-                (w, l + 1, gw, gl + t.pnl_pct.abs())
-            }
-        },
-    );
+    let (wins, losses, gross_win, gross_loss) =
+        sim.trades
+            .iter()
+            .fold((0u32, 0u32, 0.0f64, 0.0f64), |(w, l, gw, gl), t| {
+                if t.pnl_pct > 0.0 {
+                    (w + 1, l, gw + t.pnl_pct, gl)
+                } else {
+                    (w, l + 1, gw, gl + t.pnl_pct.abs())
+                }
+            });
     let total = wins + losses;
-    let win_rate = if total > 0 { wins as f64 / total as f64 } else { 0.0 };
+    let win_rate = if total > 0 {
+        wins as f64 / total as f64
+    } else {
+        0.0
+    };
     let profit_factor = if gross_loss > 1e-12 {
         gross_win / gross_loss
     } else if gross_win > 0.0 {
@@ -622,7 +796,11 @@ fn aggregate(sim: &SimResult, _n: usize) -> AggregateMetrics {
         annual_volatility: ann_vol,
         max_drawdown: mdd,
         win_rate,
-        profit_factor: if profit_factor.is_finite() { profit_factor } else { 0.0 },
+        profit_factor: if profit_factor.is_finite() {
+            profit_factor
+        } else {
+            0.0
+        },
         total_trades: total,
         avg_trade_duration_days: avg_dur,
         skewness: m.skewness,
@@ -634,11 +812,29 @@ fn expectancy(sim: &SimResult, starting_capital: f64, max_drawdown: f64) -> Expe
     if sim.trades.is_empty() {
         return ExpectancyMetrics::default();
     }
-    let wins: Vec<f64> = sim.trades.iter().filter(|t| t.pnl_pct > 0.0).map(|t| t.pnl_pct).collect();
-    let losses: Vec<f64> = sim.trades.iter().filter(|t| t.pnl_pct <= 0.0).map(|t| t.pnl_pct.abs()).collect();
+    let wins: Vec<f64> = sim
+        .trades
+        .iter()
+        .filter(|t| t.pnl_pct > 0.0)
+        .map(|t| t.pnl_pct)
+        .collect();
+    let losses: Vec<f64> = sim
+        .trades
+        .iter()
+        .filter(|t| t.pnl_pct <= 0.0)
+        .map(|t| t.pnl_pct.abs())
+        .collect();
     let win_rate = wins.len() as f64 / sim.trades.len() as f64;
-    let avg_win = if wins.is_empty() { 0.0 } else { wins.iter().sum::<f64>() / wins.len() as f64 };
-    let avg_loss = if losses.is_empty() { 0.0 } else { losses.iter().sum::<f64>() / losses.len() as f64 };
+    let avg_win = if wins.is_empty() {
+        0.0
+    } else {
+        wins.iter().sum::<f64>() / wins.len() as f64
+    };
+    let avg_loss = if losses.is_empty() {
+        0.0
+    } else {
+        losses.iter().sum::<f64>() / losses.len() as f64
+    };
     let expectancy_pct = win_rate * avg_win - (1.0 - win_rate) * avg_loss;
     let r_multiple_distribution: Vec<f64> = if avg_loss > 1e-12 {
         sim.trades.iter().map(|t| t.pnl_pct / avg_loss).collect()
@@ -668,14 +864,26 @@ fn expectancy(sim: &SimResult, starting_capital: f64, max_drawdown: f64) -> Expe
     let total_net_profit = sim.equity.last().copied().unwrap_or(1.0) - 1.0;
     ExpectancyMetrics {
         expectancy_per_trade: expectancy_pct * starting_capital,
-        expectancy_per_dollar: if avg_loss > 1e-12 { expectancy_pct / avg_loss } else { 0.0 },
+        expectancy_per_dollar: if avg_loss > 1e-12 {
+            expectancy_pct / avg_loss
+        } else {
+            0.0
+        },
         r_multiple_distribution,
         system_quality_number: sqn,
-        avg_win_loss_ratio: if avg_loss > 1e-12 { avg_win / avg_loss } else { 0.0 },
+        avg_win_loss_ratio: if avg_loss > 1e-12 {
+            avg_win / avg_loss
+        } else {
+            0.0
+        },
         largest_win_pct: wins.iter().copied().fold(0.0, f64::max),
         largest_loss_pct: losses.iter().copied().fold(0.0, f64::max),
         consecutive_losses_max: max_losses,
-        recovery_factor: if max_drawdown > 1e-12 { total_net_profit / max_drawdown } else { 0.0 },
+        recovery_factor: if max_drawdown > 1e-12 {
+            total_net_profit / max_drawdown
+        } else {
+            0.0
+        },
     }
 }
 
@@ -702,7 +910,12 @@ fn walk_forward(inputs: &EngineInputs, sim: &SimResult) -> Option<WalkForwardRes
     if n < 252 * 3 {
         return None;
     }
-    let cfg = WalkForwardConfig { n_windows: 5, train_pct: 0.70, test_pct: 0.30, anchored: true };
+    let cfg = WalkForwardConfig {
+        n_windows: 5,
+        train_pct: 0.70,
+        test_pct: 0.30,
+        anchored: true,
+    };
     let step = (n / cfg.n_windows as usize).max(1);
     let mut windows = Vec::new();
     for w in 1..=cfg.n_windows as usize {
@@ -732,11 +945,18 @@ fn walk_forward(inputs: &EngineInputs, sim: &SimResult) -> Option<WalkForwardRes
     }
     let insample = windows.iter().map(|w| w.insample_sharpe).sum::<f64>() / windows.len() as f64;
     let oos = windows.iter().map(|w| w.oos_sharpe).sum::<f64>() / windows.len() as f64;
-    let ratio = if insample.abs() > 1e-12 { oos / insample } else { 0.0 };
+    let ratio = if insample.abs() > 1e-12 {
+        oos / insample
+    } else {
+        0.0
+    };
     let consistency =
         windows.iter().filter(|w| w.oos_sharpe > 0.0).count() as f64 / windows.len() as f64;
     let warning = if ratio < 0.5 {
-        Some("Overfitting detected - this strategy may not perform as shown in live trading.".to_string())
+        Some(
+            "Overfitting detected - this strategy may not perform as shown in live trading."
+                .to_string(),
+        )
     } else {
         None
     };
@@ -807,9 +1027,26 @@ fn attribution(
         .iter()
         .map(|sig| {
             let id = sig.signal_id.as_str();
-            let entry_loo = eval_logic_skip(&inputs.spec.entry_logic, inputs.spec, &inputs.signal_series, n, Some(id));
-            let exit_loo = eval_logic_skip(&inputs.spec.exit_logic, inputs.spec, &inputs.signal_series, n, Some(id));
-            let gate = build_gate(&entry_loo, &exit_loo);
+            let entry_loo = eval_logic_skip(
+                &inputs.spec.entry_logic,
+                inputs.spec,
+                &inputs.signal_series,
+                n,
+                Some(id),
+            );
+            let exit_loo = eval_logic_skip(
+                &inputs.spec.exit_logic,
+                inputs.spec,
+                &inputs.signal_series,
+                n,
+                Some(id),
+            );
+            let gate = build_churn_controlled_gate(
+                inputs.spec,
+                &entry_loo,
+                &exit_loo,
+                has_event_conditions(&inputs.spec.exit_logic).then_some(exit_loo.as_slice()),
+            );
             let loo = simulate(inputs, &gate);
             let r: Vec<f64> = loo.net_returns.iter().skip(1).copied().collect();
             let loo_sharpe = metrics::lo_annualized_sharpe(&r, 0.0);
@@ -843,7 +1080,10 @@ fn avg_active_weight(series: Option<&Vec<f64>>, weights: &[f64]) -> f64 {
 
 // ─── Comparison baseline (12-1 time-series momentum) ─────────────────────────────
 
-fn compare_to_baseline(inputs: &EngineInputs, enhanced: &SimResult) -> (ComparisonResults, Vec<f64>) {
+fn compare_to_baseline(
+    inputs: &EngineInputs,
+    enhanced: &SimResult,
+) -> (ComparisonResults, Vec<f64>) {
     let n = inputs.returns.len();
     let gate = momentum_gate(inputs.asset_close, n);
     // Baseline uses the same cost model but a simple full-notional sizing.
@@ -874,16 +1114,18 @@ fn compare_to_baseline(inputs: &EngineInputs, enhanced: &SimResult) -> (Comparis
     };
     // Bounded composite: blends Sharpe improvement and drawdown reduction.
     let dd_frac = (drawdown_reduction_pct / 100.0).clamp(-1.0, 1.0);
-    let signal_value_score =
-        (0.5 + 0.25 * sharpe_delta.tanh() + 0.25 * dd_frac).clamp(0.0, 1.0);
+    let signal_value_score = (0.5 + 0.25 * sharpe_delta.tanh() + 0.25 * dd_frac).clamp(0.0, 1.0);
 
-    (ComparisonResults {
-        baseline_metrics,
-        enhanced_metrics,
-        sharpe_delta,
-        drawdown_reduction_pct,
-        signal_value_score,
-    }, baseline_equity)
+    (
+        ComparisonResults {
+            baseline_metrics,
+            enhanced_metrics,
+            sharpe_delta,
+            drawdown_reduction_pct,
+            signal_value_score,
+        },
+        baseline_equity,
+    )
 }
 
 fn clone_spec_for_baseline(spec: &StrategySpec) -> StrategySpec {
@@ -931,7 +1173,10 @@ fn build_dollar_summary(
     dates: &[String],
 ) -> crate::models::DollarSummary {
     use crate::models::{DollarPoint, DollarSummary};
-    let n = enhanced_equity.len().min(buy_hold_equity.len()).min(dates.len());
+    let n = enhanced_equity
+        .len()
+        .min(buy_hold_equity.len())
+        .min(dates.len());
     let curve: Vec<DollarPoint> = (0..n)
         .map(|i| DollarPoint {
             timestamp: dates[i].clone(),
@@ -943,7 +1188,13 @@ fn build_dollar_summary(
     let enhanced_final = curve.last().map(|p| p.enhanced).unwrap_or(capital);
     let buy_hold_final = curve.last().map(|p| p.buy_hold).unwrap_or(capital);
     let baseline_final = baseline_equity.and_then(|b| b.last()).map(|v| capital * v);
-    DollarSummary { starting_capital: capital, enhanced_final, buy_hold_final, baseline_final, curve }
+    DollarSummary {
+        starting_capital: capital,
+        enhanced_final,
+        buy_hold_final,
+        baseline_final,
+        curve,
+    }
 }
 
 // ─── Equity curve ────────────────────────────────────────────────────────────────
@@ -998,7 +1249,10 @@ mod tests {
         StrategySpec {
             id: "t".into(),
             name: "t".into(),
-            date_range: DateRange { start_date: "2020-01-01".into(), end_date: "2020-12-31".into() },
+            date_range: DateRange {
+                start_date: "2020-01-01".into(),
+                end_date: "2020-12-31".into(),
+            },
             signals: vec![SignalConfig {
                 signal_id: "sig".into(),
                 signal_type: SignalType::MomentumFactor,
@@ -1008,11 +1262,19 @@ mod tests {
             }],
             entry_logic: LogicExpression {
                 operator: Operator::AND,
-                conditions: vec![Condition { signal_id: "sig".into(), direction: Some(Direction::Above), threshold: Some(0.0) }],
+                conditions: vec![Condition {
+                    signal_id: "sig".into(),
+                    direction: Some(Direction::Above),
+                    threshold: Some(0.0),
+                }],
             },
             exit_logic: LogicExpression {
                 operator: Operator::AND,
-                conditions: vec![Condition { signal_id: "sig".into(), direction: Some(Direction::Below), threshold: Some(0.0) }],
+                conditions: vec![Condition {
+                    signal_id: "sig".into(),
+                    direction: Some(Direction::Below),
+                    threshold: Some(0.0),
+                }],
             },
             position_sizing: PositionSizing::FixedFractional { fraction: 1.0 },
             risk_params: RiskParams {
@@ -1021,10 +1283,21 @@ mod tests {
                 rebalance_freq: RebalanceFreq::Daily,
                 risk_per_trade_pct: 1.0,
                 min_rr: 2.0,
+                min_holding_period_bars: 0,
+                signal_confirmation_bars: 1,
+                exit_confirmation_bars: 1,
+                cooldown_bars: 0,
+                entry_score_threshold: 0.0,
+                exit_score_threshold: 0.0,
+                min_weight_change_pct: 0.0,
             },
             comparison_mode: false,
             tier: UserTier::Pro,
-            cost_model: CostModel { commission_bps: 1.0, slippage_bps: 2.0, ..CostModel::default() },
+            cost_model: CostModel {
+                commission_bps: 1.0,
+                slippage_bps: 2.0,
+                ..CostModel::default()
+            },
             instrument: "SPY".to_string(),
             starting_capital: 10_000.0,
         }
@@ -1033,7 +1306,8 @@ mod tests {
     fn dates(n: usize) -> Vec<String> {
         (0..n)
             .map(|i| {
-                let d = NaiveDate::from_ymd_opt(2020, 1, 1).unwrap() + chrono::Duration::days(i as i64);
+                let d =
+                    NaiveDate::from_ymd_opt(2020, 1, 1).unwrap() + chrono::Duration::days(i as i64);
                 d.format("%Y-%m-%d").to_string()
             })
             .collect()
@@ -1061,7 +1335,10 @@ mod tests {
         };
         let res = run(&inputs);
         // Equity should have grown from the t=6 return (minus entry cost).
-        assert!(res.equity_curve[6].value > 1.0, "position should capture next-bar return");
+        assert!(
+            res.equity_curve[6].value > 1.0,
+            "position should capture next-bar return"
+        );
         // No return leaked into bar 5 (the signal bar itself).
         assert!((res.equity_curve[5].value - 1.0).abs() < 1e-6);
     }
@@ -1072,7 +1349,11 @@ mod tests {
         let sig = vec![1.0; n]; // always long
         let returns = vec![0.0; n]; // flat market
         let mut spec = base_spec();
-        spec.cost_model = CostModel { commission_bps: 50.0, slippage_bps: 50.0, ..CostModel::default() };
+        spec.cost_model = CostModel {
+            commission_bps: 50.0,
+            slippage_bps: 50.0,
+            ..CostModel::default()
+        };
         let regime = make_regime(n);
         let mut series = HashMap::new();
         series.insert("sig".to_string(), sig);
@@ -1090,6 +1371,104 @@ mod tests {
     }
 
     #[test]
+    fn min_holding_period_filters_twitchy_exit() {
+        let n = 14;
+        let mut sig = vec![-1.0; n];
+        sig[2] = 1.0;
+        for v in sig.iter_mut().take(8).skip(3) {
+            *v = -1.0;
+        }
+        let returns = vec![0.0; n];
+        let mut spec = base_spec();
+        spec.risk_params.min_holding_period_bars = 5;
+        let regime = make_regime(n);
+        let mut series = HashMap::new();
+        series.insert("sig".to_string(), sig);
+        let inputs = EngineInputs {
+            spec: &spec,
+            dates: &dates(n),
+            returns: &returns,
+            regime: &regime,
+            signal_series: series,
+            asset_close: None,
+        };
+        let res = run(&inputs);
+        let first = res.trade_log.first().expect("trade");
+        assert!(
+            first.duration_days >= 5.0,
+            "ordinary signal exit should wait for min hold, got {} days",
+            first.duration_days
+        );
+    }
+
+    #[test]
+    fn weekly_rebalance_reduces_weight_churn_costs() {
+        let n = 140;
+        let sig = vec![1.0; n];
+        let returns: Vec<f64> = (0..n)
+            .map(|i| {
+                let amp = if i < 45 {
+                    0.004
+                } else if i < 90 {
+                    0.018
+                } else {
+                    0.008
+                };
+                if i % 2 == 0 {
+                    amp
+                } else {
+                    -amp * 0.8
+                }
+            })
+            .collect();
+        let regime = make_regime(n);
+        let mut series = HashMap::new();
+        series.insert("sig".to_string(), sig);
+
+        let mut daily = base_spec();
+        daily.position_sizing = PositionSizing::VolTarget {
+            target_annual_vol: 0.05,
+        };
+        daily.risk_params.rebalance_freq = RebalanceFreq::Daily;
+        daily.cost_model = CostModel {
+            commission_bps: 10.0,
+            slippage_bps: 10.0,
+            ..CostModel::default()
+        };
+
+        let mut weekly = daily.clone();
+        weekly.risk_params.rebalance_freq = RebalanceFreq::Weekly;
+
+        let dates = dates(n);
+        let daily_inputs = EngineInputs {
+            spec: &daily,
+            dates: &dates,
+            returns: &returns,
+            regime: &regime,
+            signal_series: series.clone(),
+            asset_close: None,
+        };
+        let weekly_inputs = EngineInputs {
+            spec: &weekly,
+            dates: &dates,
+            returns: &returns,
+            regime: &regime,
+            signal_series: series,
+            asset_close: None,
+        };
+
+        let daily_cost = run(&daily_inputs).transaction_costs.unwrap().total_cost_pct;
+        let weekly_cost = run(&weekly_inputs)
+            .transaction_costs
+            .unwrap()
+            .total_cost_pct;
+        assert!(
+            weekly_cost < daily_cost,
+            "weekly rebalance should reduce turnover costs: weekly={weekly_cost}, daily={daily_cost}"
+        );
+    }
+
+    #[test]
     fn expectancy_computes_sqn_from_r_multiples() {
         let sim = SimResult {
             gross_returns: vec![0.0; 5],
@@ -1099,9 +1478,30 @@ mod tests {
             weights: vec![0.0; 5],
             total_cost: 0.0,
             trades: vec![
-                Trade { entry_ts: "2020-01-01".into(), exit_ts: "2020-01-02".into(), pnl_pct: 0.10, regime_at_entry: 0, duration_days: 1.0, signals_triggered: vec![] },
-                Trade { entry_ts: "2020-01-03".into(), exit_ts: "2020-01-04".into(), pnl_pct: -0.05, regime_at_entry: 0, duration_days: 1.0, signals_triggered: vec![] },
-                Trade { entry_ts: "2020-01-05".into(), exit_ts: "2020-01-06".into(), pnl_pct: 0.15, regime_at_entry: 0, duration_days: 1.0, signals_triggered: vec![] },
+                Trade {
+                    entry_ts: "2020-01-01".into(),
+                    exit_ts: "2020-01-02".into(),
+                    pnl_pct: 0.10,
+                    regime_at_entry: 0,
+                    duration_days: 1.0,
+                    signals_triggered: vec![],
+                },
+                Trade {
+                    entry_ts: "2020-01-03".into(),
+                    exit_ts: "2020-01-04".into(),
+                    pnl_pct: -0.05,
+                    regime_at_entry: 0,
+                    duration_days: 1.0,
+                    signals_triggered: vec![],
+                },
+                Trade {
+                    entry_ts: "2020-01-05".into(),
+                    exit_ts: "2020-01-06".into(),
+                    pnl_pct: 0.15,
+                    regime_at_entry: 0,
+                    duration_days: 1.0,
+                    signals_triggered: vec![],
+                },
             ],
         };
         let e = expectancy(&sim, 100_000.0, 0.10);
@@ -1133,6 +1533,9 @@ mod tests {
         // After the breaker trips, subsequent positive moves shouldn't be captured
         // during cooldown; equity stays roughly at the post-crash level.
         let post = res.equity_curve[5].value;
-        assert!(post < 0.5, "breaker should have flattened after the crash, got {post}");
+        assert!(
+            post < 0.5,
+            "breaker should have flattened after the crash, got {post}"
+        );
     }
 }

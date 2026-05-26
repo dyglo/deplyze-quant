@@ -38,6 +38,9 @@ def test_resolve_tactical_spy_uses_macro_and_medium_momentum():
     assert signal_ids == {"ts_momentum_63_21", "macro_regime_risk_on"}
     assert spec["entry_logic"]["operator"] == "AND"
     assert spec["exit_logic"]["operator"] == "OR"
+    assert spec["risk_params"]["rebalance_freq"] == "Monthly"
+    assert spec["risk_params"]["min_holding_period_bars"] == 21
+    assert spec["risk_params"]["signal_confirmation_bars"] == 3
 
 
 def test_resolve_short_window_qqq_uses_short_momentum():
@@ -60,6 +63,7 @@ def test_resolve_moving_average_prompt_uses_trend_signal():
     )
 
     assert spec["instrument"] == "AAPL"
+    assert spec["date_range"] == {"start_date": "2018-01-01", "end_date": "2026-05-26"}
     assert {signal["signal_id"] for signal in spec["signals"]} == {"trend_200d_slope"}
 
 
@@ -71,4 +75,23 @@ def test_resolve_real_yields_prompt_uses_carry_signal():
     )
 
     assert spec["instrument"] == "GLD"
+    assert spec["date_range"] == {"start_date": "2010-01-01", "end_date": "2026-05-26"}
     assert {"carry_factor", "trend_200d_slope"}.issubset({signal["signal_id"] for signal in spec["signals"]})
+
+
+def test_resolve_tlt_tactical_allocation_uses_anti_churn_controls():
+    spec = resolve_intent(
+        "Backtest a multi-signal TLT tactical allocation strategy from 2012 to today with $100,000 "
+        "starting capital. Stay invested when the 200-day trend is positive, volatility-adjusted "
+        "momentum is positive, and the macro regime is risk-on. Reduce exposure or move to cash when "
+        "trend turns negative, yield-curve stress rises, or volatility-adjusted momentum weakens.",
+        today=datetime(2026, 5, 26, tzinfo=timezone.utc),
+    )
+
+    assert spec["instrument"] == "TLT"
+    assert spec["date_range"] == {"start_date": "2012-01-01", "end_date": "2026-05-26"}
+    signal_ids = {signal["signal_id"] for signal in spec["signals"]}
+    assert {"trend_200d_slope", "vol_adjusted_momentum", "macro_regime_risk_on", "yield_curve_score"}.issubset(signal_ids)
+    assert spec["risk_params"]["rebalance_freq"] == "Monthly"
+    assert spec["risk_params"]["min_holding_period_bars"] == 21
+    assert spec["risk_params"]["exit_score_threshold"] == 0.25

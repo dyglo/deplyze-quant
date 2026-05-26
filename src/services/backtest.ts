@@ -64,6 +64,13 @@ export interface RiskParams {
   rebalance_freq: RebalanceFreq;
   risk_per_trade_pct?: number;
   min_rr?: number;
+  min_holding_period_bars?: number;
+  signal_confirmation_bars?: number;
+  exit_confirmation_bars?: number;
+  cooldown_bars?: number;
+  entry_score_threshold?: number;
+  exit_score_threshold?: number;
+  min_weight_change_pct?: number;
 }
 
 export interface CostModel {
@@ -245,10 +252,17 @@ export type ImprovementCategory =
   | 'SignalRemoval'
   | 'Rebalance'
   | 'PositionSizing'
-  | 'Overfitting';
+  | 'Overfitting'
+  | 'ExecutionControls'
+  | 'AbandonStrategy';
 
 export interface ImprovementActionPatch {
-  type: 'remove_signal' | 'add_or_update_signal' | 'set_rebalance_freq' | 'set_position_sizing';
+  type:
+    | 'remove_signal'
+    | 'add_or_update_signal'
+    | 'set_rebalance_freq'
+    | 'set_position_sizing'
+    | 'set_execution_controls';
   signal_id?: string;
   signal?: SignalConfig;
   entry_operator?: Operator;
@@ -257,6 +271,14 @@ export interface ImprovementActionPatch {
   method?: PositionSizing['method'];
   kelly_fraction?: number;
   target_annual_vol?: number;
+  rebalance_freq?: RebalanceFreq;
+  min_holding_period_bars?: number;
+  signal_confirmation_bars?: number;
+  exit_confirmation_bars?: number;
+  cooldown_bars?: number;
+  entry_score_threshold?: number;
+  exit_score_threshold?: number;
+  min_weight_change_pct?: number;
 }
 
 export interface ImprovementSuggestion {
@@ -361,7 +383,17 @@ export function requestCommentary(opts: {
   metrics: Record<string, string | number>;
   context?: string;
 }): Promise<{ narrative: string }> {
-  return gatewayPost<{ narrative: string }>('/backtest/commentary', opts);
+  return gatewayPost<{ narrative: string }>('/backtest/commentary', {
+    ...opts,
+    query: compactForCommentary(opts.query, 1500),
+    context: opts.context ? compactForCommentary(opts.context, 2000) : undefined,
+  });
+}
+
+function compactForCommentary(value: string, max: number): string {
+  const clean = value.replace(/\s+/g, ' ').trim();
+  if (clean.length <= max) return clean;
+  return `${clean.slice(0, Math.max(0, max - 24)).trim()} ... [truncated]`;
 }
 
 export function requestImprovements(result: BacktestResults): Promise<ImprovementResponse> {

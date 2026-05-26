@@ -111,7 +111,11 @@ where
     Ok(raw
         .into_iter()
         .map(|r| match r {
-            Raw::Id(signal_id) => Condition { signal_id, direction: None, threshold: None },
+            Raw::Id(signal_id) => Condition {
+                signal_id,
+                direction: None,
+                threshold: None,
+            },
             Raw::Full(c) => c,
         })
         .collect())
@@ -152,6 +156,31 @@ pub struct RiskParams {
     pub risk_per_trade_pct: f64,
     #[serde(default = "default_min_rr")]
     pub min_rr: f64,
+    /// Minimum bars a position must be held before ordinary signal exits can
+    /// close it. Circuit breakers can still flatten immediately.
+    #[serde(default = "default_min_holding_period_bars")]
+    pub min_holding_period_bars: u32,
+    /// Consecutive bars required before an entry signal is accepted.
+    #[serde(default = "default_signal_confirmation_bars")]
+    pub signal_confirmation_bars: u32,
+    /// Consecutive bars required before non-event exits are accepted.
+    #[serde(default = "default_exit_confirmation_bars")]
+    pub exit_confirmation_bars: u32,
+    /// Bars to stay flat after an ordinary signal exit before re-entering.
+    #[serde(default = "default_cooldown_bars")]
+    pub cooldown_bars: u32,
+    /// Multi-signal ensemble score required for entry.
+    #[serde(default = "default_entry_score_threshold")]
+    pub entry_score_threshold: f64,
+    /// Multi-signal ensemble score buffer required for exit. A value of 0.20
+    /// means a position exits only when the confidence score falls below -0.20,
+    /// unless explicit exit logic also fires.
+    #[serde(default = "default_exit_score_threshold")]
+    pub exit_score_threshold: f64,
+    /// Ignore small target-weight changes while already invested. Accepts either
+    /// fraction units (0.02) or percent units (2.0).
+    #[serde(default = "default_min_weight_change_pct")]
+    pub min_weight_change_pct: f64,
 }
 
 fn default_risk_per_trade() -> f64 {
@@ -159,6 +188,27 @@ fn default_risk_per_trade() -> f64 {
 }
 fn default_min_rr() -> f64 {
     2.0
+}
+fn default_min_holding_period_bars() -> u32 {
+    0
+}
+fn default_signal_confirmation_bars() -> u32 {
+    1
+}
+fn default_exit_confirmation_bars() -> u32 {
+    1
+}
+fn default_cooldown_bars() -> u32 {
+    0
+}
+fn default_entry_score_threshold() -> f64 {
+    0.0
+}
+fn default_exit_score_threshold() -> f64 {
+    0.0
+}
+fn default_min_weight_change_pct() -> f64 {
+    0.0
 }
 
 /// Execution-cost assumptions. Defaults reflect liquid-futures/ETF round-trip

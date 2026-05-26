@@ -26,7 +26,14 @@ export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
 
-// Initialize analytics only if supported (prevents errors in certain environments)
-export const analytics = typeof window !== 'undefined' ? isSupported().then(yes => yes ? getAnalytics(app) : null) : null;
+const analyticsEnabled =
+  import.meta.env.VITE_ENABLE_FIREBASE_ANALYTICS === 'true' &&
+  Boolean(firebaseConfig.measurementId);
+
+// Initialize analytics only when explicitly enabled; otherwise Firebase injects
+// Google Tag Manager, which can create noisy DNS failures in locked-down clients.
+export const analytics = typeof window !== 'undefined' && analyticsEnabled
+  ? isSupported().then(yes => yes ? getAnalytics(app) : null)
+  : null;
 
 export default app;

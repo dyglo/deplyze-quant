@@ -14,23 +14,21 @@ import {
   Cell,
 } from 'recharts';
 import {
-  Play,
   Plus,
   X,
   Loader2,
   TrendingUp,
-  TrendingDown,
-  Minus,
-  ChevronDown,
-  ChevronRight,
   AlertTriangle,
   Info,
   BarChart2,
   DollarSign,
   Activity,
-  Zap,
   BookOpen,
   Lock,
+  Sparkles,
+  SlidersHorizontal,
+  Search,
+  ArrowRight,
 } from 'lucide-react';
 import { PageHeader } from '../components/quant/PageHeader';
 import { Disclaimer } from '../components/quant/Disclaimer';
@@ -253,64 +251,105 @@ const CommentaryModal: React.FC<{ title: string; narrative: string | null; onClo
   </div>
 );
 
-// ─── NLP Command Bar ─────────────────────────────────────────────────────────────
+// ─── Strategy Command Bar ─────────────────────────────────────────────────────────
+// Matches the CommandBar design pattern from Historical Research exactly.
 
-const NlpBar: React.FC<{ onSubmit: (q: string) => void; disabled: boolean }> = ({ onSubmit, disabled }) => {
+const StrategyCommandBar: React.FC<{ onSubmit: (q: string) => void; busy: boolean }> = ({ onSubmit, busy }) => {
   const [value, setValue] = useState('');
   const ref = useRef<HTMLTextAreaElement>(null);
 
-  const submit = () => {
-    const q = value.trim();
-    if (q.length < 3) return;
-    onSubmit(q);
-    setValue('');
-  };
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 160) + 'px';
+  }, [value]);
 
-  const onKey = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      submit();
-    }
+  const submit = () => {
+    const v = value.trim();
+    if (!v || busy) return;
+    onSubmit(v);
   };
 
   return (
-    <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-      <div style={{ flex: 1, position: 'relative' }}>
-        <textarea
-          ref={ref}
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          onKeyDown={onKey}
-          disabled={disabled}
-          rows={2}
-          placeholder="Describe your strategy idea… e.g. 'Long SPY when macro regime is risk-on and yield curve is positive, 10-year window'"
-          style={{
-            width: '100%',
-            padding: '11px 14px',
-            fontSize: 13,
-            lineHeight: 1.5,
-            background: 'var(--card)',
-            border: '1px solid var(--border)',
-            borderRadius: 10,
-            color: 'var(--foreground)',
-            resize: 'none',
-            outline: 'none',
-            boxSizing: 'border-box',
-          }}
-        />
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 10,
+      padding: '12px 14px',
+      border: '1px solid var(--border)',
+      borderRadius: 12,
+      background: 'var(--card)',
+    }}>
+      <div style={{ width: 24, height: 24, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flex: '0 0 auto' }}>
+        <Search size={15} style={{ color: 'var(--muted-foreground)' }} />
       </div>
+      <textarea
+        ref={ref}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); } }}
+        placeholder="Describe a strategy — instrument, signals, holding logic, time window…"
+        rows={1}
+        disabled={busy}
+        style={{
+          flex: 1, resize: 'none', border: 'none', outline: 'none',
+          background: 'transparent', color: 'var(--foreground)',
+          font: 'inherit', fontSize: 14, lineHeight: 1.5,
+          padding: '4px 0', minHeight: 24, maxHeight: 160,
+        }}
+      />
+      {!value && !busy && (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--muted-foreground)', flex: '0 0 auto' }}>
+          <kbd style={{ fontFamily: 'var(--font-mono)', fontSize: 11, padding: '1px 6px', border: '1px solid var(--border)', borderRadius: 4, background: 'var(--muted)' }}>↵</kbd>
+          <span style={{ opacity: 0.7 }}>to run</span>
+        </span>
+      )}
       <button
-        className="ds-btn ds-btn-primary"
+        type="button"
         onClick={submit}
-        disabled={disabled || value.trim().length < 3}
-        style={{ height: 42, padding: '0 18px', flexShrink: 0, alignSelf: 'flex-end' }}
+        disabled={busy || !value.trim()}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+          padding: '6px 14px',
+          border: '1px solid var(--primary)',
+          borderRadius: 8,
+          background: 'var(--primary)',
+          color: 'var(--primary-foreground)',
+          fontSize: 13, fontWeight: 500,
+          flex: '0 0 auto',
+          cursor: busy || !value.trim() ? 'not-allowed' : 'pointer',
+          opacity: !value.trim() || busy ? 0.5 : 1,
+        }}
       >
-        {disabled ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Play size={14} />}
-        {disabled ? 'Running…' : 'Run'}
+        {busy ? 'Working…' : <><span>Run</span><ArrowRight size={13} /></>}
       </button>
     </div>
   );
 };
+
+// ─── Input mode toggle ───────────────────────────────────────────────────────────
+
+const ModeToggle: React.FC<{ mode: InputMode; onChange: (m: InputMode) => void }> = ({ mode, onChange }) => (
+  <div style={{ display: 'inline-flex', gap: 2, padding: 3, border: '1px solid var(--border)', borderRadius: 8, background: 'var(--muted)' }}>
+    {([['nlp', <Sparkles size={11} />, 'Ask a question'], ['composer', <SlidersHorizontal size={11} />, 'Quick build']] as const).map(([m, icon, label]) => (
+      <button
+        key={m}
+        type="button"
+        onClick={() => onChange(m as InputMode)}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 5,
+          padding: '5px 11px', borderRadius: 6, border: 'none',
+          background: mode === m ? 'var(--card)' : 'transparent',
+          color: mode === m ? 'var(--foreground)' : 'var(--muted-foreground)',
+          fontSize: 12, fontWeight: mode === m ? 500 : 400,
+          cursor: 'pointer',
+          boxShadow: mode === m ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+        }}
+      >
+        {icon}{label}
+      </button>
+    ))}
+  </div>
+);
 
 // ─── Templates ───────────────────────────────────────────────────────────────────
 
@@ -890,7 +929,7 @@ const Composer: React.FC<{
 
 type InputMode = 'nlp' | 'composer';
 
-export default function Backtesting() {
+export function Backtesting() {
   const { state: bt, runFromQuery, runFromSpec, reset } = useBacktest();
 
   // Composer state
@@ -966,73 +1005,36 @@ export default function Backtesting() {
   const isRunning = bt.isRunning;
 
   return (
-    <div className="ds-page">
+    <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 24px 64px' }}>
       <PageHeader
         title="Strategy Backtesting"
-        subtitle="Institutional-grade causal HMM regime engine · Lo-adjusted Sharpe · DSR · t+1 execution realism"
+        subtitle="Causal HMM regime engine · Lo-adjusted Sharpe · Deflated Sharpe · t+1 execution realism"
       />
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 16, alignItems: 'start' }}>
+      {/* Mode toggle lives above the two-column grid */}
+      <div style={{ marginBottom: 12 }}>
+        <ModeToggle mode={inputMode} onChange={setInputMode} />
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 260px', gap: 16, alignItems: 'start' }}>
 
         {/* ── Left column ── */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 14 }}>
 
           {/* Input surface */}
           <section className="ds-panel" style={{ padding: '16px 18px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-              <SectionHeader icon={<Zap size={13} />} title="Strategy input" />
-              <div style={{ marginLeft: 'auto', display: 'inline-flex', borderRadius: 7, border: '1px solid var(--border)', overflow: 'hidden' }}>
-                {(['nlp', 'composer'] as InputMode[]).map((m) => (
-                  <button
-                    key={m}
-                    onClick={() => setInputMode(m)}
-                    style={{
-                      padding: '5px 12px',
-                      fontSize: 11,
-                      fontWeight: 600,
-                      background: inputMode === m ? 'var(--primary)' : 'transparent',
-                      color: inputMode === m ? 'var(--primary-foreground)' : 'var(--muted-foreground)',
-                      border: 'none',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {m === 'nlp' ? 'Natural language' : 'Composer'}
-                  </button>
-                ))}
-              </div>
-            </div>
-
             {inputMode === 'nlp' ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <NlpBar onSubmit={runFromQuery} disabled={isRunning} />
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  {[
-                    'Long SPY when macro regime is risk-on',
-                    'Yield-curve defensive strategy on TLT, 15 years',
-                    'Momentum on QQQ with vol target 10%, compare to baseline',
-                  ].map((ex) => (
-                    <button
-                      key={ex}
-                      className="ds-btn ds-btn-ghost"
-                      style={{ fontSize: 11, height: 26 }}
-                      onClick={() => !isRunning && runFromQuery(ex)}
-                      disabled={isRunning}
-                    >
-                      {ex}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <StrategyCommandBar onSubmit={runFromQuery} busy={isRunning} />
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                 {/* Template strip */}
-                <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
+                <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2 }}>
                   {TEMPLATES.map((t) => (
                     <button
                       key={t.key}
                       className="ds-btn ds-btn-ghost"
                       onClick={() => applyTemplate(t)}
-                      style={{ fontSize: 11, height: 26, whiteSpace: 'nowrap' }}
+                      style={{ fontSize: 11, height: 26, whiteSpace: 'nowrap', flexShrink: 0 }}
                     >
                       {t.name}
                     </button>
@@ -1181,7 +1183,7 @@ export default function Backtesting() {
         </div>
 
         {/* ── Right sidebar ── */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 14 }}>
           <SignalLibraryPanel library={library} onAdd={addSignalFromLibrary} activeIds={activeSignalIds} />
 
           {hasResults && !isRunning && (
@@ -1223,3 +1225,5 @@ export default function Backtesting() {
     </div>
   );
 }
+
+export default Backtesting;

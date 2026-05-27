@@ -1,10 +1,11 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Sparkles, ArrowUpRight } from 'lucide-react';
-import { useNews } from '../../hooks/useMarket';
+import { useNews, useOHLCV } from '../../hooks/useMarket';
 import { useSWR } from '../../hooks/useSWR';
+import { Sparkline } from '../quant/Sparkline';
 import { useCompositeRegime, useRiskEnvironment } from '../../hooks/useAgentIntelligence';
-import { fetchHeroRail } from '../../services/marketHomeService';
+import { fetchHeroRail, type SnapshotRow } from '../../services/marketHomeService';
 import { extractRiskLevel } from '../../services/agentService';
 import { RegimeStatusChip, RiskLevelChip } from '../quant/SystemAnalyzingState';
 import { fmtPrice, stripMarkdown, symbolCountry } from './format';
@@ -112,6 +113,38 @@ const FeaturedIntelligence: React.FC = () => {
   );
 };
 
+const HeroRailRow: React.FC<{ row: SnapshotRow; onOpen: () => void }> = ({ row: r, onOpen }) => {
+  const { data: ohlcv } = useOHLCV(r.ok ? r.symbol : null, '1day', 30);
+  const spark = (ohlcv?.bars ?? []).map((b) => b.close).filter((c) => Number.isFinite(c));
+  const sparkColor = r.changePercent > 0 ? '#4E6040' : r.changePercent < 0 ? 'var(--primary)' : 'var(--muted-foreground)';
+
+  return (
+    <button
+      type="button"
+      disabled={!r.ok}
+      onClick={r.ok ? onOpen : undefined}
+      className="ds-transition-fast"
+      style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+        width: '100%', padding: '6px 4px', background: 'transparent', border: 'none',
+        borderBottom: '1px solid var(--border)', textAlign: 'left', cursor: r.ok ? 'pointer' : 'default',
+      }}
+      onMouseEnter={(e) => { if (r.ok) (e.currentTarget as HTMLElement).style.background = 'var(--muted)'; }}
+      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+    >
+      <span style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
+        <Flag iso={symbolCountry(r.symbol)} width={16} />
+        <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--foreground)' }}>{r.symbol}</span>
+      </span>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        {spark.length > 1 && <Sparkline values={spark} width={48} height={18} strokeWidth={1.1} color={sparkColor} />}
+        <span style={{ fontSize: 11.5, fontVariantNumeric: 'tabular-nums', color: 'var(--foreground)' }}>{r.ok ? fmtPrice(r.price) : '—'}</span>
+        <ChangeCell changePercent={r.changePercent} ok={r.ok} />
+      </span>
+    </button>
+  );
+};
+
 const HeroRail: React.FC = () => {
   const navigate = useNavigate();
   const { data, loading } = useSWR(() => fetchHeroRail(), [], { cacheKey: 'marketHome:heroRail' });
@@ -119,7 +152,7 @@ const HeroRail: React.FC = () => {
 
   return (
     <div>
-      <div style={{ padding: '0 0 8px', borderBottom: '2px solid var(--foreground)', marginBottom: 4, fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--foreground)' }}>
+      <div style={{ marginBottom: 6, fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--foreground)' }}>
         Markets Now
       </div>
       <div>
@@ -127,31 +160,7 @@ const HeroRail: React.FC = () => {
           ? Array.from({ length: 8 }).map((_, i) => (
               <div key={i} style={{ height: 34, margin: '6px 0', borderRadius: 6, background: 'var(--muted)', animation: 'pulse 1.8s infinite' }} />
             ))
-          : rows.map((r) => (
-              <button
-                key={r.symbol}
-                type="button"
-                disabled={!r.ok}
-                onClick={r.ok ? () => navigate(`/instruments/${encodeURIComponent(r.symbol)}`) : undefined}
-                className="ds-transition-fast"
-                style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
-                  width: '100%', padding: '6px 4px', background: 'transparent', border: 'none',
-                  borderBottom: '1px solid var(--border)', textAlign: 'left', cursor: r.ok ? 'pointer' : 'default',
-                }}
-                onMouseEnter={(e) => { if (r.ok) (e.currentTarget as HTMLElement).style.background = 'var(--muted)'; }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
-              >
-                <span style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
-                  <Flag iso={symbolCountry(r.symbol)} width={16} />
-                  <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--foreground)' }}>{r.symbol}</span>
-                </span>
-                <span style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-                  <span style={{ fontSize: 11.5, fontVariantNumeric: 'tabular-nums', color: 'var(--foreground)' }}>{r.ok ? fmtPrice(r.price) : '—'}</span>
-                  <ChangeCell changePercent={r.changePercent} ok={r.ok} />
-                </span>
-              </button>
-            ))}
+          : rows.map((r) => <HeroRailRow key={r.symbol} row={r} onOpen={() => navigate(`/instruments/${encodeURIComponent(r.symbol)}`)} />)}
       </div>
     </div>
   );

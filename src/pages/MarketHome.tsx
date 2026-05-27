@@ -1,5 +1,6 @@
 import React from 'react';
 import { useAuth } from '../components/AuthProvider';
+import { TickerTape } from '../components/market-home/TickerTape';
 import { HeroIntelligence } from '../components/market-home/HeroIntelligence';
 import { MarketSnapshot } from '../components/market-home/MarketSnapshot';
 import { ValuationTable } from '../components/market-home/ValuationTable';
@@ -38,6 +39,10 @@ export const MarketHome: React.FC = () => {
           .market-home-cal { grid-template-columns: 1fr !important; }
         }
       `}</style>
+
+      <div style={{ marginBottom: 16 }}>
+        <SectionBoundary label="Ticker"><TickerTape /></SectionBoundary>
+      </div>
 
       <header style={{ marginBottom: 18 }}>
         <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--foreground)' }}>

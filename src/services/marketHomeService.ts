@@ -152,6 +152,33 @@ export async function fetchHeroRail(): Promise<SnapshotRow[]> {
   );
 }
 
+// ─── Ticker tape ────────────────────────────────────────────────────────────────
+
+export const TICKER_SYMBOLS: UniverseEntry[] = [
+  { symbol: 'SPY', name: 'S&P 500' },
+  { symbol: 'QQQ', name: 'Nasdaq 100' },
+  { symbol: 'DIA', name: 'Dow Jones' },
+  { symbol: 'IWM', name: 'Russell 2000' },
+  { symbol: 'TLT', name: '20Y+ Treasuries' },
+  { symbol: 'UUP', name: 'US Dollar' },
+  { symbol: 'XAU/USD', name: 'Gold' },
+  { symbol: 'XAG/USD', name: 'Silver' },
+  { symbol: 'WTI/USD', name: 'Crude Oil' },
+  { symbol: 'EUR/USD', name: 'EUR/USD' },
+  { symbol: 'USD/JPY', name: 'USD/JPY' },
+  { symbol: 'BTC/USD', name: 'Bitcoin' },
+  { symbol: 'ETH/USD', name: 'Ethereum' },
+];
+
+export async function fetchTicker(): Promise<SnapshotRow[]> {
+  const nameMap = Object.fromEntries(TICKER_SYMBOLS.map((u) => [u.symbol, u.name]));
+  const rows = await fetchQuotes(TICKER_SYMBOLS.map((u) => u.symbol));
+  const bySymbol = new Map(rows.map((r) => [r.symbol, r]));
+  return TICKER_SYMBOLS.map((u) =>
+    normalize(bySymbol.get(u.symbol) ?? { symbol: u.symbol, ok: false }, nameMap),
+  );
+}
+
 // ─── World indices (flagged) ───────────────────────────────────────────────────
 // Country-flagged index proxies (ETFs), mirroring the reference's World Indices
 // table. ISO-2 country codes drive flag emoji rendering.

@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSWR } from '../../hooks/useSWR';
 import { SectionCard } from './SectionCard';
+import { Flag } from './Flag';
+import { symbolCountry } from './format';
 import { fetchValuationScreen, type ValuationRow } from '../../services/valuationService';
 
 type Tab = 'undervalued' | 'overvalued';
@@ -34,9 +36,12 @@ const Row: React.FC<{ row: ValuationRow }> = ({ row }) => {
       onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'var(--muted)'; }}
       onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
     >
-      <span style={{ minWidth: 0 }}>
-        <span style={{ display: 'block', fontSize: 12, fontWeight: 700, color: 'var(--foreground)' }}>{row.symbol}</span>
-        <span style={{ display: 'block', fontSize: 10, color: 'var(--muted-foreground)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.name}</span>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
+        <Flag iso={symbolCountry(row.symbol)} width={18} />
+        <span style={{ minWidth: 0 }}>
+          <span style={{ display: 'block', fontSize: 12, fontWeight: 700, color: 'var(--foreground)' }}>{row.symbol}</span>
+          <span style={{ display: 'block', fontSize: 10, color: 'var(--muted-foreground)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.name}</span>
+        </span>
       </span>
       {[row.peRatio, row.pbRatio, row.evToEbitda, row.priceToSales].map((m, i) => (
         <span key={i} style={{ fontSize: 11.5, fontVariantNumeric: 'tabular-nums', color: 'var(--foreground)', textAlign: 'right' }}>{fmtMultiple(m)}</span>

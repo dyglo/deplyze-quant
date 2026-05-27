@@ -4,7 +4,8 @@ import { useSWR } from '../../hooks/useSWR';
 import { SectionCard } from './SectionCard';
 import { fetchEarningsCalendar } from '../../services/earningsService';
 import { fetchMacroObservations } from '../../services/v3p2Service';
-import { tsValue, fmtDayLabel, stripMarkdown } from './format';
+import { tsValue, fmtDayLabel, stripMarkdown, symbolCountry } from './format';
+import { Flag } from './Flag';
 import type { EarningsEvent } from '../../lib/market-data/contracts';
 
 const Empty: React.FC<{ msg: string }> = ({ msg }) => (
@@ -49,7 +50,10 @@ const EarningsCalendarBlock: React.FC = () => {
                 onMouseEnter={(ev) => { (ev.currentTarget as HTMLElement).style.background = 'var(--muted)'; }}
                 onMouseLeave={(ev) => { (ev.currentTarget as HTMLElement).style.background = 'transparent'; }}
               >
-                <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--foreground)' }}>{e.symbol}</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
+                  <Flag iso={symbolCountry(e.symbol)} width={16} />
+                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--foreground)' }}>{e.symbol}</span>
+                </span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   {e.time && <span style={{ fontSize: 9, fontWeight: 600, color: 'var(--muted-foreground)', textTransform: 'uppercase' }}>{e.time}</span>}
                   {typeof e.epsEstimate === 'number' && <span style={{ fontSize: 10.5, color: 'var(--muted-foreground)', fontVariantNumeric: 'tabular-nums' }}>est {e.epsEstimate.toFixed(2)}</span>}

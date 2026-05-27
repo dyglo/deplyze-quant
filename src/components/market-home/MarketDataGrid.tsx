@@ -29,7 +29,7 @@ export const MarketDataGrid: React.FC = () => {
         style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 28 }}
       >
         <MiniQuoteTable title="World Indices" rows={indices.data ?? []} loading={indices.loading} error={indices.error?.message} showFlags />
-        <MiniQuoteTable title="Leading Stocks" rows={leading} loading={stocks.loading} error={stocks.error?.message} />
+        <MiniQuoteTable title="Leading Stocks" rows={leading} loading={stocks.loading} error={stocks.error?.message} showFlags />
         <MiniQuoteTable title="Commodities" rows={commodities.data ?? []} loading={commodities.loading} error={commodities.error?.message} />
         <MiniQuoteTable title="ETFs" rows={etfs.data ?? []} loading={etfs.loading} error={etfs.error?.message} />
         <MiniQuoteTable title="Bond Proxies" rows={bonds.data ?? []} loading={bonds.loading} error={bonds.error?.message} />

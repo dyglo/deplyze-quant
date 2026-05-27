@@ -34,6 +34,15 @@ export function fmtDayLabel(iso: string | null): string {
   return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
+/**
+ * Best-effort country for a symbol, for flag rendering. Pairs (BTC/USD, EUR/USD,
+ * XAU/USD) have no single country → null. Our equity/ETF universes are US-listed.
+ */
+export function symbolCountry(symbol: string): string | null {
+  if (!symbol || symbol.includes('/')) return null;
+  return 'US';
+}
+
 /** Strip common markdown emphasis/inline markers so summaries read as plain text. */
 export function stripMarkdown(s: string | null | undefined): string {
   if (!s) return '';

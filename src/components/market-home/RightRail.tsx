@@ -5,7 +5,9 @@ import { useCompositeRegime, useRiskEnvironment } from '../../hooks/useAgentInte
 import { extractRiskLevel } from '../../services/agentService';
 import { fetchMarketMovers, type MarketMoverItem, type MoverType } from '../../services/marketService';
 import { RegimeStatusChip, RiskLevelChip } from '../quant/SystemAnalyzingState';
-import { fmtPct, deltaColor } from './format';
+import { Flag } from './Flag';
+import { ChangeCell } from './ChangeCell';
+import { symbolCountry } from './format';
 
 function moverSymbol(m: MarketMoverItem): string {
   return m.symbol ?? m.ticker ?? '';
@@ -100,11 +102,14 @@ const MoversCard: React.FC = () => {
                   onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'var(--muted)'; }}
                   onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
                 >
-                  <span style={{ minWidth: 0 }}>
-                    <span style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: 'var(--foreground)' }}>{sym}</span>
-                    <span style={{ display: 'block', fontSize: 9.5, color: 'var(--muted-foreground)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 130 }}>{m.name ?? m.companyName ?? ''}</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
+                    <Flag iso={symbolCountry(sym)} width={16} />
+                    <span style={{ minWidth: 0 }}>
+                      <span style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: 'var(--foreground)' }}>{sym}</span>
+                      <span style={{ display: 'block', fontSize: 9.5, color: 'var(--muted-foreground)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 120 }}>{m.name ?? m.companyName ?? ''}</span>
+                    </span>
                   </span>
-                  <span style={{ fontSize: 11.5, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: deltaColor(pct) }}>{fmtPct(pct)}</span>
+                  <ChangeCell changePercent={pct} />
                 </button>
               );
             })}

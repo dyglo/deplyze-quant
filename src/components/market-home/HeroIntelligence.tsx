@@ -7,7 +7,9 @@ import { useCompositeRegime, useRiskEnvironment } from '../../hooks/useAgentInte
 import { fetchHeroRail } from '../../services/marketHomeService';
 import { extractRiskLevel } from '../../services/agentService';
 import { RegimeStatusChip, RiskLevelChip } from '../quant/SystemAnalyzingState';
-import { fmtPrice, fmtPct, deltaColor, stripMarkdown } from './format';
+import { fmtPrice, stripMarkdown, symbolCountry } from './format';
+import { Flag } from './Flag';
+import { ChangeCell } from './ChangeCell';
 import type { GatewayNewsItem } from '../../services/marketService';
 
 function timeAgo(ts: number): string {
@@ -125,31 +127,31 @@ const HeroRail: React.FC = () => {
           ? Array.from({ length: 8 }).map((_, i) => (
               <div key={i} style={{ height: 34, margin: '6px 0', borderRadius: 6, background: 'var(--muted)', animation: 'pulse 1.8s infinite' }} />
             ))
-          : rows.map((r) => {
-              const color = deltaColor(r.changePercent);
-              return (
-                <button
-                  key={r.symbol}
-                  type="button"
-                  disabled={!r.ok}
-                  onClick={r.ok ? () => navigate(`/instruments/${encodeURIComponent(r.symbol)}`) : undefined}
-                  className="ds-transition-fast"
-                  style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
-                    width: '100%', padding: '7px 4px', background: 'transparent', border: 'none',
-                    borderBottom: '1px solid var(--border)', textAlign: 'left', cursor: r.ok ? 'pointer' : 'default',
-                  }}
-                  onMouseEnter={(e) => { if (r.ok) (e.currentTarget as HTMLElement).style.background = 'var(--muted)'; }}
-                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
-                >
+          : rows.map((r) => (
+              <button
+                key={r.symbol}
+                type="button"
+                disabled={!r.ok}
+                onClick={r.ok ? () => navigate(`/instruments/${encodeURIComponent(r.symbol)}`) : undefined}
+                className="ds-transition-fast"
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+                  width: '100%', padding: '6px 4px', background: 'transparent', border: 'none',
+                  borderBottom: '1px solid var(--border)', textAlign: 'left', cursor: r.ok ? 'pointer' : 'default',
+                }}
+                onMouseEnter={(e) => { if (r.ok) (e.currentTarget as HTMLElement).style.background = 'var(--muted)'; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+              >
+                <span style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
+                  <Flag iso={symbolCountry(r.symbol)} width={16} />
                   <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--foreground)' }}>{r.symbol}</span>
-                  <span style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                    <span style={{ fontSize: 11.5, fontVariantNumeric: 'tabular-nums', color: 'var(--foreground)' }}>{r.ok ? fmtPrice(r.price) : '—'}</span>
-                    <span style={{ fontSize: 11, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color, minWidth: 56, textAlign: 'right' }}>{r.ok ? fmtPct(r.changePercent) : '—'}</span>
-                  </span>
-                </button>
-              );
-            })}
+                </span>
+                <span style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+                  <span style={{ fontSize: 11.5, fontVariantNumeric: 'tabular-nums', color: 'var(--foreground)' }}>{r.ok ? fmtPrice(r.price) : '—'}</span>
+                  <ChangeCell changePercent={r.changePercent} ok={r.ok} />
+                </span>
+              </button>
+            ))}
       </div>
     </div>
   );

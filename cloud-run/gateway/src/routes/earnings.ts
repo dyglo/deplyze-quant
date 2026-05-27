@@ -85,11 +85,15 @@ router.get('/calendar', async (req, res, next) => {
             id: 'fmp', fn: async () => {
               const items = await fmp.getEarningsCalendar(defaultFrom, defaultTo);
               return items.map((e) => ({
-                date: e.date, symbol: e.symbol,
-                eps: e.eps, epsEstimated: e.epsEstimated,
-                revenue: e.revenue, revenueEstimated: e.revenueEstimated,
-                time: e.time, fiscalDateEnding: e.fiscalDateEnding,
-              }));
+                date: e.date,
+                symbol: e.symbol,
+                epsActual: e.epsActual ?? e.eps,
+                epsEstimate: e.epsEstimated,
+                revenue: e.revenueActual ?? e.revenue,
+                revenueEstimate: e.revenueEstimated,
+                time: e.time,
+                fiscalDateEnding: e.fiscalDateEnding,
+              })).filter((e) => e.date && e.symbol);
             },
           },
         ],

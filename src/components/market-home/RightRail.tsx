@@ -15,9 +15,9 @@ function moverPct(m: MarketMoverItem): number {
 }
 
 const RailCard: React.FC<{ title: string; children: React.ReactNode; action?: React.ReactNode }> = ({ title, children, action }) => (
-  <section style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
-    <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 13px', borderBottom: '1px solid var(--border)' }}>
-      <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--muted-foreground)' }}>{title}</span>
+  <section>
+    <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 8, marginBottom: 4, borderBottom: '2px solid var(--foreground)' }}>
+      <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--foreground)' }}>{title}</span>
       {action}
     </header>
     <div>{children}</div>
@@ -30,7 +30,7 @@ const RegimeCard: React.FC = () => {
   const riskLevel = extractRiskLevel(risk);
   return (
     <RailCard title="Market Environment">
-      <div style={{ padding: '12px 13px', display: 'flex', flexDirection: 'column', gap: 9 }}>
+      <div style={{ padding: '10px 0', display: 'flex', flexDirection: 'column', gap: 10 }}>
         <div>
           <div style={{ fontSize: 10, color: 'var(--muted-foreground)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Macro Regime</div>
           {regimeLabel ? <RegimeStatusChip regime={regimeLabel} confidence={regime?.confidence ?? null} /> : <span className="ds-caption" style={{ color: 'var(--muted-foreground)' }}>Computing…</span>}
@@ -80,9 +80,9 @@ const MoversCard: React.FC = () => {
     >
       <div>
         {loading && rows.length === 0
-          ? Array.from({ length: 5 }).map((_, i) => <div key={i} style={{ height: 34, margin: '6px 10px', borderRadius: 6, background: 'var(--muted)', animation: 'pulse 1.8s infinite' }} />)
+          ? Array.from({ length: 5 }).map((_, i) => <div key={i} style={{ height: 34, margin: '6px 0', borderRadius: 6, background: 'var(--muted)', animation: 'pulse 1.8s infinite' }} />)
           : rows.length === 0
-          ? <p className="ds-caption" style={{ color: 'var(--muted-foreground)', padding: '14px 13px' }}>No mover data right now.</p>
+          ? <p className="ds-caption" style={{ color: 'var(--muted-foreground)', padding: '14px 0' }}>No mover data right now.</p>
           : rows.map((m) => {
               const sym = moverSymbol(m);
               const pct = moverPct(m);
@@ -94,7 +94,7 @@ const MoversCard: React.FC = () => {
                   className="ds-transition-fast"
                   style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, width: '100%',
-                    padding: '7px 13px', background: 'transparent', border: 'none', borderBottom: '1px solid var(--border)',
+                    padding: '7px 4px', background: 'transparent', border: 'none', borderBottom: '1px solid var(--border)',
                     textAlign: 'left', cursor: 'pointer',
                   }}
                   onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'var(--muted)'; }}

@@ -5,7 +5,7 @@ import { useNews } from '../../hooks/useMarket';
 import { useSWR } from '../../hooks/useSWR';
 import { useCompositeRegime, useRiskEnvironment } from '../../hooks/useAgentIntelligence';
 import { fetchHeroRail } from '../../services/marketHomeService';
-import { extractRegimeLabel, extractRiskLevel } from '../../services/agentService';
+import { extractRiskLevel } from '../../services/agentService';
 import { RegimeStatusChip, RiskLevelChip } from '../quant/SystemAnalyzingState';
 import { fmtPrice, fmtPct, deltaColor } from './format';
 import type { GatewayNewsItem } from '../../services/marketService';
@@ -35,7 +35,7 @@ const NewsCard: React.FC<{ item: GatewayNewsItem; featured?: boolean }> = ({ ite
     {item.image && (
       <div style={{
         width: featured ? '100%' : 72,
-        height: featured ? 168 : 54,
+        height: featured ? 188 : 54,
         flexShrink: 0,
         borderRadius: 8,
         overflow: 'hidden',
@@ -47,9 +47,9 @@ const NewsCard: React.FC<{ item: GatewayNewsItem; featured?: boolean }> = ({ ite
     <div style={{ minWidth: 0 }}>
       <p style={{
         margin: 0,
-        fontSize: featured ? 16 : 12.5,
+        fontSize: featured ? 18 : 12.5,
         fontWeight: featured ? 700 : 600,
-        lineHeight: 1.32,
+        lineHeight: 1.3,
         color: 'var(--foreground)',
         letterSpacing: '-0.01em',
         display: '-webkit-box',
@@ -58,9 +58,9 @@ const NewsCard: React.FC<{ item: GatewayNewsItem; featured?: boolean }> = ({ ite
         overflow: 'hidden',
       }}>{item.headline}</p>
       {featured && item.summary && (
-        <p style={{ margin: '6px 0 0', fontSize: 12.5, lineHeight: 1.5, color: 'var(--muted-foreground)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{item.summary}</p>
+        <p style={{ margin: '7px 0 0', fontSize: 13, lineHeight: 1.5, color: 'var(--muted-foreground)', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{item.summary}</p>
       )}
-      <div style={{ marginTop: 5, fontSize: 10, color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+      <div style={{ marginTop: 6, fontSize: 10, color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
         {item.source}{item.publishedAt ? ` · ${timeAgo(item.publishedAt)}` : ''}
       </div>
     </div>
@@ -82,9 +82,9 @@ const FeaturedIntelligence: React.FC = () => {
       className="ds-transition-fast"
       style={{
         textAlign: 'left', width: '100%', cursor: 'pointer',
-        background: 'color-mix(in srgb, var(--primary) 6%, var(--card))',
-        border: '1px solid color-mix(in srgb, var(--primary) 22%, var(--border))',
-        borderRadius: 12, padding: '16px 16px 14px', display: 'flex', flexDirection: 'column', gap: 10,
+        background: 'color-mix(in srgb, var(--primary) 7%, transparent)',
+        borderLeft: '3px solid var(--primary)',
+        padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 9,
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
@@ -115,16 +115,14 @@ const HeroRail: React.FC = () => {
   const rows = data ?? [];
 
   return (
-    <div style={{
-      background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden',
-    }}>
-      <div style={{ padding: '11px 14px', borderBottom: '1px solid var(--border)', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--muted-foreground)' }}>
+    <div>
+      <div style={{ padding: '0 0 8px', borderBottom: '2px solid var(--foreground)', marginBottom: 4, fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--foreground)' }}>
         Markets Now
       </div>
       <div>
         {loading && rows.length === 0
           ? Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} style={{ height: 40, margin: '6px 10px', borderRadius: 6, background: 'var(--muted)', animation: 'pulse 1.8s infinite' }} />
+              <div key={i} style={{ height: 34, margin: '6px 0', borderRadius: 6, background: 'var(--muted)', animation: 'pulse 1.8s infinite' }} />
             ))
           : rows.map((r) => {
               const color = deltaColor(r.changePercent);
@@ -137,7 +135,7 @@ const HeroRail: React.FC = () => {
                   className="ds-transition-fast"
                   style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
-                    width: '100%', padding: '8px 14px', background: 'transparent', border: 'none',
+                    width: '100%', padding: '7px 4px', background: 'transparent', border: 'none',
                     borderBottom: '1px solid var(--border)', textAlign: 'left', cursor: r.ok ? 'pointer' : 'default',
                   }}
                   onMouseEnter={(e) => { if (r.ok) (e.currentTarget as HTMLElement).style.background = 'var(--muted)'; }}
@@ -166,14 +164,14 @@ export const HeroIntelligence: React.FC = () => {
     <div style={{
       display: 'grid',
       gridTemplateColumns: 'minmax(0, 1.5fr) minmax(0, 1.2fr) minmax(240px, 0.9fr)',
-      gap: 16,
+      gap: 24,
       alignItems: 'start',
     }} className="market-home-hero">
       {/* Left: featured story */}
-      <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, padding: 16, minHeight: 220 }}>
+      <div style={{ minHeight: 220 }}>
         {loading && !featured ? (
           <div style={{ display: 'grid', gap: 10 }}>
-            <div style={{ height: 168, borderRadius: 8, background: 'var(--muted)', animation: 'pulse 1.8s infinite' }} />
+            <div style={{ height: 188, borderRadius: 8, background: 'var(--muted)', animation: 'pulse 1.8s infinite' }} />
             <div style={{ height: 18, width: '80%', borderRadius: 4, background: 'var(--muted)', animation: 'pulse 1.8s infinite' }} />
           </div>
         ) : featured ? (
@@ -184,9 +182,9 @@ export const HeroIntelligence: React.FC = () => {
       </div>
 
       {/* Center: AI summary + secondary headlines */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <FeaturedIntelligence />
-        <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, padding: '4px 14px' }}>
+        <div>
           {loading && rest.length === 0
             ? Array.from({ length: 3 }).map((_, i) => (
                 <div key={i} style={{ height: 44, margin: '8px 0', borderRadius: 6, background: 'var(--muted)', animation: 'pulse 1.8s infinite' }} />

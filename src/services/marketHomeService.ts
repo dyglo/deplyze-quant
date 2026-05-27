@@ -32,10 +32,10 @@ interface UniverseEntry { symbol: string; name: string }
 
 const UNIVERSE: Record<SnapshotAssetClass, UniverseEntry[]> = {
   indices: [
-    { symbol: 'SPY',  name: 'S&P 500' },
-    { symbol: 'QQQ',  name: 'Nasdaq 100' },
-    { symbol: 'DIA',  name: 'Dow Jones' },
-    { symbol: 'IWM',  name: 'Russell 2000' },
+    { symbol: 'SPY',  name: 'S&P 500 ETF' },
+    { symbol: 'QQQ',  name: 'Nasdaq 100 ETF' },
+    { symbol: 'DIA',  name: 'Dow Jones ETF' },
+    { symbol: 'IWM',  name: 'Russell 2000 ETF' },
     { symbol: 'ACWI', name: 'MSCI All-World' },
     { symbol: 'EFA',  name: 'Developed ex-US' },
     { symbol: 'EEM',  name: 'Emerging Markets' },
@@ -185,17 +185,20 @@ export async function fetchTicker(): Promise<SnapshotRow[]> {
 
 export interface FlaggedRow extends SnapshotRow { country?: string }
 
+// ETF proxies — the real-time quote chain serves ETFs reliably but not raw
+// index levels, so names say "ETF" to avoid implying the index value (e.g. SPY
+// ~745, not the S&P 500 index ~7,500). The chart uses true index symbols.
 export const WORLD_INDICES: Array<{ symbol: string; name: string; country: string }> = [
-  { symbol: 'DIA',  name: 'Dow Jones',     country: 'US' },
-  { symbol: 'SPY',  name: 'S&P 500',        country: 'US' },
-  { symbol: 'QQQ',  name: 'Nasdaq 100',     country: 'US' },
-  { symbol: 'IWM',  name: 'Russell 2000',   country: 'US' },
-  { symbol: 'EWG',  name: 'DAX (Germany)',  country: 'DE' },
-  { symbol: 'EWU',  name: 'FTSE (UK)',      country: 'GB' },
-  { symbol: 'EWJ',  name: 'Nikkei (Japan)', country: 'JP' },
-  { symbol: 'FXI',  name: 'China Large-Cap', country: 'CN' },
-  { symbol: 'EWA',  name: 'ASX (Australia)', country: 'AU' },
-  { symbol: 'EWC',  name: 'TSX (Canada)',   country: 'CA' },
+  { symbol: 'DIA',  name: 'Dow Jones ETF',     country: 'US' },
+  { symbol: 'SPY',  name: 'S&P 500 ETF',        country: 'US' },
+  { symbol: 'QQQ',  name: 'Nasdaq 100 ETF',     country: 'US' },
+  { symbol: 'IWM',  name: 'Russell 2000 ETF',   country: 'US' },
+  { symbol: 'EWG',  name: 'DAX (Germany)',      country: 'DE' },
+  { symbol: 'EWU',  name: 'FTSE (UK)',          country: 'GB' },
+  { symbol: 'EWJ',  name: 'Nikkei (Japan)',     country: 'JP' },
+  { symbol: 'FXI',  name: 'China Large-Cap',    country: 'CN' },
+  { symbol: 'EWA',  name: 'ASX (Australia)',    country: 'AU' },
+  { symbol: 'EWC',  name: 'TSX (Canada)',       country: 'CA' },
 ];
 
 export const LEADING_STOCKS = UNIVERSE.stocks;

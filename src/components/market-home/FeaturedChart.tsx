@@ -7,11 +7,13 @@ import { SectionCard } from './SectionCard';
 import { Flag } from './Flag';
 import { fmtPrice, fmtPct, deltaColor, symbolCountry } from './format';
 
+// True index symbols (resolve to real index levels via EODHD OHLCV:
+// SPX→GSPC.INDX, NDX→NDX.INDX, DJI→DJI.INDX), not ETF proxies — so the chart
+// shows the actual index value (e.g. S&P 500 ~7,500, not SPY ~745).
 const SERIES: Array<{ symbol: string; label: string }> = [
-  { symbol: 'SPY', label: 'S&P 500' },
-  { symbol: 'QQQ', label: 'Nasdaq 100' },
-  { symbol: 'DIA', label: 'Dow Jones' },
-  { symbol: 'IWM', label: 'Russell 2000' },
+  { symbol: 'SPX', label: 'S&P 500' },
+  { symbol: 'NDX', label: 'Nasdaq 100' },
+  { symbol: 'DJI', label: 'Dow Jones' },
   { symbol: 'XAU/USD', label: 'Gold' },
   { symbol: 'BTC/USD', label: 'Bitcoin' },
 ];

@@ -108,18 +108,22 @@ export async function getEarningsSurprises(symbol: string, limit = 8): Promise<F
 export interface FmpEarningsCalendarItem {
   date: string;
   symbol: string;
-  eps: number | null;
+  eps?: number | null;
+  epsActual?: number | null;
   epsEstimated: number | null;
   time: string;
-  revenue: number | null;
+  revenue?: number | null;
+  revenueActual?: number | null;
   revenueEstimated: number | null;
   updatedFromDate?: string;
+  lastUpdated?: string;
   fiscalDateEnding?: string;
 }
 
 export async function getEarningsCalendar(from: string, to: string): Promise<FmpEarningsCalendarItem[]> {
-  const url = `${BASE}/v3/earning_calendar?from=${from}&to=${to}&apikey=${key()}`;
-  return getJson<FmpEarningsCalendarItem[]>('fmp', url);
+  const url = `${STABLE}/earnings-calendar?from=${from}&to=${to}&apikey=${key()}`;
+  const r = await getJson<FmpEarningsCalendarItem[]>('fmp', url);
+  return Array.isArray(r) ? r : [];
 }
 
 // ─── Key Metrics ──────────────────────────────────────────────────────────

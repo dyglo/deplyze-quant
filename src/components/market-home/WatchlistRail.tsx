@@ -4,6 +4,7 @@ import { Star, ArrowUpRight } from 'lucide-react';
 import { useAuth } from '../../components/AuthProvider';
 import { useWorkspace } from '../../components/WorkspaceContext';
 import { subscribeToWatchlists } from '../../services/portfolioService';
+import { usePortfolioWorkspace } from '../../hooks/usePortfolioWorkspace';
 import { useSWR } from '../../hooks/useSWR';
 import { fetchQuotes } from '../../services/marketService';
 import { Flag } from './Flag';
@@ -19,6 +20,8 @@ const Header: React.FC<{ children: React.ReactNode; action?: React.ReactNode }> 
     {action}
   </header>
 );
+
+interface WatchSource { title: string; label?: string; symbols: string[]; href: string }
 
 const WatchlistQuotes: React.FC<{ symbols: string[] }> = ({ symbols }) => {
   const navigate = useNavigate();
@@ -73,23 +76,38 @@ export const WatchlistRail: React.FC = () => {
   const { user } = useAuth();
   const { currentWorkspace } = useWorkspace();
   const [watchlists, setWatchlists] = useState<IntelligenceWatchlist[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [wlLoading, setWlLoading] = useState(true);
+
+  // Holdings fall back here so a user with positions but no explicit watchlist
+  // still sees their book, rather than an empty create-prompt.
+  const { portfolios, selectedPortfolio, holdings, loading: pfLoading } = usePortfolioWorkspace();
 
   useEffect(() => {
-    if (!user || !currentWorkspace) { setWatchlists([]); setLoading(false); return; }
-    setLoading(true);
+    if (!user || !currentWorkspace) { setWatchlists([]); setWlLoading(false); return; }
+    setWlLoading(true);
     const unsub = subscribeToWatchlists(user.uid, currentWorkspace.id, (wl) => {
       setWatchlists(wl);
-      setLoading(false);
+      setWlLoading(false);
     });
     return unsub;
   }, [user, currentWorkspace]);
 
-  if (loading) return null;
+  if (wlLoading || pfLoading) return null;
 
-  const active = watchlists.find((w) => w.symbols.length > 0) ?? watchlists[0];
+  const activeWatchlist = watchlists.find((w) => w.symbols.length > 0);
+  const holdingSymbols = holdings.map((h) => h.symbol).filter(Boolean);
 
-  if (!active) {
+  let source: WatchSource | null = null;
+  if (activeWatchlist) {
+    source = { title: 'My Watchlist', label: activeWatchlist.name, symbols: activeWatchlist.symbols, href: '/portfolio/holdings' };
+  } else if (holdingSymbols.length > 0) {
+    source = { title: 'My Holdings', label: selectedPortfolio?.name, symbols: holdingSymbols, href: '/portfolio/holdings' };
+  } else if (portfolios.length > 0) {
+    // Has a portfolio but no holdings/watchlist yet.
+    source = { title: 'My Holdings', label: selectedPortfolio?.name, symbols: [], href: '/portfolio/holdings' };
+  }
+
+  if (!source) {
     return (
       <section>
         <Header>My Watchlist</Header>
@@ -100,7 +118,7 @@ export const WatchlistRail: React.FC = () => {
           style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', padding: '11px 12px', borderRadius: 7, border: '1px dashed var(--border)', background: 'transparent', cursor: 'pointer' }}
         >
           <Star size={15} style={{ color: 'var(--primary)' }} />
-          <span style={{ fontSize: 11.5, color: 'var(--muted-foreground)' }}>Create a watchlist to track symbols here.</span>
+          <span style={{ fontSize: 11.5, color: 'var(--muted-foreground)' }}>Add holdings or a watchlist to track symbols here.</span>
         </button>
       </section>
     );
@@ -109,14 +127,14 @@ export const WatchlistRail: React.FC = () => {
   return (
     <section>
       <Header action={
-        <button onClick={() => navigate('/portfolio/holdings')} className="ds-transition-fast" style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 10.5, fontWeight: 600, color: 'var(--primary)', background: 'transparent', border: 'none', cursor: 'pointer' }}>
-          {active.name} <ArrowUpRight size={11} />
+        <button onClick={() => navigate(source.href)} className="ds-transition-fast" style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 10.5, fontWeight: 600, color: 'var(--primary)', background: 'transparent', border: 'none', cursor: 'pointer' }}>
+          {source.label ?? 'Open'} <ArrowUpRight size={11} />
         </button>
-      }>My Watchlist</Header>
-      {active.symbols.length === 0 ? (
-        <p className="ds-caption" style={{ color: 'var(--muted-foreground)', padding: '8px 2px' }}>This watchlist has no symbols yet.</p>
+      }>{source.title}</Header>
+      {source.symbols.length === 0 ? (
+        <p className="ds-caption" style={{ color: 'var(--muted-foreground)', padding: '8px 2px' }}>No symbols yet — add holdings in the portfolio workspace.</p>
       ) : (
-        <WatchlistQuotes symbols={active.symbols} />
+        <WatchlistQuotes symbols={source.symbols} />
       )}
     </section>
   );

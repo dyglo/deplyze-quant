@@ -3,6 +3,9 @@ import { useAuth } from '../components/AuthProvider';
 import { HeroIntelligence } from '../components/market-home/HeroIntelligence';
 import { MarketSnapshot } from '../components/market-home/MarketSnapshot';
 import { ValuationTable } from '../components/market-home/ValuationTable';
+import { CalendarSection } from '../components/market-home/CalendarSection';
+import { IntelligenceSpotlight } from '../components/market-home/IntelligenceSpotlight';
+import { AnalysisOpinion } from '../components/market-home/AnalysisOpinion';
 import { PopularScreens } from '../components/market-home/PopularScreens';
 import { ToolsShortcuts } from '../components/market-home/ToolsShortcuts';
 import { RightRail } from '../components/market-home/RightRail';
@@ -29,6 +32,7 @@ export const MarketHome: React.FC = () => {
         }
         @media (max-width: 720px) {
           .market-home-hero { grid-template-columns: 1fr !important; }
+          .market-home-cal { grid-template-columns: 1fr !important; }
         }
       `}</style>
 
@@ -51,6 +55,9 @@ export const MarketHome: React.FC = () => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 24, minWidth: 0 }}>
             <MarketSnapshot />
             <ValuationTable />
+            <CalendarSection />
+            <IntelligenceSpotlight />
+            <AnalysisOpinion />
             <PopularScreens />
             <ToolsShortcuts />
           </div>

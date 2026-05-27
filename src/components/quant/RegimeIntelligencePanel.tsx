@@ -108,7 +108,7 @@ const RegimeSummary: React.FC<{ regime: MarketRegime }> = ({ regime }) => {
   );
 };
 
-export const RegimeIntelligencePanel: React.FC<{ symbol: string }> = ({ symbol }) => {
+export const RegimeIntelligencePanel: React.FC<{ symbol: string; flat?: boolean }> = ({ symbol, flat }) => {
   const intel = useInstrumentRegime(symbol);
   const { currentWorkspace, currentProject } = useWorkspace();
   const { user } = useAuth();
@@ -146,18 +146,32 @@ export const RegimeIntelligencePanel: React.FC<{ symbol: string }> = ({ symbol }
   };
 
   if (intel.loading) {
-    return (
+    return flat ? (
+      <section style={{ marginBottom: 32 }}>
+        <div style={{ paddingBottom: 10, borderBottom: '1px solid var(--border)', marginBottom: 16 }}>
+          <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Market Regime</h2>
+        </div>
+        <p style={{ color: 'var(--muted-foreground)', fontSize: 12, margin: 0 }}>Computing regime from 2-year history…</p>
+      </section>
+    ) : (
       <section className="ds-surface" style={{ padding: 14, borderRadius: 10 }}>
         <h3 className="ds-heading" style={{ margin: 0, marginBottom: 8 }}>Regime intelligence</h3>
-        <p className="ds-caption" style={{ color: 'var(--muted-foreground)', margin: 0 }}>
-          Computing regime from 2-year history…
-        </p>
+        <p className="ds-caption" style={{ color: 'var(--muted-foreground)', margin: 0 }}>Computing regime from 2-year history…</p>
       </section>
     );
   }
 
   if (intel.insufficient || !intel.regime) {
-    return (
+    return flat ? (
+      <section style={{ marginBottom: 32 }}>
+        <div style={{ paddingBottom: 10, borderBottom: '1px solid var(--border)', marginBottom: 16 }}>
+          <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Market Regime</h2>
+        </div>
+        <p style={{ color: 'var(--muted-foreground)', fontSize: 12, margin: 0 }}>
+          Insufficient history for {symbol} — need ≥280 daily bars, have {intel.barCount}.
+        </p>
+      </section>
+    ) : (
       <section className="ds-surface" style={{ padding: 14, borderRadius: 10 }}>
         <h3 className="ds-heading" style={{ margin: 0, marginBottom: 8 }}>Regime intelligence</h3>
         <p className="ds-caption" style={{ color: 'var(--muted-foreground)', margin: 0 }}>
@@ -172,10 +186,18 @@ export const RegimeIntelligencePanel: React.FC<{ symbol: string }> = ({ symbol }
     ...intel.volumeAnomalies.slice(0, 2),
   ].sort((a, b) => b.ts - a.ts).slice(0, 4);
 
+  const outerStyle = flat
+    ? { marginBottom: 32, display: 'grid' as const, gap: 12 }
+    : { padding: 14, borderRadius: 10, display: 'grid' as const, gap: 12 };
+  const outerClass = flat ? undefined : 'ds-surface';
+
   return (
-    <section className="ds-surface" style={{ padding: 14, borderRadius: 10, display: 'grid', gap: 12 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <h3 className="ds-heading" style={{ margin: 0 }}>Regime intelligence</h3>
+    <section className={outerClass} style={outerStyle}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: flat ? 'center' : 'baseline', ...(flat ? { paddingBottom: 10, borderBottom: '1px solid var(--border)', marginBottom: 16 } : { marginBottom: 12 }) }}>
+        {flat
+          ? <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Market Regime</h2>
+          : <h3 className="ds-heading" style={{ margin: 0 }}>Regime intelligence</h3>
+        }
         <div style={{ display: 'inline-flex', gap: 8, alignItems: 'baseline' }}>
           {canPersist && (
             <button

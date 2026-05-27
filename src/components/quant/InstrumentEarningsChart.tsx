@@ -64,10 +64,10 @@ export const InstrumentEarningsChart: React.FC<{ earnings: EarningsRecord[] }> =
   const hasNegative = allValues.some(v => v < 0);
 
   return (
-    <section className="ds-surface" style={{ padding: 16, borderRadius: 10 }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 14 }}>
-        <h2 className="ds-heading" style={{ margin: 0 }}>EPS History</h2>
-        <span className="ds-caption" style={{ color: 'var(--muted-foreground)' }}>{data.length} quarters · actual vs estimate</span>
+    <section style={{ marginBottom: 32 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, paddingBottom: 10, borderBottom: '1px solid var(--border)', marginBottom: 16 }}>
+        <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>EPS History</h2>
+        <span style={{ fontSize: 11, color: 'var(--muted-foreground)' }}>{data.length} quarters · actual vs estimate</span>
       </div>
       <div style={{ width: '100%', height: 200 }}>
         <ResponsiveContainer>

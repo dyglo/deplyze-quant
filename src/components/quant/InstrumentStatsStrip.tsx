@@ -9,148 +9,60 @@ function fmtVol(v: number): string {
   return String(v);
 }
 
-interface StatCellProps {
-  label: string;
-  value: React.ReactNode;
-  color?: string;
-  emphasise?: boolean;
-}
-
-const StatCell: React.FC<StatCellProps> = ({ label, value, color, emphasise }) => (
-  <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-    <span style={{
-      fontSize: 9, fontWeight: 700, letterSpacing: 0.7,
-      textTransform: 'uppercase', color: 'var(--muted-foreground)',
-      whiteSpace: 'nowrap',
-    }}>{label}</span>
-    <span style={{
-      fontSize: 12.5, fontWeight: emphasise ? 700 : 500,
-      fontVariantNumeric: 'tabular-nums',
-      color: color ?? 'var(--foreground)',
-      whiteSpace: 'nowrap',
-    }}>{value}</span>
+const Cell: React.FC<{ label: string; value: React.ReactNode; color?: string }> = ({ label, value, color }) => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: 3, flexShrink: 0, padding: '0 20px' }}>
+    <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.8, textTransform: 'uppercase', color: 'var(--muted-foreground)', lineHeight: 1 }}>{label}</span>
+    <span style={{ fontSize: 13, fontWeight: 500, fontVariantNumeric: 'tabular-nums', color: color ?? 'var(--foreground)', lineHeight: 1.2 }}>{value}</span>
   </div>
 );
 
-const Divider: React.FC = () => (
-  <div style={{ width: 1, alignSelf: 'stretch', background: 'var(--border)', margin: '0 4px', flexShrink: 0 }} />
+const Sep: React.FC = () => (
+  <div style={{ width: 1, background: 'var(--border)', flexShrink: 0, alignSelf: 'stretch' }} />
 );
 
 interface Props {
   quote: Quote | null | undefined;
   fundamentals: InstrumentFundamentals | null | undefined;
-  analytics: {
-    vol: number;
-    ret60: number;
-    mdd: number;
-  } | null;
+  analytics: { vol: number; ret60: number; mdd: number } | null;
   loading: boolean;
 }
 
 export const InstrumentStatsStrip: React.FC<Props> = ({ quote: q, fundamentals: f, analytics, loading }) => {
   const dp = q?.changePercent;
-  const changeColor = dp == null ? 'var(--foreground)' : dp > 0 ? 'var(--ds-gain)' : dp < 0 ? 'var(--ds-loss)' : 'var(--foreground)';
-  const retColor = analytics && analytics.ret60 > 0 ? 'var(--ds-gain)' : analytics && analytics.ret60 < 0 ? 'var(--ds-loss)' : 'var(--foreground)';
+  const chColor = dp == null ? 'var(--foreground)' : dp > 0 ? 'var(--ds-gain)' : dp < 0 ? 'var(--ds-loss)' : 'var(--foreground)';
   const dash = '—';
 
   return (
     <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      gap: 12,
-      padding: '10px 16px',
-      background: 'var(--card)',
-      borderRadius: 10,
-      border: '1px solid var(--border)',
+      display: 'flex', alignItems: 'center',
+      borderTop: '1px solid var(--border)',
+      borderBottom: '1px solid var(--border)',
+      padding: '10px 0',
+      marginBottom: 28,
       overflowX: 'auto',
-      flexWrap: 'nowrap',
-      marginBottom: 14,
       scrollbarWidth: 'none',
     }}>
-      <StatCell
-        label="Open"
-        value={loading ? '…' : q?.open != null ? q.open.toFixed(2) : dash}
-      />
-      <Divider />
-      <StatCell
-        label="High"
-        value={loading ? '…' : q?.high != null ? q.high.toFixed(2) : dash}
-        color={q?.high != null && q?.price != null && q.price >= q.high * 0.995 ? 'var(--ds-gain)' : undefined}
-      />
-      <Divider />
-      <StatCell
-        label="Low"
-        value={loading ? '…' : q?.low != null ? q.low.toFixed(2) : dash}
-        color={q?.low != null && q?.price != null && q.price <= q.low * 1.005 ? 'var(--ds-loss)' : undefined}
-      />
-      <Divider />
-      <StatCell
-        label="Prev. Close"
-        value={loading ? '…' : q?.previousClose != null ? q.previousClose.toFixed(2) : dash}
-      />
-      <Divider />
-      <StatCell
-        label="Change"
-        value={loading ? '…' : dp != null ? `${dp > 0 ? '+' : ''}${dp.toFixed(2)}%` : dash}
-        color={changeColor}
-        emphasise
-      />
-      {q?.volume != null && (
-        <>
-          <Divider />
-          <StatCell label="Volume" value={fmtVol(q.volume)} />
-        </>
-      )}
-      {f?.peRatio != null && (
-        <>
-          <Divider />
-          <StatCell label="P/E Ratio" value={f.peRatio.toFixed(1)} />
-        </>
-      )}
-      {f?.eps != null && (
-        <>
-          <Divider />
-          <StatCell label="EPS (TTM)" value={`$${f.eps.toFixed(2)}`} color={f.eps > 0 ? 'var(--ds-gain)' : 'var(--ds-loss)'} />
-        </>
-      )}
-      {f?.beta != null && (
-        <>
-          <Divider />
-          <StatCell label="Beta" value={f.beta.toFixed(2)} />
-        </>
-      )}
-      {f?.week52High != null && (
-        <>
-          <Divider />
-          <StatCell label="52W High" value={`$${f.week52High.toFixed(2)}`} color="var(--ds-gain)" />
-        </>
-      )}
-      {f?.week52Low != null && (
-        <>
-          <Divider />
-          <StatCell label="52W Low" value={`$${f.week52Low.toFixed(2)}`} color="var(--ds-loss)" />
-        </>
-      )}
-      {analytics && (
-        <>
-          <Divider />
-          <StatCell label="Ann. Vol" value={`${analytics.vol.toFixed(1)}%`} />
-          <Divider />
-          <StatCell
-            label="60d Return"
-            value={`${analytics.ret60 >= 0 ? '+' : ''}${analytics.ret60.toFixed(2)}%`}
-            color={retColor}
-          />
-          <Divider />
-          <StatCell label="Max DD (90d)" value={`${analytics.mdd.toFixed(1)}%`} color="var(--ds-loss)" />
-        </>
-      )}
-      {f?.dividendYield != null && f.dividendYield > 0 && (
-        <>
-          <Divider />
-          <StatCell label="Div. Yield" value={`${(f.dividendYield * 100).toFixed(2)}%`} color="var(--ds-gain)" />
-        </>
-      )}
+      <Cell label="Open"      value={loading ? '…' : q?.open != null ? q.open.toFixed(2) : dash} />
+      <Sep />
+      <Cell label="High"      value={loading ? '…' : q?.high != null ? q.high.toFixed(2) : dash} />
+      <Sep />
+      <Cell label="Low"       value={loading ? '…' : q?.low != null ? q.low.toFixed(2) : dash} />
+      <Sep />
+      <Cell label="Prev Close" value={loading ? '…' : q?.previousClose != null ? q.previousClose.toFixed(2) : dash} />
+      <Sep />
+      <Cell label="Change"    value={loading ? '…' : dp != null ? `${dp > 0 ? '+' : ''}${dp.toFixed(2)}%` : dash} color={chColor} />
+      {q?.volume != null && <><Sep /><Cell label="Volume" value={fmtVol(q.volume)} /></>}
+      {f?.peRatio != null && <><Sep /><Cell label="P/E Ratio" value={f.peRatio.toFixed(1)} /></>}
+      {f?.eps != null && <><Sep /><Cell label="EPS" value={`$${f.eps.toFixed(2)}`} color={f.eps > 0 ? 'var(--ds-gain)' : 'var(--ds-loss)'} /></>}
+      {f?.beta != null && <><Sep /><Cell label="Beta" value={f.beta.toFixed(2)} /></>}
+      {f?.week52High != null && <><Sep /><Cell label="52W High" value={`$${f.week52High.toFixed(2)}`} color="var(--ds-gain)" /></>}
+      {f?.week52Low  != null && <><Sep /><Cell label="52W Low"  value={`$${f.week52Low.toFixed(2)}`}  color="var(--ds-loss)" /></>}
+      {analytics && <>
+        <Sep /><Cell label="Ann. Vol"    value={`${analytics.vol.toFixed(1)}%`} />
+        <Sep /><Cell label="60d Return"  value={`${analytics.ret60 >= 0 ? '+' : ''}${analytics.ret60.toFixed(2)}%`} color={analytics.ret60 >= 0 ? 'var(--ds-gain)' : 'var(--ds-loss)'} />
+        <Sep /><Cell label="Max DD (90d)" value={`${analytics.mdd.toFixed(1)}%`} color="var(--ds-loss)" />
+      </>}
+      {f?.dividendYield != null && f.dividendYield > 0 && <><Sep /><Cell label="Div. Yield" value={`${(f.dividendYield * 100).toFixed(2)}%`} color="var(--ds-gain)" /></>}
     </div>
   );
 };

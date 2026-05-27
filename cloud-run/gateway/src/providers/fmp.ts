@@ -260,3 +260,65 @@ export async function getMostActive(): Promise<FmpMover[]> {
   const r = await getJson<FmpMover[]>('fmp', `${STABLE}/most-actives?apikey=${key()}`);
   return Array.isArray(r) ? r : [];
 }
+
+// ─── Stock Peers ─────────────────────────────────────────────────────────
+
+export interface FmpPeersResult {
+  symbol: string;
+  peersList: string[];
+}
+
+export async function getStockPeers(symbol: string): Promise<string[]> {
+  const url = `${BASE}/v4/stock_peers?symbol=${encodeURIComponent(symbol)}&apikey=${key()}`;
+  const r = await getJson<FmpPeersResult[]>('fmp', url);
+  return Array.isArray(r) && r[0]?.peersList ? r[0].peersList.slice(0, 8) : [];
+}
+
+export async function getQuoteBatch(symbols: string[]): Promise<FmpQuote[]> {
+  if (!symbols.length) return [];
+  const url = `${BASE}/v3/quote/${symbols.map(encodeURIComponent).join(',')}?apikey=${key()}`;
+  const r = await getJson<FmpQuote[]>('fmp', url);
+  return Array.isArray(r) ? r : [];
+}
+
+// ─── Analyst Recommendations ─────────────────────────────────────────────
+
+export interface FmpAnalystRecommendation {
+  date: string;
+  symbol: string;
+  analystRatingsbuy: number;
+  analystRatingsHold: number;
+  analystRatingsSell: number;
+  analystRatingsStrongSell: number;
+  analystRatingsStrongBuy: number;
+}
+
+export async function getAnalystRecommendations(
+  symbol: string,
+  limit = 1,
+): Promise<FmpAnalystRecommendation[]> {
+  const url = `${BASE}/v3/analyst-stock-recommendations/${encodeURIComponent(symbol)}?limit=${limit}&apikey=${key()}`;
+  const r = await getJson<FmpAnalystRecommendation[]>('fmp', url);
+  return Array.isArray(r) ? r : [];
+}
+
+// ─── Price Targets ────────────────────────────────────────────────────────
+
+export interface FmpPriceTargetItem {
+  symbol: string;
+  publishedDate: string;
+  priceTarget: number;
+  adjPriceTarget: number;
+  priceWhenPosted: number;
+  analystName: string;
+  analystCompany: string;
+}
+
+export async function getPriceTargets(
+  symbol: string,
+  limit = 20,
+): Promise<FmpPriceTargetItem[]> {
+  const url = `${BASE}/v4/price-target?symbol=${encodeURIComponent(symbol)}&apikey=${key()}`;
+  const r = await getJson<FmpPriceTargetItem[]>('fmp', url);
+  return Array.isArray(r) ? r.slice(0, limit) : [];
+}

@@ -24,14 +24,22 @@ function fmtNum(x: number, digits = 2): string {
   return x.toFixed(digits);
 }
 
-export const BenchmarkIntelligencePanel: React.FC<{ symbol: string }> = ({ symbol }) => {
+export const BenchmarkIntelligencePanel: React.FC<{ symbol: string; flat?: boolean }> = ({ symbol, flat }) => {
   const [benchmark, setBenchmark] = useState<BenchmarkChoice>('SPY');
   const intel = useBenchmarkIntelligence(symbol, benchmark);
 
+  const outerStyle = flat
+    ? { marginBottom: 32, display: 'grid' as const, gap: 12 }
+    : { padding: 16, borderRadius: 10, display: 'grid' as const, gap: 12 };
+  const outerClass = flat ? undefined : 'ds-surface';
+
   return (
-    <section className="ds-surface" style={{ padding: 16, borderRadius: 10, display: 'grid', gap: 12 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <h3 className="ds-heading" style={{ margin: 0 }}>Benchmark intelligence</h3>
+    <section className={outerClass} style={outerStyle}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', ...(flat ? { paddingBottom: 10, borderBottom: '1px solid var(--border)', marginBottom: 16 } : {}) }}>
+        {flat
+          ? <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Benchmark Intelligence</h2>
+          : <h3 className="ds-heading" style={{ margin: 0 }}>Benchmark intelligence</h3>
+        }
         <div style={{ display: 'inline-flex', border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden' }}>
           {BENCHMARKS.map((b) => (
             <button

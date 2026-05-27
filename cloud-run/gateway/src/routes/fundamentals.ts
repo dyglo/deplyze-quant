@@ -150,6 +150,107 @@ router.get('/:symbol/metrics', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ─── /fundamentals/:symbol/financials ─────────────────────────────────────
+router.get('/:symbol/financials', async (req, res, next) => {
+  try {
+    const symbol = req.params.symbol.toUpperCase();
+    const period = (req.query.period === 'quarter' ? 'quarter' : 'annual') as 'annual' | 'quarter';
+    const limit = Math.min(parseInt(String(req.query.limit ?? '8'), 10) || 8, 20);
+    const cacheKey = `fund:financials:${symbol}:${period}:${limit}`;
+    const data = await withCache(cacheKey, TTL.fundamentals, async () => {
+      const income = await fmp.getIncomeStatement(symbol, period, limit);
+      return {
+        series: income
+          .map((r) => ({
+            date: r.date,
+            period: r.period,
+            revenue: r.revenue,
+            grossProfit: r.grossProfit,
+            operatingIncome: r.operatingIncome,
+            netIncome: r.netIncome,
+            eps: r.epsdiluted ?? r.eps,
+            ebitda: r.ebitda,
+          }))
+          .sort((a, b) => a.date.localeCompare(b.date)),
+      };
+    });
+    res.json(data);
+  } catch (err) { next(err); }
+});
+
+// ─── /fundamentals/:symbol/analyst ────────────────────────────────────────
+router.get('/:symbol/analyst', async (req, res, next) => {
+  try {
+    const symbol = req.params.symbol.toUpperCase();
+    const data = await withCache(`fund:analyst:${symbol}`, TTL.fundamentals, async () => {
+      const [recsR, targetsR] = await Promise.allSettled([
+        fmp.getAnalystRecommendations(symbol, 1),
+        fmp.getPriceTargets(symbol, 20),
+      ]);
+      const recs = recsR.status === 'fulfilled' ? recsR.value : [];
+      const targets = targetsR.status === 'fulfilled' ? targetsR.value : [];
+
+      const rec = recs[0] ?? null;
+      const ptValues = targets
+        .map((t) => t.adjPriceTarget > 0 ? t.adjPriceTarget : t.priceTarget)
+        .filter((v) => v > 0);
+      const ptHigh = ptValues.length ? Math.max(...ptValues) : undefined;
+      const ptLow = ptValues.length ? Math.min(...ptValues) : undefined;
+      const ptAvg = ptValues.length
+        ? ptValues.reduce((a, b) => a + b, 0) / ptValues.length
+        : undefined;
+
+      return {
+        recommendations: rec ? {
+          strongBuy: rec.analystRatingsStrongBuy,
+          buy: rec.analystRatingsbuy,
+          hold: rec.analystRatingsHold,
+          sell: rec.analystRatingsSell,
+          strongSell: rec.analystRatingsStrongSell,
+          date: rec.date,
+        } : null,
+        priceTargets: {
+          high: ptHigh,
+          low: ptLow,
+          avg: ptAvg,
+          count: ptValues.length,
+          recent: targets.slice(0, 8).map((t) => ({
+            date: t.publishedDate,
+            target: t.adjPriceTarget > 0 ? t.adjPriceTarget : t.priceTarget,
+            analyst: t.analystName,
+            company: t.analystCompany,
+          })),
+        },
+      };
+    });
+    res.json(data);
+  } catch (err) { next(err); }
+});
+
+// ─── /fundamentals/:symbol/peers ──────────────────────────────────────────
+router.get('/:symbol/peers', async (req, res, next) => {
+  try {
+    const symbol = req.params.symbol.toUpperCase();
+    const data = await withCache(`fund:peers:${symbol}`, TTL.fundamentals, async () => {
+      const peerSymbols = await fmp.getStockPeers(symbol);
+      if (!peerSymbols.length) return { peers: [] };
+      const quotes = await fmp.getQuoteBatch(peerSymbols);
+      return {
+        peers: quotes.map((q) => ({
+          symbol: q.symbol,
+          name: q.name,
+          price: q.price,
+          changePercent: q.changesPercentage,
+          marketCap: q.marketCap,
+          pe: q.pe,
+          volume: q.volume,
+        })),
+      };
+    });
+    res.json(data);
+  } catch (err) { next(err); }
+});
+
 // ─── /fundamentals/:symbol/edgar ──────────────────────────────────────────
 router.get('/:symbol/edgar', async (req, res, next) => {
   try {

@@ -2,16 +2,20 @@
  * InstrumentDetail — institutional research workspace for a single asset.
  *
  * Layout (top to bottom):
- *   1. Price hero header (company name + live price + change)
- *   2. Compact stats strip (Open/High/Low/Prev/Vol/P-E/52W/Beta/Ann Vol/60d Ret)
- *   3. Full-width price chart with 1W–2Y timeframe selector
- *   4. Overview row: Company profile (left) | Key metrics (right)
- *   5. AI Analysis (full-width)
- *   6. EPS history bar chart (full-width)
- *   7. Market Regime intelligence (full-width)
- *   8. Benchmark intelligence (full-width)
- *   9. Recent headlines (full-width)
- *  10. Related workspace intelligence
+ *   1.  Price hero header (company name + live price + change)
+ *   2.  Compact stats strip (Open/High/Low/Prev/Vol/P-E/52W/Beta/Ann Vol/60d Ret)
+ *   3.  Full-width price chart with volume bars + 1W–2Y timeframe selector
+ *   4.  Overview row: Company profile (left) | Key metrics + 52W range (right)
+ *   5.  Financial Summary (Revenue / Net Income / EPS — annual or quarterly)
+ *   5b. Analyst Ratings (consensus + ratings distribution + price target gauge)
+ *   6.  Technical Analysis (MA/oscillator summary)
+ *   6b. AI Analysis (Gemini narrative)
+ *   7.  EPS history bar chart
+ *   8.  Market Regime intelligence
+ *   9.  Benchmark intelligence
+ *  10.  Peers & Competitors
+ *  11.  Recent headlines
+ *  12.  Related workspace intelligence
  */
 
 import React, { useMemo, useState, useCallback } from 'react';
@@ -33,6 +37,9 @@ import { InstrumentOHLCVSection } from '../components/quant/InstrumentOHLCVSecti
 import { InstrumentOverviewPanel } from '../components/quant/InstrumentOverviewPanel';
 import { InstrumentEarningsChart } from '../components/quant/InstrumentEarningsChart';
 import { InstrumentTechnicalAnalysis } from '../components/quant/InstrumentTechnicalAnalysis';
+import { InstrumentFinancialStatements } from '../components/quant/InstrumentFinancialStatements';
+import { InstrumentAnalystRatings } from '../components/quant/InstrumentAnalystRatings';
+import { InstrumentPeers } from '../components/quant/InstrumentPeers';
 import { ArtifactDetailDrawerBody } from '../components/quant/ArtifactDetailDrawerBody';
 import { useDrawer } from '../components/quant/DataDrawer';
 import { closes, logReturns, annualisedVol, maxDrawdown, trendLabel } from '../lib/quant';
@@ -40,15 +47,6 @@ import { createInstrumentSnapshot } from '../services/artifactService';
 import type { FreshnessStatus } from '../services/gatewayClient';
 import { useWorkspace } from '../components/WorkspaceContext';
 import { useAuth } from '../components/AuthProvider';
-
-// ─── Section divider ──────────────────────────────────────────────────────────
-
-const SectionDivider: React.FC<{ title: string }> = ({ title }) => (
-  <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '24px 0 12px' }}>
-    <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 1.1, textTransform: 'uppercase', color: 'var(--muted-foreground)', whiteSpace: 'nowrap' }}>{title}</span>
-    <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-  </div>
-);
 
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
 
@@ -89,10 +87,10 @@ const AIAnalysis: React.FC<{
   status: FreshnessStatus; fetchedAt: number | null;
   onRetry: () => void;
 }> = ({ loading, error, narrative, status, fetchedAt, onRetry }) => (
-  <section className="ds-surface" style={{ padding: 16, borderRadius: 10 }}>
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+  <section style={{ marginBottom: 32 }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 10, borderBottom: '1px solid var(--border)', marginBottom: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <h2 className="ds-heading" style={{ margin: 0 }}>AI Analysis</h2>
+        <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>AI Analysis</h2>
         <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', padding: '2px 6px', borderRadius: 4, background: 'rgba(193,95,60,0.08)', color: 'var(--primary)' }}>Gemini</span>
       </div>
       <FreshnessBadge status={status} fetchedAt={fetchedAt} compact />
@@ -255,12 +253,16 @@ export const InstrumentDetail: React.FC = () => {
         currentPrice={q?.price}
       />
 
-      {/* ── 5. TECHNICAL ANALYSIS ───────────────────────────────────── */}
-      <SectionDivider title="Technical Analysis" />
+      {/* ── 5. FINANCIAL SUMMARY ────────────────────────────────────── */}
+      <InstrumentFinancialStatements symbol={sym} />
+
+      {/* ── 5b. ANALYST RATINGS ─────────────────────────────────────── */}
+      <InstrumentAnalystRatings symbol={sym} currentPrice={q?.price} />
+
+      {/* ── 6. TECHNICAL ANALYSIS ───────────────────────────────────── */}
       <InstrumentTechnicalAnalysis symbol={sym} />
 
       {/* ── 5b. AI ANALYSIS ─────────────────────────────────────────── */}
-      <SectionDivider title="AI Analysis" />
       <AIAnalysis
         loading={intel.loading}
         error={intel.error}
@@ -271,24 +273,22 @@ export const InstrumentDetail: React.FC = () => {
       />
 
       {/* ── 6. EPS HISTORY ──────────────────────────────────────────── */}
-      {earnings.length > 0 && (
-        <>
-          <SectionDivider title="Earnings History" />
-          <InstrumentEarningsChart earnings={earnings} />
-        </>
-      )}
+      {earnings.length > 0 && <InstrumentEarningsChart earnings={earnings} />}
 
       {/* ── 7. MARKET REGIME ────────────────────────────────────────── */}
-      <SectionDivider title="Market Regime" />
-      <RegimeIntelligencePanel symbol={sym} />
+      <RegimeIntelligencePanel symbol={sym} flat />
 
       {/* ── 8. BENCHMARK INTELLIGENCE ───────────────────────────────── */}
-      <SectionDivider title="Benchmark Intelligence" />
-      <BenchmarkIntelligencePanel symbol={sym} />
+      <BenchmarkIntelligencePanel symbol={sym} flat />
 
-      {/* ── 9. RECENT HEADLINES ─────────────────────────────────────── */}
-      <SectionDivider title="Recent Headlines" />
-      <section>
+      {/* ── 9. PEERS & COMPETITORS ──────────────────────────────────── */}
+      <InstrumentPeers symbol={sym} />
+
+      {/* ── 10. RECENT HEADLINES ────────────────────────────────────── */}
+      <section style={{ marginBottom: 32 }}>
+        <div style={{ paddingBottom: 10, borderBottom: '1px solid var(--border)', marginBottom: 16 }}>
+          <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Recent Headlines</h2>
+        </div>
         {news.loading && !news.data ? (
           <p style={{ color: 'var(--muted-foreground)', fontSize: 12, margin: 0 }}>Loading news…</p>
         ) : news.data?.length ? (

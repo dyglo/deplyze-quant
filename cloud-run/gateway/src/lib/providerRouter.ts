@@ -155,10 +155,12 @@ export function ohlcvChain<T>(providers: {
   fmp?: ProviderFn<T>;
   polygon?: ProviderFn<T>;
   stooq?: ProviderFn<T>;
+  yahoo?: ProviderFn<T>;
 }): FallbackChain<T> {
   return {
     providers: [
       ...(providers.eodhd        ? [{ id: 'eodhd',         fn: providers.eodhd,         timeoutMs: OHLCV_TIMEOUT_MS, retries: 0 }] : []),
+      ...(providers.yahoo        ? [{ id: 'yahoo',         fn: providers.yahoo,         timeoutMs: OHLCV_TIMEOUT_MS, retries: 0 }] : []),
       ...(providers.twelve_data  ? [{ id: 'twelve_data',   fn: providers.twelve_data,   timeoutMs: OHLCV_TIMEOUT_MS, retries: 0 }] : []),
       ...(providers.fmp          ? [{ id: 'fmp',           fn: providers.fmp,           timeoutMs: OHLCV_TIMEOUT_MS, retries: 0 }] : []),
       ...(providers.polygon      ? [{ id: 'polygon',       fn: providers.polygon,       timeoutMs: OHLCV_TIMEOUT_MS, retries: 0 }] : []),

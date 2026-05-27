@@ -7,6 +7,7 @@ import { fetchMarketMovers, type MarketMoverItem, type MoverType } from '../../s
 import { RegimeStatusChip, RiskLevelChip } from '../quant/SystemAnalyzingState';
 import { Flag } from './Flag';
 import { ChangeCell } from './ChangeCell';
+import { WatchlistRail } from './WatchlistRail';
 import { symbolCountry } from './format';
 
 function moverSymbol(m: MarketMoverItem): string {
@@ -18,7 +19,7 @@ function moverPct(m: MarketMoverItem): number {
 
 const RailCard: React.FC<{ title: string; children: React.ReactNode; action?: React.ReactNode }> = ({ title, children, action }) => (
   <section>
-    <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 8, marginBottom: 4, borderBottom: '2px solid var(--foreground)' }}>
+    <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
       <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--foreground)' }}>{title}</span>
       {action}
     </header>
@@ -119,8 +120,9 @@ const MoversCard: React.FC = () => {
 };
 
 export const RightRail: React.FC = () => (
-  <aside style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+  <aside style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
     <RegimeCard />
+    <WatchlistRail />
     <MoversCard />
   </aside>
 );

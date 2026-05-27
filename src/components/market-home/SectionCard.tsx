@@ -15,7 +15,7 @@ export const SectionCard: React.FC<{
   <section style={{ display: 'flex', flexDirection: 'column' }}>
     <header style={{
       display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12,
-      paddingBottom: 8, marginBottom: 12, borderBottom: '2px solid var(--foreground)',
+      marginBottom: 12,
     }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, minWidth: 0 }}>
         <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: 'var(--foreground)', letterSpacing: '-0.01em' }}>{title}</h2>

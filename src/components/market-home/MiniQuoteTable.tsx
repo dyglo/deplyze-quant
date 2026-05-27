@@ -24,7 +24,7 @@ export const MiniQuoteTable: React.FC<{
 
   return (
     <div style={{ minWidth: 0 }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', paddingBottom: 5, marginBottom: 2, borderBottom: '1.5px solid var(--foreground)' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
         <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--foreground)', letterSpacing: '-0.01em' }}>{title}</span>
       </div>
 

@@ -13,8 +13,9 @@ import { Flag } from './Flag';
 import { ChangeCell } from './ChangeCell';
 import type { GatewayNewsItem } from '../../services/marketService';
 
-function timeAgo(ts: number): string {
-  const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+function timeAgo(ts: number | null | undefined): string {
+  if (!Number.isFinite(ts)) return '';
+  const s = Math.max(0, Math.floor((Date.now() - Number(ts)) / 1000));
   if (s < 60) return 'just now';
   const m = Math.floor(s / 60);
   if (m < 60) return `${m}m ago`;
@@ -25,9 +26,12 @@ function timeAgo(ts: number): string {
 
 const NewsCard: React.FC<{ item: GatewayNewsItem; featured?: boolean }> = ({ item, featured }) => {
   const [imgOk, setImgOk] = useState(Boolean(item.image));
+  const headline = item.headline || 'Market headline';
+  const source = item.source || 'News';
+  const age = timeAgo(item.publishedAt);
   return (
   <a
-    href={item.url}
+    href={item.url || '#'}
     target="_blank"
     rel="noopener noreferrer"
     className="ds-transition-fast"
@@ -70,12 +74,12 @@ const NewsCard: React.FC<{ item: GatewayNewsItem; featured?: boolean }> = ({ ite
         WebkitLineClamp: featured ? 3 : 2,
         WebkitBoxOrient: 'vertical',
         overflow: 'hidden',
-      }}>{item.headline}</p>
+      }}>{headline}</p>
       {featured && item.summary && (
         <p style={{ margin: '7px 0 0', fontSize: 13, lineHeight: 1.5, color: 'var(--muted-foreground)', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{stripMarkdown(item.summary)}</p>
       )}
       <div style={{ marginTop: 6, fontSize: 10, color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-        {item.source}{item.publishedAt ? ` · ${timeAgo(item.publishedAt)}` : ''}
+        {source}{age ? ` · ${age}` : ''}
       </div>
     </div>
   </a>
@@ -88,7 +92,11 @@ const FeaturedIntelligence: React.FC = () => {
   const { data: risk } = useRiskEnvironment();
   const riskLevel = extractRiskLevel(risk);
 
-  const summary = regime?.summary || risk?.summary;
+  const summary = typeof regime?.summary === 'string'
+    ? regime.summary
+    : typeof risk?.summary === 'string'
+      ? risk.summary
+      : null;
 
   return (
     <button
@@ -219,7 +227,7 @@ const TabbedHeadlines: React.FC = () => {
           ? Array.from({ length: 3 }).map((_, i) => <div key={i} style={{ height: 44, margin: '8px 0', borderRadius: 6, background: 'var(--muted)', animation: 'pulse 1.8s infinite' }} />)
           : items.length === 0
           ? <p className="ds-caption" style={{ color: 'var(--muted-foreground)', padding: '10px 0' }}>No headlines in this category right now.</p>
-          : items.map((item) => <NewsCard key={item.id} item={item} />)}
+          : items.map((item, index) => <NewsCard key={item.id || `${item.url}-${index}`} item={item} />)}
       </div>
     </div>
   );

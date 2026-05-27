@@ -27,7 +27,7 @@ const RANGES: Array<{ id: string; label: string; size: number }> = [
 
 export const FeaturedChart: React.FC = () => {
   const navigate = useNavigate();
-  const [symbol, setSymbol] = useState('SPY');
+  const [symbol, setSymbol] = useState(SERIES[0].symbol);
   const [range, setRange] = useState(RANGES[1]);
   const { data, loading } = useOHLCV(symbol, '1day', range.size);
 

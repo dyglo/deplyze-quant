@@ -17,6 +17,8 @@ import { InstrumentProfileCard } from '../components/quant/InstrumentProfileCard
 import { InstrumentKeyMetrics } from '../components/quant/InstrumentKeyMetrics';
 import { InstrumentOHLCVSection } from '../components/quant/InstrumentOHLCVSection';
 import { InstrumentEarningsChart } from '../components/quant/InstrumentEarningsChart';
+import { InstrumentSkeleton } from '../components/quant/InstrumentSkeleton';
+import { RegimeIntelligencePanel } from '../components/quant/RegimeIntelligencePanel';
 import { ArtifactDetailDrawerBody } from '../components/quant/ArtifactDetailDrawerBody';
 import { useDrawer } from '../components/quant/DataDrawer';
 import { closes, logReturns, annualisedVol, maxDrawdown, trendLabel } from '../lib/quant';
@@ -162,6 +164,9 @@ export const InstrumentDetail: React.FC = () => {
 
   if (!sym) return null;
 
+  // Show full-page skeleton while initial quote hasn't arrived yet
+  if (quote.loading && !quote.data) return <InstrumentSkeleton />;
+
   const q = quote.data;
   const dp = q?.changePercent;
   const profile = intel.data?.profile ?? null;
@@ -276,7 +281,7 @@ export const InstrumentDetail: React.FC = () => {
       </section>
 
       {/* ── Body: 2-column layout ─────────────────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 24 }}>
+      <div className="instrument-body-grid" style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 24 }}>
 
         {/* LEFT COLUMN — primary research workspace */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -332,6 +337,9 @@ export const InstrumentDetail: React.FC = () => {
       </div>
 
       {/* ── Full-width intelligence sections ─────────────────────────── */}
+      <SectionDivider title="Market Regime" />
+      <RegimeIntelligencePanel symbol={sym} />
+
       <SectionDivider title="Benchmark Intelligence" />
       <BenchmarkIntelligencePanel symbol={sym} />
 

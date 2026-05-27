@@ -773,3 +773,28 @@ textarea.ds-input {
   height: auto;
   padding: 0.5rem 0.75rem;
 }
+
+/* ─── Skeleton shimmer ───────────────────────────────────────────── */
+@keyframes ds-shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+.ds-skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--muted) 25%,
+    var(--border) 50%,
+    var(--muted) 75%
+  );
+  background-size: 800px 100%;
+  animation: ds-shimmer 1.4s ease-in-out infinite;
+  border-radius: 6px;
+}
+
+/* ─── Instrument page responsive ────────────────────────────────── */
+@media (max-width: 900px) {
+  .instrument-body-grid {
+    grid-template-columns: 1fr !important;
+  }
+}

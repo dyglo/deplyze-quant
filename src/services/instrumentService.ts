@@ -15,7 +15,7 @@ export interface InstrumentProfile {
   website?: string;
   logo?: string;
   ipoDate?: string;
-  // legacy Finnhub field names kept for backward compat
+  // legacy Finnhub names kept for backward-compat
   finnhubIndustry?: string;
   marketCapitalization?: number;
   weburl?: string;
@@ -53,7 +53,6 @@ export interface InstrumentIntelligence {
   asOf: number;
   quote: Quote;
   profile: InstrumentProfile | null;
-  /** Normalised fundamentals from FMP → Finnhub → EODHD chain */
   fundamentals: InstrumentFundamentals | null;
   /** Legacy field kept for backward compat — prefer fundamentals */
   basicFinancials?: { metric?: Record<string, number | string> } | null;

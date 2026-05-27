@@ -125,6 +125,10 @@ router.get('/quote/:symbol', async (req, res, next) => {
           const q = await td.getQuote(td.normalizeTdSymbol(symbol));
           return { ...q, symbol, source: 'twelve_data' };
         },
+        eodhd: async () => {
+          const q = await eodhd.getQuote(symbol);
+          return { ...q, source: 'eodhd' };
+        },
       }));
       return { ...result, source: providerId };
     });
@@ -183,6 +187,10 @@ router.get('/quotes', async (req, res, next) => {
               twelve_data: async () => {
                 const q = await td.getQuote(td.normalizeTdSymbol(sym));
                 return { ...q, symbol: sym, source: 'twelve_data' };
+              },
+              eodhd: async () => {
+                const q = await eodhd.getQuote(sym);
+                return { ...q, source: 'eodhd' };
               },
             }));
             return { ...result, source: providerId };

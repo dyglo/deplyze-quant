@@ -46,19 +46,36 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: dorny/paths-filter@v3
+      - name: Detect changed paths
         id: filter
-        with:
-          filters: |
-            frontend:
-              - 'src/**'
-              - 'index.html'
-              - 'vite.config.*'
-              - 'tsconfig*.json'
-              - 'package*.json'
-              - 'components.json'
-            gateway:
-              - 'cloud-run/gateway/**'
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            base="${{ github.event.pull_request.base.sha }}"
+            head="${{ github.event.pull_request.head.sha }}"
+          else
+            base="${{ github.event.before }}"
+            head="${{ github.sha }}"
+          fi
+
+          if [[ -z "$base" || "$base" =~ ^0+$ ]]; then
+            base="$(git rev-parse "${head}^")"
+          fi
+
+          changed="$(git diff --name-only "$base" "$head")"
+          echo "$changed"
+
+          if echo "$changed" | grep -Eq '^(src/|index\.html$|vite\.config\.|tsconfig.*\.json$|package.*\.json$|components\.json$)'; then
+            echo "frontend=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "frontend=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if echo "$changed" | grep -Eq '^cloud-run/gateway/'; then
+            echo "gateway=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "gateway=false" >> "$GITHUB_OUTPUT"
+          fi
 
   # ─── Frontend ──────────────────────────────────────────────────────────
   type-check-frontend:

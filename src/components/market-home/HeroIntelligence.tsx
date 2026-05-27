@@ -23,7 +23,9 @@ function timeAgo(ts: number): string {
   return `${Math.floor(h / 24)}d ago`;
 }
 
-const NewsCard: React.FC<{ item: GatewayNewsItem; featured?: boolean }> = ({ item, featured }) => (
+const NewsCard: React.FC<{ item: GatewayNewsItem; featured?: boolean }> = ({ item, featured }) => {
+  const [imgOk, setImgOk] = useState(Boolean(item.image));
+  return (
   <a
     href={item.url}
     target="_blank"
@@ -35,16 +37,25 @@ const NewsCard: React.FC<{ item: GatewayNewsItem; featured?: boolean }> = ({ ite
       borderBottom: featured ? 'none' : '1px solid var(--border)',
     }}
   >
-    {item.image && (
+    {item.image && imgOk && (
       <div style={{
         width: featured ? '100%' : 72,
-        height: featured ? 188 : 54,
+        aspectRatio: featured ? '16 / 9' : undefined,
+        height: featured ? undefined : 54,
         flexShrink: 0,
         borderRadius: 8,
         overflow: 'hidden',
         background: 'var(--muted)',
       }}>
-        <img src={item.image} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        <img
+          src={item.image}
+          alt=""
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          decoding="async"
+          onError={() => setImgOk(false)}
+          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+        />
       </div>
     )}
     <div style={{ minWidth: 0 }}>
@@ -68,7 +79,8 @@ const NewsCard: React.FC<{ item: GatewayNewsItem; featured?: boolean }> = ({ ite
       </div>
     </div>
   </a>
-);
+  );
+};
 
 const FeaturedIntelligence: React.FC = () => {
   const navigate = useNavigate();

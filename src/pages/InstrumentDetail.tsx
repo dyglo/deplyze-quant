@@ -127,11 +127,11 @@ export const InstrumentDetail: React.FC = () => {
               {savingSnap ? <Loader2 size={11} className="animate-spin" /> : <Camera size={11} />}
               Save Snapshot
             </button>
-            <Link to="/instruments" className="ds-caption" style={{
+            <Link to="/" className="ds-caption" style={{
               padding: '6px 10px', border: '1px solid var(--border)', borderRadius: 6,
               textDecoration: 'none', color: 'var(--muted-foreground)',
             }}>
-              ← All instruments
+              ← Market Home
             </Link>
           </div>
         }

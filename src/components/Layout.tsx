@@ -67,9 +67,7 @@ interface LayoutProps {
 }
 
 const menuItems = [
-  { id: 'morning',     label: 'Morning Routines',       icon: Newspaper,       path: '/morning' },
   { id: 'terminal',    label: 'Intelligence Terminal',  icon: Activity,        path: '/terminal' },
-  { id: 'instruments', label: 'Instrument Intelligence', icon: LineChart,      path: '/instruments' },
   { id: 'macro',       label: 'Macro Regime Desk',      icon: TrendingUp,      path: '/macro' },
   { id: 'relations-map', label: 'Relations Map',         icon: Network,         path: '/relations-map' },
   { id: 'research',    label: 'Historical Research',     icon: Compass,        path: '/research' },

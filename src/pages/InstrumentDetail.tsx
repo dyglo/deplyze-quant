@@ -6,7 +6,6 @@ import { useInstrumentIntelligence } from '../hooks/useInstrument';
 import { useQuote, useOHLCV, useNews } from '../hooks/useMarket';
 import { useArtifacts, useBriefings } from '../hooks/useArtifacts';
 import { PageHeader } from '../components/quant/PageHeader';
-import { OHLCVChart } from '../components/quant/OHLCVChart';
 import { NewsList } from '../components/quant/NewsList';
 import { StatTile } from '../components/quant/StatTile';
 import { AssetIcon } from '../components/quant/AssetIcon';
@@ -16,6 +15,8 @@ import { RelatedIntelligencePanel } from '../components/quant/RelatedIntelligenc
 import { BenchmarkIntelligencePanel } from '../components/quant/BenchmarkIntelligencePanel';
 import { InstrumentProfileCard } from '../components/quant/InstrumentProfileCard';
 import { InstrumentKeyMetrics } from '../components/quant/InstrumentKeyMetrics';
+import { InstrumentOHLCVSection } from '../components/quant/InstrumentOHLCVSection';
+import { InstrumentEarningsChart } from '../components/quant/InstrumentEarningsChart';
 import { ArtifactDetailDrawerBody } from '../components/quant/ArtifactDetailDrawerBody';
 import { useDrawer } from '../components/quant/DataDrawer';
 import { closes, logReturns, annualisedVol, maxDrawdown, trendLabel } from '../lib/quant';
@@ -280,29 +281,8 @@ export const InstrumentDetail: React.FC = () => {
         {/* LEFT COLUMN — primary research workspace */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-          {/* Chart */}
-          <section className="ds-surface" style={{ padding: 16, borderRadius: 10 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <h2 className="ds-heading" style={{ margin: 0 }}>Price History (90d Daily)</h2>
-              <FreshnessBadge status={ohlcv.status} fetchedAt={ohlcv.fetchedAt} compact />
-            </div>
-            {ohlcv.loading && !bars.length ? (
-              <div style={{ height: 220, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted-foreground)', fontSize: 11 }}>
-                Loading bars…
-              </div>
-            ) : bars.length > 1 ? (
-              <OHLCVChart bars={bars} height={240} symbol={sym} />
-            ) : (
-              <p className="ds-caption" style={{ color: 'var(--muted-foreground)', margin: 0 }}>
-                {ohlcv.error ? `Failed: ${ohlcv.error.message}` : 'No bars available.'}
-                {' '}
-                <button onClick={() => ohlcv.refresh()} style={{
-                  background: 'transparent', border: 'none', color: 'var(--primary)',
-                  textDecoration: 'underline', cursor: 'pointer', padding: 0, fontSize: 'inherit',
-                }}>Retry</button>
-              </p>
-            )}
-          </section>
+          {/* Chart with timeframe selector */}
+          <InstrumentOHLCVSection symbol={sym} />
 
           {/* AI Analysis */}
           <AIAnalysisSection
@@ -314,60 +294,8 @@ export const InstrumentDetail: React.FC = () => {
             onRetry={() => intel.refresh()}
           />
 
-          {/* Earnings history inline (if available) */}
-          {earnings.length > 0 && (
-            <section className="ds-surface" style={{ padding: 16, borderRadius: 10 }}>
-              <h2 className="ds-heading" style={{ margin: '0 0 12px' }}>Earnings History</h2>
-              <div style={{ display: 'grid', gap: 6 }}>
-                {earnings.slice(0, 6).map((e, i) => {
-                  const beat = e.surprisePct != null && e.surprisePct > 0;
-                  const miss = e.surprisePct != null && e.surprisePct < 0;
-                  return (
-                    <div key={i} style={{
-                      display: 'grid',
-                      gridTemplateColumns: '90px 1fr 1fr 80px',
-                      gap: 8,
-                      alignItems: 'center',
-                      padding: '6px 10px',
-                      borderRadius: 6,
-                      background: 'var(--muted)',
-                      fontSize: 12,
-                    }}>
-                      <span className="ds-caption" style={{ color: 'var(--muted-foreground)', fontVariantNumeric: 'tabular-nums' }}>{e.date}</span>
-                      <div>
-                        <div className="ds-caption" style={{ color: 'var(--muted-foreground)', fontSize: 10 }}>Actual EPS</div>
-                        <div style={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
-                          {e.epsActual != null ? `$${e.epsActual.toFixed(2)}` : '—'}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="ds-caption" style={{ color: 'var(--muted-foreground)', fontSize: 10 }}>Est. EPS</div>
-                        <div style={{ fontVariantNumeric: 'tabular-nums' }}>
-                          {e.epsEstimate != null ? `$${e.epsEstimate.toFixed(2)}` : '—'}
-                        </div>
-                      </div>
-                      {e.surprisePct != null ? (
-                        <span style={{
-                          padding: '2px 6px', borderRadius: 4, fontSize: 11, fontWeight: 700,
-                          background: beat ? 'var(--ds-gain-muted)' : miss ? 'var(--ds-loss-muted)' : 'var(--muted)',
-                          color: beat ? 'var(--ds-gain)' : miss ? 'var(--ds-loss)' : 'var(--muted-foreground)',
-                          textAlign: 'center',
-                          fontVariantNumeric: 'tabular-nums',
-                        }}>
-                          {beat ? '+' : ''}{e.surprisePct.toFixed(1)}%
-                        </span>
-                      ) : (
-                        <span />
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-              <p className="ds-caption" style={{ color: 'var(--muted-foreground)', fontSize: 10, margin: '8px 0 0' }}>
-                EPS surprise = (actual − estimate) / |estimate|. Beat shown in green, miss in red.
-              </p>
-            </section>
-          )}
+          {/* Earnings bar chart */}
+          {earnings.length > 0 && <InstrumentEarningsChart earnings={earnings} />}
         </div>
 
         {/* RIGHT COLUMN — context panel */}

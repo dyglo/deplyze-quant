@@ -3,14 +3,13 @@ import { useAuth } from '../components/AuthProvider';
 import { TickerTape } from '../components/market-home/TickerTape';
 import { HeroIntelligence } from '../components/market-home/HeroIntelligence';
 import { MarketSnapshot } from '../components/market-home/MarketSnapshot';
+import { FeaturedChart } from '../components/market-home/FeaturedChart';
 import { ValuationTable } from '../components/market-home/ValuationTable';
 import { CalendarSection } from '../components/market-home/CalendarSection';
 import { IntelligenceSpotlight } from '../components/market-home/IntelligenceSpotlight';
 import { AnalysisOpinion } from '../components/market-home/AnalysisOpinion';
 import { MarketDataGrid } from '../components/market-home/MarketDataGrid';
 import { PortfolioInsights } from '../components/market-home/PortfolioInsights';
-import { PopularScreens } from '../components/market-home/PopularScreens';
-import { ToolsShortcuts } from '../components/market-home/ToolsShortcuts';
 import { RightRail } from '../components/market-home/RightRail';
 import { SectionBoundary } from '../components/market-home/SectionBoundary';
 import { Disclaimer } from '../components/quant/Disclaimer';
@@ -61,6 +60,7 @@ export const MarketHome: React.FC = () => {
           style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 18, alignItems: 'start' }}
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: 24, minWidth: 0 }}>
+            <SectionBoundary label="Market performance"><FeaturedChart /></SectionBoundary>
             <SectionBoundary label="Market snapshot"><MarketSnapshot /></SectionBoundary>
             <SectionBoundary label="Your portfolio"><PortfolioInsights /></SectionBoundary>
             <SectionBoundary label="Relative valuation"><ValuationTable /></SectionBoundary>
@@ -68,8 +68,6 @@ export const MarketHome: React.FC = () => {
             <SectionBoundary label="Intelligence spotlight"><IntelligenceSpotlight /></SectionBoundary>
             <SectionBoundary label="Analysis & opinion"><AnalysisOpinion /></SectionBoundary>
             <SectionBoundary label="Market data"><MarketDataGrid /></SectionBoundary>
-            <SectionBoundary label="Popular screens"><PopularScreens /></SectionBoundary>
-            <SectionBoundary label="Tools"><ToolsShortcuts /></SectionBoundary>
           </div>
           <div className="market-home-rail" style={{ position: 'sticky', top: 12 }}>
             <SectionBoundary label="Right rail"><RightRail /></SectionBoundary>

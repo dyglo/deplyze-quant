@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Sparkles, ArrowUpRight } from 'lucide-react';
 import { useNews, useOHLCV } from '../../hooks/useMarket';
@@ -166,11 +166,57 @@ const HeroRail: React.FC = () => {
   );
 };
 
+const NEWS_TABS: { id: 'general' | 'forex' | 'crypto' | 'merger'; label: string }[] = [
+  { id: 'general', label: 'Latest' },
+  { id: 'forex',   label: 'Forex' },
+  { id: 'crypto',  label: 'Crypto' },
+  { id: 'merger',  label: 'M&A' },
+];
+
+const TabbedHeadlines: React.FC = () => {
+  const [cat, setCat] = useState<'general' | 'forex' | 'crypto' | 'merger'>('general');
+  const { data, loading } = useNews({ category: cat, limit: 6 });
+  // For the default tab, skip the first item (it is the featured story on the left).
+  const items = (data ?? []).slice(cat === 'general' ? 1 : 0, cat === 'general' ? 5 : 4);
+
+  return (
+    <div>
+      <div role="tablist" style={{ display: 'flex', gap: 4, marginBottom: 6 }}>
+        {NEWS_TABS.map((t) => {
+          const active = t.id === cat;
+          return (
+            <button
+              key={t.id}
+              role="tab"
+              aria-selected={active}
+              onClick={() => setCat(t.id)}
+              style={{
+                fontSize: 10.5, fontWeight: active ? 700 : 500, padding: '3px 9px', borderRadius: 999,
+                border: 'none', cursor: 'pointer',
+                background: active ? 'color-mix(in srgb, var(--primary) 12%, transparent)' : 'transparent',
+                color: active ? 'var(--primary)' : 'var(--muted-foreground)',
+              }}
+            >
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
+      <div>
+        {loading && items.length === 0
+          ? Array.from({ length: 3 }).map((_, i) => <div key={i} style={{ height: 44, margin: '8px 0', borderRadius: 6, background: 'var(--muted)', animation: 'pulse 1.8s infinite' }} />)
+          : items.length === 0
+          ? <p className="ds-caption" style={{ color: 'var(--muted-foreground)', padding: '10px 0' }}>No headlines in this category right now.</p>
+          : items.map((item) => <NewsCard key={item.id} item={item} />)}
+      </div>
+    </div>
+  );
+};
+
 export const HeroIntelligence: React.FC = () => {
   const { data: news, loading } = useNews({ category: 'general', limit: 7 });
   const items = news ?? [];
   const featured = items[0];
-  const rest = items.slice(1, 5);
 
   return (
     <div style={{
@@ -193,16 +239,10 @@ export const HeroIntelligence: React.FC = () => {
         )}
       </div>
 
-      {/* Center: AI summary + secondary headlines */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {/* Center: AI summary + tabbed headlines */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         <FeaturedIntelligence />
-        <div>
-          {loading && rest.length === 0
-            ? Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} style={{ height: 44, margin: '8px 0', borderRadius: 6, background: 'var(--muted)', animation: 'pulse 1.8s infinite' }} />
-              ))
-            : rest.map((item) => <NewsCard key={item.id} item={item} />)}
-        </div>
+        <TabbedHeadlines />
       </div>
 
       {/* Right: compact market rail */}

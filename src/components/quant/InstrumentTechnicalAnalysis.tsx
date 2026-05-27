@@ -131,8 +131,10 @@ export const InstrumentTechnicalAnalysis: React.FC<{ symbol: string }> = ({ symb
 
   if (ohlcv.loading && !bars.length) {
     return (
-      <section className="ds-surface" style={{ padding: 16, borderRadius: 10 }}>
-        <h2 className="ds-heading" style={{ margin: '0 0 8px' }}>Technical Analysis</h2>
+      <section style={{ marginBottom: 32 }}>
+        <div style={{ paddingBottom: 10, borderBottom: '1px solid var(--border)', marginBottom: 16 }}>
+          <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Technical Analysis</h2>
+        </div>
         <p style={{ color: 'var(--muted-foreground)', fontSize: 12, margin: 0 }}>Computing indicators from 1-year history…</p>
       </section>
     );
@@ -140,8 +142,10 @@ export const InstrumentTechnicalAnalysis: React.FC<{ symbol: string }> = ({ symb
 
   if (!analysis || cs.length < 30) {
     return (
-      <section className="ds-surface" style={{ padding: 16, borderRadius: 10 }}>
-        <h2 className="ds-heading" style={{ margin: '0 0 8px' }}>Technical Analysis</h2>
+      <section style={{ marginBottom: 32 }}>
+        <div style={{ paddingBottom: 10, borderBottom: '1px solid var(--border)', marginBottom: 16 }}>
+          <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Technical Analysis</h2>
+        </div>
         <p style={{ color: 'var(--muted-foreground)', fontSize: 12, margin: 0 }}>Insufficient price history for technical analysis (need ≥30 bars, have {cs.length}).</p>
       </section>
     );
@@ -151,9 +155,11 @@ export const InstrumentTechnicalAnalysis: React.FC<{ symbol: string }> = ({ symb
   const current = cs[cs.length - 1];
 
   return (
-    <section className="ds-surface" style={{ padding: 16, borderRadius: 10 }}>
-      <h2 className="ds-heading" style={{ margin: '0 0 2px' }}>Technical Analysis</h2>
-      <p style={{ fontSize: 11, color: 'var(--muted-foreground)', margin: '0 0 8px' }}>Computed from {cs.length} daily bars</p>
+    <section style={{ marginBottom: 32 }}>
+      <div style={{ paddingBottom: 10, borderBottom: '1px solid var(--border)', marginBottom: 12 }}>
+        <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Technical Analysis</h2>
+        <p style={{ fontSize: 11, color: 'var(--muted-foreground)', margin: '2px 0 0' }}>Computed from {cs.length} daily bars</p>
+      </div>
 
       <SummaryGauge {...summary} />
 

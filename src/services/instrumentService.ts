@@ -74,3 +74,63 @@ export async function fetchInstrumentIntelligence(symbol: string): Promise<Instr
     `/instruments/${encodeURIComponent(symbol)}/intelligence`,
   );
 }
+
+export interface FinancialPeriod {
+  date: string;
+  period?: string;
+  revenue?: number;
+  grossProfit?: number;
+  operatingIncome?: number;
+  netIncome?: number;
+  eps?: number;
+  ebitda?: number;
+}
+
+export async function fetchFinancials(
+  symbol: string,
+  period: 'annual' | 'quarter' = 'annual',
+): Promise<{ series: FinancialPeriod[] }> {
+  return gatewayGet<{ series: FinancialPeriod[] }>(
+    `/fundamentals/${encodeURIComponent(symbol)}/financials?period=${period}`,
+  );
+}
+
+export interface AnalystRatings {
+  recommendations: {
+    strongBuy: number;
+    buy: number;
+    hold: number;
+    sell: number;
+    strongSell: number;
+    date?: string;
+  } | null;
+  priceTargets: {
+    high?: number;
+    low?: number;
+    avg?: number;
+    count: number;
+    recent: Array<{ date: string; target: number; analyst: string; company: string }>;
+  };
+}
+
+export async function fetchAnalystRatings(symbol: string): Promise<AnalystRatings> {
+  return gatewayGet<AnalystRatings>(
+    `/fundamentals/${encodeURIComponent(symbol)}/analyst`,
+  );
+}
+
+export interface PeerQuote {
+  symbol: string;
+  name?: string;
+  price: number;
+  changePercent: number;
+  marketCap?: number;
+  pe?: number;
+  volume?: number;
+}
+
+export async function fetchPeers(symbol: string): Promise<{ peers: PeerQuote[] }> {
+  return gatewayGet<{ peers: PeerQuote[] }>(
+    `/fundamentals/${encodeURIComponent(symbol)}/peers`,
+  );
+}

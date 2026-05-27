@@ -66,6 +66,67 @@ export async function getHistoricalBars(
   return getJson<EodhdBar[]>('eodhd', url, { signal });
 }
 
+// ─── Real-time quote ───────────────────────────────────────────────────────
+// EODHD serves real-time (delayed) quotes for equities, FX, crypto, commodities
+// AND raw index levels (via the .INDX tickers in toEodhdTicker, e.g.
+// SPX→GSPC.INDX). This lets index symbols return true index values where the
+// equity-only quote providers cannot. Numeric fields arrive as numbers or the
+// string "NA" when unavailable.
+
+interface EodhdRealTime {
+  code?: string;
+  timestamp?: number | string;
+  open?: number | string;
+  high?: number | string;
+  low?: number | string;
+  close?: number | string;
+  volume?: number | string;
+  previousClose?: number | string;
+  change?: number | string;
+  change_p?: number | string;
+}
+
+function num(v: number | string | undefined): number {
+  const n = typeof v === 'number' ? v : Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+export interface EodhdQuote {
+  symbol: string;
+  price: number;
+  open: number;
+  high: number;
+  low: number;
+  previousClose: number;
+  change: number;
+  changePercent: number;
+  ts: number;
+}
+
+export async function getQuote(symbol: string, signal?: AbortSignal): Promise<EodhdQuote> {
+  const ticker = toEodhdTicker(symbol);
+  const url = `${BASE}/real-time/${encodeURIComponent(ticker)}?api_token=${key()}&fmt=json`;
+  const r = await getJson<EodhdRealTime>('eodhd', url, { signal });
+
+  const price = num(r.close);
+  // A zero/NA close means no usable data — throw so the fallback chain continues.
+  if (price === 0) {
+    throw new Error(`EODHD: no quote data for ${ticker}`);
+  }
+  const tsRaw = typeof r.timestamp === 'number' ? r.timestamp : Number(r.timestamp);
+  return {
+    symbol,
+    price,
+    open: num(r.open),
+    high: num(r.high),
+    low: num(r.low),
+    previousClose: num(r.previousClose),
+    change: num(r.change),
+    changePercent: num(r.change_p),
+    ts: Number.isFinite(tsRaw) && tsRaw > 0 ? tsRaw * 1000 : Date.now(),
+  };
+}
+
 // ─── Fundamentals ─────────────────────────────────────────────────────────
 
 export interface EodhdFundamentalsGeneral {

@@ -131,12 +131,16 @@ export function quoteChain<T>(providers: {
   polygon?: ProviderFn<T>;
   finnhub?: ProviderFn<T>;
   twelve_data?: ProviderFn<T>;
+  eodhd?: ProviderFn<T>;
 }): FallbackChain<T> {
   return {
     providers: [
       ...(providers.polygon    ? [{ id: 'polygon',     fn: providers.polygon,     timeoutMs: QUOTE_TIMEOUT_MS }] : []),
       ...(providers.finnhub    ? [{ id: 'finnhub',     fn: providers.finnhub,     timeoutMs: QUOTE_TIMEOUT_MS }] : []),
       ...(providers.twelve_data? [{ id: 'twelve_data', fn: providers.twelve_data, timeoutMs: QUOTE_TIMEOUT_MS }]: []),
+      // EODHD last so equities keep their existing providers; index symbols
+      // (SPX/DJI/NDX → .INDX) fall through to here for true index levels.
+      ...(providers.eodhd      ? [{ id: 'eodhd',       fn: providers.eodhd,       timeoutMs: QUOTE_TIMEOUT_MS }]: []),
     ],
   };
 }

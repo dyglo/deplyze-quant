@@ -2,6 +2,9 @@ import React from 'react';
 import { useAuth } from '../components/AuthProvider';
 import { HeroIntelligence } from '../components/market-home/HeroIntelligence';
 import { MarketSnapshot } from '../components/market-home/MarketSnapshot';
+import { ValuationTable } from '../components/market-home/ValuationTable';
+import { PopularScreens } from '../components/market-home/PopularScreens';
+import { ToolsShortcuts } from '../components/market-home/ToolsShortcuts';
 import { RightRail } from '../components/market-home/RightRail';
 import { Disclaimer } from '../components/quant/Disclaimer';
 
@@ -45,8 +48,11 @@ export const MarketHome: React.FC = () => {
           className="market-home-body"
           style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 18, alignItems: 'start' }}
         >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 18, minWidth: 0 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 24, minWidth: 0 }}>
             <MarketSnapshot />
+            <ValuationTable />
+            <PopularScreens />
+            <ToolsShortcuts />
           </div>
           <div className="market-home-rail" style={{ position: 'sticky', top: 12 }}>
             <RightRail />

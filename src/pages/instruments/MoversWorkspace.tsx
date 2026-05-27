@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { BookmarkCheck, ChevronLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import { FilterRail } from '../../components/quant/FilterRail';
@@ -20,6 +20,10 @@ function loadPinned(): string[] {
   try { return JSON.parse(localStorage.getItem(PINNED_KEY) ?? '[]'); } catch { return []; }
 }
 function savePinned(syms: string[]) { localStorage.setItem(PINNED_KEY, JSON.stringify(syms)); }
+const VALID_TABS: DiscoveryTab[] = [
+  'gainers', 'losers', 'active', 'unusual-volume', 'vol-expansion', 'gap-up', 'gap-down',
+  'mega-caps', 'sectors', 'etfs', 'fx', 'commodities', 'crypto', 'saved',
+];
 function loadTab(): DiscoveryTab {
   return (localStorage.getItem(TAB_KEY) as DiscoveryTab | null) ?? 'gainers';
 }
@@ -28,8 +32,13 @@ function loadTab(): DiscoveryTab {
 
 export const MoversWorkspace: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  const [activeTab, setActiveTab] = useState<DiscoveryTab>(loadTab);
+  const queryTab = searchParams.get('tab');
+  const initialTab = queryTab && VALID_TABS.includes(queryTab as DiscoveryTab)
+    ? (queryTab as DiscoveryTab)
+    : loadTab();
+  const [activeTab, setActiveTab] = useState<DiscoveryTab>(initialTab);
   const [pinned, setPinned]       = useState<string[]>(loadPinned);
   const [selectedRow, setSelectedRow] = useState<ScreenerRow | null>(null);
 
@@ -39,7 +48,12 @@ export const MoversWorkspace: React.FC = () => {
     setActiveTab(tab);
     setSelectedRow(null);
     localStorage.setItem(TAB_KEY, tab);
-  }, []);
+    // Keep the URL clean once the user navigates within the workspace.
+    if (searchParams.has('tab')) {
+      searchParams.delete('tab');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   const addToSaved = useCallback((sym: string) => {
     const upper = sym.toUpperCase();

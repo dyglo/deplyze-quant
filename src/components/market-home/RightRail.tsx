@@ -5,7 +5,10 @@ import { useCompositeRegime, useRiskEnvironment } from '../../hooks/useAgentInte
 import { extractRiskLevel } from '../../services/agentService';
 import { fetchMarketMovers, type MarketMoverItem, type MoverType } from '../../services/marketService';
 import { RegimeStatusChip, RiskLevelChip } from '../quant/SystemAnalyzingState';
-import { fmtPct, deltaColor } from './format';
+import { Flag } from './Flag';
+import { ChangeCell } from './ChangeCell';
+import { WatchlistRail } from './WatchlistRail';
+import { symbolCountry } from './format';
 
 function moverSymbol(m: MarketMoverItem): string {
   return m.symbol ?? m.ticker ?? '';
@@ -16,7 +19,7 @@ function moverPct(m: MarketMoverItem): number {
 
 const RailCard: React.FC<{ title: string; children: React.ReactNode; action?: React.ReactNode }> = ({ title, children, action }) => (
   <section>
-    <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 8, marginBottom: 4, borderBottom: '2px solid var(--foreground)' }}>
+    <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
       <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--foreground)' }}>{title}</span>
       {action}
     </header>
@@ -100,11 +103,14 @@ const MoversCard: React.FC = () => {
                   onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'var(--muted)'; }}
                   onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
                 >
-                  <span style={{ minWidth: 0 }}>
-                    <span style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: 'var(--foreground)' }}>{sym}</span>
-                    <span style={{ display: 'block', fontSize: 9.5, color: 'var(--muted-foreground)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 130 }}>{m.name ?? m.companyName ?? ''}</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
+                    <Flag iso={symbolCountry(sym)} width={16} />
+                    <span style={{ minWidth: 0 }}>
+                      <span style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: 'var(--foreground)' }}>{sym}</span>
+                      <span style={{ display: 'block', fontSize: 9.5, color: 'var(--muted-foreground)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 120 }}>{m.name ?? m.companyName ?? ''}</span>
+                    </span>
                   </span>
-                  <span style={{ fontSize: 11.5, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: deltaColor(pct) }}>{fmtPct(pct)}</span>
+                  <ChangeCell changePercent={pct} />
                 </button>
               );
             })}
@@ -114,8 +120,9 @@ const MoversCard: React.FC = () => {
 };
 
 export const RightRail: React.FC = () => (
-  <aside style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+  <aside style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
     <RegimeCard />
+    <WatchlistRail />
     <MoversCard />
   </aside>
 );

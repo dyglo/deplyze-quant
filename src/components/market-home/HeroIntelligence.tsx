@@ -1,13 +1,16 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Sparkles, ArrowUpRight } from 'lucide-react';
-import { useNews } from '../../hooks/useMarket';
+import { useNews, useOHLCV } from '../../hooks/useMarket';
 import { useSWR } from '../../hooks/useSWR';
+import { Sparkline } from '../quant/Sparkline';
 import { useCompositeRegime, useRiskEnvironment } from '../../hooks/useAgentIntelligence';
-import { fetchHeroRail } from '../../services/marketHomeService';
+import { fetchHeroRail, type SnapshotRow } from '../../services/marketHomeService';
 import { extractRiskLevel } from '../../services/agentService';
 import { RegimeStatusChip, RiskLevelChip } from '../quant/SystemAnalyzingState';
-import { fmtPrice, fmtPct, deltaColor } from './format';
+import { fmtPrice, stripMarkdown, symbolCountry } from './format';
+import { Flag } from './Flag';
+import { ChangeCell } from './ChangeCell';
 import type { GatewayNewsItem } from '../../services/marketService';
 
 function timeAgo(ts: number): string {
@@ -20,7 +23,9 @@ function timeAgo(ts: number): string {
   return `${Math.floor(h / 24)}d ago`;
 }
 
-const NewsCard: React.FC<{ item: GatewayNewsItem; featured?: boolean }> = ({ item, featured }) => (
+const NewsCard: React.FC<{ item: GatewayNewsItem; featured?: boolean }> = ({ item, featured }) => {
+  const [imgOk, setImgOk] = useState(Boolean(item.image));
+  return (
   <a
     href={item.url}
     target="_blank"
@@ -32,16 +37,25 @@ const NewsCard: React.FC<{ item: GatewayNewsItem; featured?: boolean }> = ({ ite
       borderBottom: featured ? 'none' : '1px solid var(--border)',
     }}
   >
-    {item.image && (
+    {item.image && imgOk && (
       <div style={{
         width: featured ? '100%' : 72,
-        height: featured ? 188 : 54,
+        aspectRatio: featured ? '16 / 9' : undefined,
+        height: featured ? undefined : 54,
         flexShrink: 0,
         borderRadius: 8,
         overflow: 'hidden',
         background: 'var(--muted)',
       }}>
-        <img src={item.image} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        <img
+          src={item.image}
+          alt=""
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          decoding="async"
+          onError={() => setImgOk(false)}
+          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+        />
       </div>
     )}
     <div style={{ minWidth: 0 }}>
@@ -58,14 +72,15 @@ const NewsCard: React.FC<{ item: GatewayNewsItem; featured?: boolean }> = ({ ite
         overflow: 'hidden',
       }}>{item.headline}</p>
       {featured && item.summary && (
-        <p style={{ margin: '7px 0 0', fontSize: 13, lineHeight: 1.5, color: 'var(--muted-foreground)', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{item.summary}</p>
+        <p style={{ margin: '7px 0 0', fontSize: 13, lineHeight: 1.5, color: 'var(--muted-foreground)', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{stripMarkdown(item.summary)}</p>
       )}
       <div style={{ marginTop: 6, fontSize: 10, color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
         {item.source}{item.publishedAt ? ` · ${timeAgo(item.publishedAt)}` : ''}
       </div>
     </div>
   </a>
-);
+  );
+};
 
 const FeaturedIntelligence: React.FC = () => {
   const navigate = useNavigate();
@@ -83,7 +98,8 @@ const FeaturedIntelligence: React.FC = () => {
       style={{
         textAlign: 'left', width: '100%', cursor: 'pointer',
         background: 'color-mix(in srgb, var(--primary) 7%, transparent)',
-        borderLeft: '3px solid var(--primary)',
+        border: '1px solid color-mix(in srgb, var(--primary) 18%, var(--border))',
+        borderRadius: 8,
         padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 9,
       }}
     >
@@ -99,11 +115,43 @@ const FeaturedIntelligence: React.FC = () => {
       </div>
       <p style={{ margin: 0, fontSize: 13, lineHeight: 1.55, color: 'var(--foreground)' }}>
         {summary
-          ? summary
+          ? stripMarkdown(summary)
           : 'Composite regime and risk-environment intelligence is recalculating. Cross-asset signals will appear here as the agents publish their latest reads.'}
       </p>
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 600, color: 'var(--primary)' }}>
         Open Macro Regime Desk <ArrowUpRight size={12} />
+      </span>
+    </button>
+  );
+};
+
+const HeroRailRow: React.FC<{ row: SnapshotRow; onOpen: () => void }> = ({ row: r, onOpen }) => {
+  const { data: ohlcv } = useOHLCV(r.ok ? r.symbol : null, '1day', 30);
+  const spark = (ohlcv?.bars ?? []).map((b) => b.close).filter((c) => Number.isFinite(c));
+  const sparkColor = r.changePercent > 0 ? '#4E6040' : r.changePercent < 0 ? 'var(--primary)' : 'var(--muted-foreground)';
+
+  return (
+    <button
+      type="button"
+      disabled={!r.ok}
+      onClick={r.ok ? onOpen : undefined}
+      className="ds-transition-fast"
+      style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+        width: '100%', padding: '6px 4px', background: 'transparent', border: 'none',
+        borderBottom: '1px solid var(--border)', textAlign: 'left', cursor: r.ok ? 'pointer' : 'default',
+      }}
+      onMouseEnter={(e) => { if (r.ok) (e.currentTarget as HTMLElement).style.background = 'var(--muted)'; }}
+      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+    >
+      <span style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
+        <Flag iso={symbolCountry(r.symbol)} width={16} />
+        <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--foreground)' }}>{r.symbol}</span>
+      </span>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        {spark.length > 1 && <Sparkline values={spark} width={48} height={18} strokeWidth={1.1} color={sparkColor} />}
+        <span style={{ fontSize: 11.5, fontVariantNumeric: 'tabular-nums', color: 'var(--foreground)' }}>{r.ok ? fmtPrice(r.price) : '—'}</span>
+        <ChangeCell changePercent={r.changePercent} ok={r.ok} />
       </span>
     </button>
   );
@@ -116,7 +164,7 @@ const HeroRail: React.FC = () => {
 
   return (
     <div>
-      <div style={{ padding: '0 0 8px', borderBottom: '2px solid var(--foreground)', marginBottom: 4, fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--foreground)' }}>
+      <div style={{ marginBottom: 6, fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--foreground)' }}>
         Markets Now
       </div>
       <div>
@@ -124,31 +172,54 @@ const HeroRail: React.FC = () => {
           ? Array.from({ length: 8 }).map((_, i) => (
               <div key={i} style={{ height: 34, margin: '6px 0', borderRadius: 6, background: 'var(--muted)', animation: 'pulse 1.8s infinite' }} />
             ))
-          : rows.map((r) => {
-              const color = deltaColor(r.changePercent);
-              return (
-                <button
-                  key={r.symbol}
-                  type="button"
-                  disabled={!r.ok}
-                  onClick={r.ok ? () => navigate(`/instruments/${encodeURIComponent(r.symbol)}`) : undefined}
-                  className="ds-transition-fast"
-                  style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
-                    width: '100%', padding: '7px 4px', background: 'transparent', border: 'none',
-                    borderBottom: '1px solid var(--border)', textAlign: 'left', cursor: r.ok ? 'pointer' : 'default',
-                  }}
-                  onMouseEnter={(e) => { if (r.ok) (e.currentTarget as HTMLElement).style.background = 'var(--muted)'; }}
-                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
-                >
-                  <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--foreground)' }}>{r.symbol}</span>
-                  <span style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                    <span style={{ fontSize: 11.5, fontVariantNumeric: 'tabular-nums', color: 'var(--foreground)' }}>{r.ok ? fmtPrice(r.price) : '—'}</span>
-                    <span style={{ fontSize: 11, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color, minWidth: 56, textAlign: 'right' }}>{r.ok ? fmtPct(r.changePercent) : '—'}</span>
-                  </span>
-                </button>
-              );
-            })}
+          : rows.map((r) => <HeroRailRow key={r.symbol} row={r} onOpen={() => navigate(`/instruments/${encodeURIComponent(r.symbol)}`)} />)}
+      </div>
+    </div>
+  );
+};
+
+const NEWS_TABS: { id: 'general' | 'forex' | 'crypto' | 'merger'; label: string }[] = [
+  { id: 'general', label: 'Latest' },
+  { id: 'forex',   label: 'Forex' },
+  { id: 'crypto',  label: 'Crypto' },
+  { id: 'merger',  label: 'M&A' },
+];
+
+const TabbedHeadlines: React.FC = () => {
+  const [cat, setCat] = useState<'general' | 'forex' | 'crypto' | 'merger'>('general');
+  const { data, loading } = useNews({ category: cat, limit: 6 });
+  // For the default tab, skip the first item (it is the featured story on the left).
+  const items = (data ?? []).slice(cat === 'general' ? 1 : 0, cat === 'general' ? 5 : 4);
+
+  return (
+    <div>
+      <div role="tablist" style={{ display: 'flex', gap: 4, marginBottom: 6 }}>
+        {NEWS_TABS.map((t) => {
+          const active = t.id === cat;
+          return (
+            <button
+              key={t.id}
+              role="tab"
+              aria-selected={active}
+              onClick={() => setCat(t.id)}
+              style={{
+                fontSize: 10.5, fontWeight: active ? 700 : 500, padding: '3px 9px', borderRadius: 999,
+                border: 'none', cursor: 'pointer',
+                background: active ? 'color-mix(in srgb, var(--primary) 12%, transparent)' : 'transparent',
+                color: active ? 'var(--primary)' : 'var(--muted-foreground)',
+              }}
+            >
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
+      <div>
+        {loading && items.length === 0
+          ? Array.from({ length: 3 }).map((_, i) => <div key={i} style={{ height: 44, margin: '8px 0', borderRadius: 6, background: 'var(--muted)', animation: 'pulse 1.8s infinite' }} />)
+          : items.length === 0
+          ? <p className="ds-caption" style={{ color: 'var(--muted-foreground)', padding: '10px 0' }}>No headlines in this category right now.</p>
+          : items.map((item) => <NewsCard key={item.id} item={item} />)}
       </div>
     </div>
   );
@@ -158,7 +229,6 @@ export const HeroIntelligence: React.FC = () => {
   const { data: news, loading } = useNews({ category: 'general', limit: 7 });
   const items = news ?? [];
   const featured = items[0];
-  const rest = items.slice(1, 5);
 
   return (
     <div style={{
@@ -181,16 +251,10 @@ export const HeroIntelligence: React.FC = () => {
         )}
       </div>
 
-      {/* Center: AI summary + secondary headlines */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {/* Center: AI summary + tabbed headlines */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         <FeaturedIntelligence />
-        <div>
-          {loading && rest.length === 0
-            ? Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} style={{ height: 44, margin: '8px 0', borderRadius: 6, background: 'var(--muted)', animation: 'pulse 1.8s infinite' }} />
-              ))
-            : rest.map((item) => <NewsCard key={item.id} item={item} />)}
-        </div>
+        <TabbedHeadlines />
       </div>
 
       {/* Right: compact market rail */}

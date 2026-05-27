@@ -4,7 +4,7 @@ import { FileText, GitBranch } from 'lucide-react';
 import { useSWR } from '../../hooks/useSWR';
 import { SectionCard } from './SectionCard';
 import { fetchLatestBriefings, fetchEmergingNarratives } from '../../services/v3p2Service';
-import { tsValue, relTime } from './format';
+import { tsValue, relTime, stripMarkdown } from './format';
 
 const Empty: React.FC<{ msg: string }> = ({ msg }) => (
   <p className="ds-caption" style={{ color: 'var(--muted-foreground)', padding: '14px 2px' }}>{msg}</p>
@@ -21,7 +21,7 @@ const BriefingsBlock: React.FC = () => {
   const items = (data ?? []).slice(0, 4);
 
   return (
-    <div>
+    <div style={{ minWidth: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--muted-foreground)', marginBottom: 8 }}>
         <FileText size={12} /> Latest Briefings
       </div>
@@ -41,10 +41,10 @@ const BriefingsBlock: React.FC = () => {
                 onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
               >
                 <span style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                  <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--foreground)', display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{b.title}</span>
+                  <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--foreground)', minWidth: 0, display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{stripMarkdown(b.title)}</span>
                   <span style={{ fontSize: 10, color: 'var(--muted-foreground)', flexShrink: 0 }}>{relTime(tsValue(b.observation_time))}</span>
                 </span>
-                <span style={{ fontSize: 11, color: 'var(--muted-foreground)', lineHeight: 1.4, marginTop: 3, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{b.summary}</span>
+                <span style={{ fontSize: 11, color: 'var(--muted-foreground)', lineHeight: 1.4, marginTop: 3, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{stripMarkdown(b.summary)}</span>
               </button>
             ))}
           </div>
@@ -59,7 +59,7 @@ const NarrativesBlock: React.FC = () => {
   const items = (data ?? []).slice(0, 5);
 
   return (
-    <div>
+    <div style={{ minWidth: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--muted-foreground)', marginBottom: 8 }}>
         <GitBranch size={12} /> Emerging Narratives
       </div>
@@ -79,10 +79,10 @@ const NarrativesBlock: React.FC = () => {
                 onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
               >
                 <span style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                  <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--foreground)', display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{n.title}</span>
+                  <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--foreground)', minWidth: 0, display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{stripMarkdown(n.title)}</span>
                   <span style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--primary)', flexShrink: 0 }}>{Math.round(n.confidence * 100)}%</span>
                 </span>
-                <span style={{ fontSize: 11, color: 'var(--muted-foreground)', lineHeight: 1.4, marginTop: 3, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{n.summary}</span>
+                <span style={{ fontSize: 11, color: 'var(--muted-foreground)', lineHeight: 1.4, marginTop: 3, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{stripMarkdown(n.summary)}</span>
               </button>
             ))}
           </div>
@@ -93,7 +93,7 @@ const NarrativesBlock: React.FC = () => {
 
 export const AnalysisOpinion: React.FC = () => (
   <SectionCard title="Analysis & Opinion" subtitle="Deplyze research intelligence">
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }} className="market-home-cal">
+    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 20 }} className="market-home-cal">
       <BriefingsBlock />
       <NarrativesBlock />
     </div>

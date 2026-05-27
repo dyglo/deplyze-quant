@@ -4,7 +4,7 @@ import { useSWR } from '../../hooks/useSWR';
 import { SectionCard } from './SectionCard';
 import { fetchEarningsCalendar } from '../../services/earningsService';
 import { fetchMacroObservations } from '../../services/v3p2Service';
-import { tsValue, fmtDayLabel } from './format';
+import { tsValue, fmtDayLabel, stripMarkdown } from './format';
 import type { EarningsEvent } from '../../lib/market-data/contracts';
 
 const Empty: React.FC<{ msg: string }> = ({ msg }) => (
@@ -26,7 +26,7 @@ const EarningsCalendarBlock: React.FC = () => {
     .slice(0, 8);
 
   return (
-    <div>
+    <div style={{ minWidth: 0 }}>
       <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--muted-foreground)', marginBottom: 8 }}>
         Upcoming Earnings
       </div>
@@ -69,7 +69,7 @@ const MacroReleasesBlock: React.FC = () => {
   const items = (data ?? []).slice(0, 6);
 
   return (
-    <div>
+    <div style={{ minWidth: 0 }}>
       <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--muted-foreground)', marginBottom: 8 }}>
         Recent Macro Releases
       </div>
@@ -91,11 +91,11 @@ const MacroReleasesBlock: React.FC = () => {
                 onMouseEnter={(ev) => { (ev.currentTarget as HTMLElement).style.background = 'var(--muted)'; }}
                 onMouseLeave={(ev) => { (ev.currentTarget as HTMLElement).style.background = 'transparent'; }}
               >
-                <span style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                  <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--foreground)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.title}</span>
+                <span style={{ display: 'flex', justifyContent: 'space-between', gap: 8, minWidth: 0 }}>
+                  <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--foreground)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{stripMarkdown(m.title)}</span>
                   <span style={{ fontSize: 10, color: 'var(--muted-foreground)', flexShrink: 0 }}>{fmtDayLabel(tsValue(m.observation_time))}</span>
                 </span>
-                <span style={{ display: 'block', fontSize: 10.5, color: 'var(--muted-foreground)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 2 }}>{m.summary}</span>
+                <span style={{ display: 'block', fontSize: 10.5, color: 'var(--muted-foreground)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 2 }}>{stripMarkdown(m.summary)}</span>
               </button>
             ))}
           </div>
@@ -106,7 +106,7 @@ const MacroReleasesBlock: React.FC = () => {
 
 export const CalendarSection: React.FC = () => (
   <SectionCard title="Calendar" subtitle="Earnings & macro events">
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }} className="market-home-cal">
+    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 20 }} className="market-home-cal">
       <EarningsCalendarBlock />
       <MacroReleasesBlock />
     </div>

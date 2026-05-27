@@ -7,7 +7,7 @@ import { useCompositeRegime, useRiskEnvironment } from '../../hooks/useAgentInte
 import { fetchHeroRail } from '../../services/marketHomeService';
 import { extractRiskLevel } from '../../services/agentService';
 import { RegimeStatusChip, RiskLevelChip } from '../quant/SystemAnalyzingState';
-import { fmtPrice, fmtPct, deltaColor } from './format';
+import { fmtPrice, fmtPct, deltaColor, stripMarkdown } from './format';
 import type { GatewayNewsItem } from '../../services/marketService';
 
 function timeAgo(ts: number): string {
@@ -58,7 +58,7 @@ const NewsCard: React.FC<{ item: GatewayNewsItem; featured?: boolean }> = ({ ite
         overflow: 'hidden',
       }}>{item.headline}</p>
       {featured && item.summary && (
-        <p style={{ margin: '7px 0 0', fontSize: 13, lineHeight: 1.5, color: 'var(--muted-foreground)', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{item.summary}</p>
+        <p style={{ margin: '7px 0 0', fontSize: 13, lineHeight: 1.5, color: 'var(--muted-foreground)', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{stripMarkdown(item.summary)}</p>
       )}
       <div style={{ marginTop: 6, fontSize: 10, color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
         {item.source}{item.publishedAt ? ` · ${timeAgo(item.publishedAt)}` : ''}
@@ -83,7 +83,8 @@ const FeaturedIntelligence: React.FC = () => {
       style={{
         textAlign: 'left', width: '100%', cursor: 'pointer',
         background: 'color-mix(in srgb, var(--primary) 7%, transparent)',
-        borderLeft: '3px solid var(--primary)',
+        border: '1px solid color-mix(in srgb, var(--primary) 18%, var(--border))',
+        borderRadius: 8,
         padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 9,
       }}
     >
@@ -99,7 +100,7 @@ const FeaturedIntelligence: React.FC = () => {
       </div>
       <p style={{ margin: 0, fontSize: 13, lineHeight: 1.55, color: 'var(--foreground)' }}>
         {summary
-          ? summary
+          ? stripMarkdown(summary)
           : 'Composite regime and risk-environment intelligence is recalculating. Cross-asset signals will appear here as the agents publish their latest reads.'}
       </p>
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 600, color: 'var(--primary)' }}>

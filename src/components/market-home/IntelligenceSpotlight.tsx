@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Sparkles } from 'lucide-react';
 import { useAgentOutputs } from '../../hooks/useAgentIntelligence';
 import { SectionCard } from './SectionCard';
-import { relTime } from './format';
+import { relTime, stripMarkdown } from './format';
 import { AGENT_DOMAIN_LABELS } from '../../types/agents';
 import type { AgentOutput, AgentSeverity } from '../../types/agents';
 
@@ -23,25 +23,26 @@ const Card: React.FC<{ o: AgentOutput }> = ({ o }) => {
       onClick={() => navigate(`/artifacts/${encodeURIComponent(o.artifact_id)}`)}
       className="ds-transition-fast"
       style={{
-        display: 'flex', flexDirection: 'column', gap: 7, textAlign: 'left',
+        display: 'flex', flexDirection: 'column', gap: 7, textAlign: 'left', minWidth: 0,
         padding: '12px 13px', borderRadius: 8, border: '1px solid var(--border)',
-        borderLeft: `3px solid ${sevColor[sev]}`, background: 'transparent', cursor: 'pointer',
+        background: 'transparent', cursor: 'pointer',
       }}
       onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'color-mix(in srgb, var(--primary) 4%, transparent)'; }}
       onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-        <span style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: sevColor[sev] }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: sevColor[sev] }}>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: sevColor[sev], flexShrink: 0 }} />
           {AGENT_DOMAIN_LABELS[o.domain] ?? o.domain}
         </span>
         <span style={{ fontSize: 9.5, color: 'var(--muted-foreground)' }}>{relTime(o.generated_at)}</span>
       </div>
       <p style={{ margin: 0, fontSize: 12.5, fontWeight: 700, lineHeight: 1.3, color: 'var(--foreground)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-        {o.title ?? 'Intelligence observation'}
+        {stripMarkdown(o.title) || 'Intelligence observation'}
       </p>
       {o.summary && (
         <p style={{ margin: 0, fontSize: 11.5, lineHeight: 1.45, color: 'var(--muted-foreground)', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-          {o.summary}
+          {stripMarkdown(o.summary)}
         </p>
       )}
       {o.symbols.length > 0 && (

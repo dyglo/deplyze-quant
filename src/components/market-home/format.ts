@@ -34,6 +34,20 @@ export function fmtDayLabel(iso: string | null): string {
   return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
+/** Strip common markdown emphasis/inline markers so summaries read as plain text. */
+export function stripMarkdown(s: string | null | undefined): string {
+  if (!s) return '';
+  return s
+    .replace(/\*\*(.+?)\*\*/g, '$1')   // bold
+    .replace(/\*(.+?)\*/g, '$1')        // italic
+    .replace(/__(.+?)__/g, '$1')        // bold (underscore)
+    .replace(/`([^`]+)`/g, '$1')        // inline code
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // links → text
+    .replace(/[*_`#>]/g, '')            // stray markers
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export function relTime(iso: string | null): string {
   if (!iso) return '';
   const d = new Date(iso).getTime();

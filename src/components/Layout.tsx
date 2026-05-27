@@ -179,13 +179,14 @@ const SidebarInner: React.FC<{ signOut: () => void; user: any; profile: any }> =
       <SidebarHeader className="px-3 py-3" style={{ borderBottom: '1px solid var(--sidebar-border)' }}>
         {collapsed ? (
           <div className="flex flex-col items-center gap-3.5 py-1">
-            <div
+            <Link
+              to="/"
               className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
               style={{ background: 'var(--primary)', color: 'var(--primary-foreground)' }}
-              title="Deplyze Quant"
+              title="Deplyze Quant — Market Home"
             >
               <Activity size={14} />
-            </div>
+            </Link>
             
             <div 
               className="w-6 h-6 rounded bg-light border border-divider flex items-center justify-center text-[10px] font-semibold text-secondary-foreground cursor-pointer hover:bg-light-hover" 
@@ -197,8 +198,8 @@ const SidebarInner: React.FC<{ signOut: () => void; user: any; profile: any }> =
           </div>
         ) : (
           <div className="flex flex-col gap-2.5 px-1 relative">
-            {/* Logo Row */}
-            <div className="flex items-center gap-2 px-0.5">
+            {/* Logo Row → Market Home */}
+            <Link to="/" className="flex items-center gap-2 px-0.5" style={{ textDecoration: 'none' }} title="Deplyze Quant — Market Home">
               <div
                 className="w-6 h-6 rounded-md flex items-center justify-center shrink-0"
                 style={{ background: 'var(--primary)', color: 'var(--primary-foreground)' }}
@@ -210,7 +211,7 @@ const SidebarInner: React.FC<{ signOut: () => void; user: any; profile: any }> =
                   Deplyze Quant
                 </p>
               </div>
-            </div>
+            </Link>
 
             {/* Workspace Select Menu */}
             <div className="relative">

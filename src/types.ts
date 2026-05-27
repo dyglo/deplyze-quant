@@ -116,6 +116,7 @@ export interface Quote {
   low: number;
   open: number;
   previousClose: number;
+  volume?: number;
   ts: number;            // unix ms
   source: ProviderId;
 }

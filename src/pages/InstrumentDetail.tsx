@@ -20,6 +20,7 @@ import { ArtifactDetailDrawerBody } from '../components/quant/ArtifactDetailDraw
 import { useDrawer } from '../components/quant/DataDrawer';
 import { closes, logReturns, annualisedVol, maxDrawdown, trendLabel } from '../lib/quant';
 import { createInstrumentSnapshot } from '../services/artifactService';
+import type { FreshnessStatus } from '../services/gatewayClient';
 import { useWorkspace } from '../components/WorkspaceContext';
 import { useAuth } from '../components/AuthProvider';
 
@@ -59,7 +60,7 @@ const AIAnalysisSection: React.FC<{
   loading: boolean;
   error: Error | null;
   narrative: string | null | undefined;
-  status: string;
+  status: FreshnessStatus;
   fetchedAt: number | null;
   onRetry: () => void;
 }> = ({ loading, error, narrative, status, fetchedAt, onRetry }) => (

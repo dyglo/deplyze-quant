@@ -127,7 +127,8 @@ export async function fetchRiskEnvironment(): Promise<AgentOutput | null> {
 export function extractRegimeLabel(output: AgentOutput | null): string | null {
   if (!output?.evidence) return null;
   const ev = output.evidence as Record<string, unknown>;
-  return (ev.composite_regime as string) ?? null;
+  const value = ev.composite_regime;
+  return typeof value === 'string' ? value : null;
 }
 
 /**
@@ -136,5 +137,6 @@ export function extractRegimeLabel(output: AgentOutput | null): string | null {
 export function extractRiskLevel(output: AgentOutput | null): string | null {
   if (!output?.evidence) return null;
   const ev = output.evidence as Record<string, unknown>;
-  return (ev.risk_level as string) ?? null;
+  const value = ev.risk_level;
+  return typeof value === 'string' ? value : null;
 }

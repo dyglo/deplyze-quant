@@ -32,6 +32,7 @@ import { InstrumentStatsStrip } from '../components/quant/InstrumentStatsStrip';
 import { InstrumentOHLCVSection } from '../components/quant/InstrumentOHLCVSection';
 import { InstrumentOverviewPanel } from '../components/quant/InstrumentOverviewPanel';
 import { InstrumentEarningsChart } from '../components/quant/InstrumentEarningsChart';
+import { InstrumentTechnicalAnalysis } from '../components/quant/InstrumentTechnicalAnalysis';
 import { ArtifactDetailDrawerBody } from '../components/quant/ArtifactDetailDrawerBody';
 import { useDrawer } from '../components/quant/DataDrawer';
 import { closes, logReturns, annualisedVol, maxDrawdown, trendLabel } from '../lib/quant';
@@ -254,7 +255,11 @@ export const InstrumentDetail: React.FC = () => {
         currentPrice={q?.price}
       />
 
-      {/* ── 5. AI ANALYSIS ──────────────────────────────────────────── */}
+      {/* ── 5. TECHNICAL ANALYSIS ───────────────────────────────────── */}
+      <SectionDivider title="Technical Analysis" />
+      <InstrumentTechnicalAnalysis symbol={sym} />
+
+      {/* ── 5b. AI ANALYSIS ─────────────────────────────────────────── */}
       <SectionDivider title="AI Analysis" />
       <AIAnalysis
         loading={intel.loading}

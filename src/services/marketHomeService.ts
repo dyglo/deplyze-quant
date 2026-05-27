@@ -151,3 +151,35 @@ export async function fetchHeroRail(): Promise<SnapshotRow[]> {
     normalize(bySymbol.get(u.symbol) ?? { symbol: u.symbol, ok: false }, nameMap),
   );
 }
+
+// ─── World indices (flagged) ───────────────────────────────────────────────────
+// Country-flagged index proxies (ETFs), mirroring the reference's World Indices
+// table. ISO-2 country codes drive flag emoji rendering.
+
+export interface FlaggedRow extends SnapshotRow { country?: string }
+
+export const WORLD_INDICES: Array<{ symbol: string; name: string; country: string }> = [
+  { symbol: 'DIA',  name: 'Dow Jones',     country: 'US' },
+  { symbol: 'SPY',  name: 'S&P 500',        country: 'US' },
+  { symbol: 'QQQ',  name: 'Nasdaq 100',     country: 'US' },
+  { symbol: 'IWM',  name: 'Russell 2000',   country: 'US' },
+  { symbol: 'EWG',  name: 'DAX (Germany)',  country: 'DE' },
+  { symbol: 'EWU',  name: 'FTSE (UK)',      country: 'GB' },
+  { symbol: 'EWJ',  name: 'Nikkei (Japan)', country: 'JP' },
+  { symbol: 'FXI',  name: 'China Large-Cap', country: 'CN' },
+  { symbol: 'EWA',  name: 'ASX (Australia)', country: 'AU' },
+  { symbol: 'EWC',  name: 'TSX (Canada)',   country: 'CA' },
+];
+
+export const LEADING_STOCKS = UNIVERSE.stocks;
+
+export async function fetchWorldIndices(): Promise<FlaggedRow[]> {
+  const nameMap = Object.fromEntries(WORLD_INDICES.map((u) => [u.symbol, u.name]));
+  const countryMap = Object.fromEntries(WORLD_INDICES.map((u) => [u.symbol, u.country]));
+  const rows = await fetchQuotes(WORLD_INDICES.map((u) => u.symbol));
+  const bySymbol = new Map(rows.map((r) => [r.symbol, r]));
+  return WORLD_INDICES.map((u) => ({
+    ...normalize(bySymbol.get(u.symbol) ?? { symbol: u.symbol, ok: false }, nameMap),
+    country: countryMap[u.symbol],
+  }));
+}

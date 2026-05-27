@@ -6,9 +6,12 @@ import { ValuationTable } from '../components/market-home/ValuationTable';
 import { CalendarSection } from '../components/market-home/CalendarSection';
 import { IntelligenceSpotlight } from '../components/market-home/IntelligenceSpotlight';
 import { AnalysisOpinion } from '../components/market-home/AnalysisOpinion';
+import { MarketDataGrid } from '../components/market-home/MarketDataGrid';
+import { PortfolioInsights } from '../components/market-home/PortfolioInsights';
 import { PopularScreens } from '../components/market-home/PopularScreens';
 import { ToolsShortcuts } from '../components/market-home/ToolsShortcuts';
 import { RightRail } from '../components/market-home/RightRail';
+import { SectionBoundary } from '../components/market-home/SectionBoundary';
 import { Disclaimer } from '../components/quant/Disclaimer';
 
 function greeting(): string {
@@ -46,23 +49,25 @@ export const MarketHome: React.FC = () => {
       </header>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-        <HeroIntelligence />
+        <SectionBoundary label="Market intelligence"><HeroIntelligence /></SectionBoundary>
 
         <div
           className="market-home-body"
           style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 18, alignItems: 'start' }}
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: 24, minWidth: 0 }}>
-            <MarketSnapshot />
-            <ValuationTable />
-            <CalendarSection />
-            <IntelligenceSpotlight />
-            <AnalysisOpinion />
-            <PopularScreens />
-            <ToolsShortcuts />
+            <SectionBoundary label="Market snapshot"><MarketSnapshot /></SectionBoundary>
+            <SectionBoundary label="Your portfolio"><PortfolioInsights /></SectionBoundary>
+            <SectionBoundary label="Relative valuation"><ValuationTable /></SectionBoundary>
+            <SectionBoundary label="Calendar"><CalendarSection /></SectionBoundary>
+            <SectionBoundary label="Intelligence spotlight"><IntelligenceSpotlight /></SectionBoundary>
+            <SectionBoundary label="Analysis & opinion"><AnalysisOpinion /></SectionBoundary>
+            <SectionBoundary label="Market data"><MarketDataGrid /></SectionBoundary>
+            <SectionBoundary label="Popular screens"><PopularScreens /></SectionBoundary>
+            <SectionBoundary label="Tools"><ToolsShortcuts /></SectionBoundary>
           </div>
           <div className="market-home-rail" style={{ position: 'sticky', top: 12 }}>
-            <RightRail />
+            <SectionBoundary label="Right rail"><RightRail /></SectionBoundary>
           </div>
         </div>
       </div>

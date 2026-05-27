@@ -16,6 +16,7 @@ import * as polygon from '../providers/polygon';
 import * as finnhub from '../providers/finnhub';
 import * as td from '../providers/twelvedata';
 import * as eodhd from '../providers/eodhd';
+import * as yahoo from '../providers/yahoo';
 import * as fmp from '../providers/fmp';
 import * as serper from '../providers/serper';
 import * as stooq from '../providers/stooq';
@@ -286,6 +287,9 @@ router.get('/ohlcv/:symbol(*)', async (req, res, next) => {
           if (bars.length < SPARSE_MIN) throw new Error(`EODHD: sparse result (${bars.length}/${outputsize} bars)`);
           return bars;
         } : undefined,
+        yahoo: isDaily && yahoo.isIndexSupported(symbol)
+          ? async (signal) => yahoo.getIndexDailyBars(symbol, outputsize, signal)
+          : undefined,
         twelve_data: async (signal) => {
           const bars = await td.getTimeSeries(td.normalizeTdSymbol(symbol), tdInterval, outputsize, signal);
           if (bars.length < SPARSE_MIN) throw new Error(`Twelve Data: sparse result (${bars.length}/${outputsize} bars)`);

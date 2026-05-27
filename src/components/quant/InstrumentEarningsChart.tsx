@@ -1,0 +1,140 @@
+import React from 'react';
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, Cell, ReferenceLine,
+} from 'recharts';
+import type { EarningsRecord } from '../../services/instrumentService';
+
+interface ChartDatum {
+  date: string;
+  actual: number | null;
+  estimate: number | null;
+  surprisePct: number | null;
+  beat: boolean;
+}
+
+function fmtDate(dateStr: string): string {
+  const d = new Date(dateStr);
+  return `${d.toLocaleString('default', { month: 'short' })} '${String(d.getFullYear()).slice(2)}`;
+}
+
+const CustomTooltip: React.FC<{
+  active?: boolean;
+  payload?: Array<{ name: string; value: number | null; color: string }>;
+  label?: string;
+}> = ({ active, payload, label }) => {
+  if (!active || !payload?.length) return null;
+  const actual = payload.find(p => p.name === 'actual')?.value;
+  const estimate = payload.find(p => p.name === 'estimate')?.value;
+  const surprisePct = payload[0] && (payload[0] as unknown as { payload: ChartDatum }).payload?.surprisePct;
+
+  return (
+    <div style={{
+      background: 'var(--card)', border: '1px solid var(--border)',
+      borderRadius: 6, padding: '8px 12px', fontSize: 11,
+    }}>
+      <div style={{ fontWeight: 600, marginBottom: 4, color: 'var(--muted-foreground)' }}>{label}</div>
+      {actual != null && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}>
+          <span style={{ color: 'var(--muted-foreground)' }}>Actual EPS</span>
+          <span style={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>${actual.toFixed(2)}</span>
+        </div>
+      )}
+      {estimate != null && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}>
+          <span style={{ color: 'var(--muted-foreground)' }}>Est. EPS</span>
+          <span style={{ fontVariantNumeric: 'tabular-nums' }}>${estimate.toFixed(2)}</span>
+        </div>
+      )}
+      {surprisePct != null && (
+        <div style={{
+          marginTop: 4, paddingTop: 4, borderTop: '1px solid var(--border)',
+          display: 'flex', justifyContent: 'space-between', gap: 16,
+        }}>
+          <span style={{ color: 'var(--muted-foreground)' }}>Surprise</span>
+          <span style={{
+            fontWeight: 700, fontVariantNumeric: 'tabular-nums',
+            color: surprisePct > 0 ? 'var(--ds-gain)' : 'var(--ds-loss)',
+          }}>
+            {surprisePct > 0 ? '+' : ''}{surprisePct.toFixed(1)}%
+          </span>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export const InstrumentEarningsChart: React.FC<{
+  earnings: EarningsRecord[];
+}> = ({ earnings }) => {
+  if (!earnings.length) return null;
+
+  const data: ChartDatum[] = earnings
+    .slice()
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((e) => ({
+      date: fmtDate(e.date),
+      actual: e.epsActual ?? null,
+      estimate: e.epsEstimate ?? null,
+      surprisePct: e.surprisePct ?? null,
+      beat: (e.surprisePct ?? 0) > 0,
+    }));
+
+  const allValues = data.flatMap(d => [d.actual, d.estimate]).filter((v): v is number => v != null);
+  const hasNegative = allValues.some(v => v < 0);
+
+  return (
+    <section className="ds-surface" style={{ padding: 16, borderRadius: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 14 }}>
+        <h2 className="ds-heading" style={{ margin: 0 }}>EPS History</h2>
+        <span className="ds-caption" style={{ color: 'var(--muted-foreground)' }}>
+          {data.length} quarters · actual vs estimate
+        </span>
+      </div>
+
+      <div style={{ width: '100%', height: 180 }}>
+        <ResponsiveContainer>
+          <BarChart data={data} margin={{ top: 4, right: 4, left: 0, bottom: 0 }} barGap={2} barCategoryGap="30%">
+            <CartesianGrid stroke="var(--border)" strokeDasharray="2 4" vertical={false} />
+            <XAxis dataKey="date" stroke="var(--muted-foreground)" fontSize={10} tickLine={false} axisLine={false} />
+            <YAxis
+              stroke="var(--muted-foreground)" fontSize={10} tickLine={false} axisLine={false}
+              width={36} tickFormatter={(v) => `$${v}`}
+            />
+            {hasNegative && <ReferenceLine y={0} stroke="var(--border)" />}
+            <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0,0,0,0.04)' }} />
+            <Bar dataKey="estimate" name="estimate" fill="var(--muted)" radius={[2, 2, 0, 0]}>
+              {data.map((_, i) => (
+                <Cell key={i} fill="var(--border)" />
+              ))}
+            </Bar>
+            <Bar dataKey="actual" name="actual" radius={[2, 2, 0, 0]}>
+              {data.map((d, i) => (
+                <Cell
+                  key={i}
+                  fill={d.beat ? 'var(--ds-gain)' : d.actual != null && d.estimate != null ? 'var(--ds-loss)' : 'var(--muted-foreground)'}
+                  fillOpacity={0.85}
+                />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+
+      <div style={{ display: 'flex', gap: 14, marginTop: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <div style={{ width: 10, height: 10, borderRadius: 2, background: 'var(--border)' }} />
+          <span className="ds-caption" style={{ fontSize: 10, color: 'var(--muted-foreground)' }}>Estimate</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <div style={{ width: 10, height: 10, borderRadius: 2, background: 'var(--ds-gain)' }} />
+          <span className="ds-caption" style={{ fontSize: 10, color: 'var(--muted-foreground)' }}>Beat</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <div style={{ width: 10, height: 10, borderRadius: 2, background: 'var(--ds-loss)' }} />
+          <span className="ds-caption" style={{ fontSize: 10, color: 'var(--muted-foreground)' }}>Miss</span>
+        </div>
+      </div>
+    </section>
+  );
+};

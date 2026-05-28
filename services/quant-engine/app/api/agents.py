@@ -19,11 +19,12 @@ from datetime import datetime, timezone
 from typing import Optional, List
 
 import structlog
-from fastapi import APIRouter, BackgroundTasks, Query, Path, Body
+from fastapi import APIRouter, BackgroundTasks, Query, Path, Body, Response
 from pydantic import BaseModel
 from google.cloud import bigquery
 
 from app.agents.orchestrator import run_all, run_one, ensure_agent_outputs_table
+from app.agents import run_ledger
 from app.agents.registry import AGENT_REGISTRY, REGISTRY_BY_ID
 from app.agents import reasoning as reasoning_engine
 from app.agents import historical_analog as analog_engine
@@ -42,6 +43,12 @@ router = APIRouter()
 class AgentRunRequest(BaseModel):
     portfolio_id: Optional[str] = None
     dry_run: bool = False
+    # Synchronous by default: the run executes inside the request so Cloud Run
+    # keeps CPU allocated for its whole duration and Cloud Scheduler waits for
+    # (and can retry on) the result. `background=true` opts into the legacy
+    # fire-and-forget path, which has no execution guarantee — manual use only.
+    background: bool = False
+    trigger: Optional[str] = None   # ledger label: scheduled | manual | full
 
 
 class AgentRunResponse(BaseModel):
@@ -50,59 +57,86 @@ class AgentRunResponse(BaseModel):
     message: str
 
 
+async def _ensure_tables() -> None:
+    """Ensure both the outputs table and the run ledger exist before a run."""
+    await ensure_agent_outputs_table()
+    run_ledger.ensure_table()
+
+
 # ─── POST /agents/run ────────────────────────────────────────────────────────
 
 @router.post("/run")
 async def trigger_full_run(
+    response: Response,
     background_tasks: BackgroundTasks,
     req: AgentRunRequest = Body(default_factory=AgentRunRequest),
 ):
-    run_id = str(uuid.uuid4())
     if req.dry_run:
-        return {"run_id": run_id, "status": "dry_run", "agents": [e.agent_id for e in AGENT_REGISTRY if e.trigger_type == "scheduled"]}
+        return {
+            "run_id": str(uuid.uuid4()),
+            "status": "dry_run",
+            "agents": [e.agent_id for e in AGENT_REGISTRY if e.trigger_type == "scheduled"],
+        }
 
-    background_tasks.add_task(_run_all_bg, run_id, req.portfolio_id)
-    return {"run_id": run_id, "status": "accepted", "message": "Full agent run started in background"}
+    await _ensure_tables()
+    trigger = req.trigger or "full"
+
+    if req.background:
+        run_id = str(uuid.uuid4())
+        background_tasks.add_task(_run_all_bg, req.portfolio_id, trigger)
+        return {"run_id": run_id, "status": "accepted", "message": "Full agent run started in background"}
+
+    # Synchronous: execute in-request so the run is durable and verifiable.
+    result = await run_all(portfolio_id=req.portfolio_id, trigger=trigger)
+    if result.get("failed"):
+        response.status_code = 500  # signal Cloud Scheduler to retry
+    return result
 
 
-async def _run_all_bg(run_id: str, portfolio_id: Optional[str]) -> None:
+async def _run_all_bg(portfolio_id: Optional[str], trigger: str) -> None:
     try:
-        await ensure_agent_outputs_table()
-        result = await run_all(portfolio_id=portfolio_id)
-        log.info("agents.full_run_complete", run_id=run_id, result=result)
+        result = await run_all(portfolio_id=portfolio_id, trigger=trigger)
+        log.info("agents.full_run_complete", result=result)
     except Exception as e:
-        log.error("agents.full_run_failed", run_id=run_id, error=str(e))
+        log.error("agents.full_run_failed", error=str(e))
 
 
 # ─── POST /agents/run/:agent_id ──────────────────────────────────────────────
 
 @router.post("/run/{agent_id}")
 async def trigger_single_agent(
+    response: Response,
     agent_id: str = Path(...),
     background_tasks: BackgroundTasks = None,
     req: AgentRunRequest = Body(default_factory=AgentRunRequest),
 ):
     if agent_id not in REGISTRY_BY_ID:
+        response.status_code = 404
         return {"error": f"Unknown agent_id: {agent_id}"}
     if req.dry_run:
         return {"agent_id": agent_id, "status": "dry_run"}
 
-    run_id = str(uuid.uuid4())
-    if background_tasks:
-        background_tasks.add_task(_run_one_bg, agent_id, run_id, req.portfolio_id)
+    await _ensure_tables()
+    trigger = req.trigger or "scheduled"
+
+    if req.background and background_tasks is not None:
+        run_id = str(uuid.uuid4())
+        background_tasks.add_task(_run_one_bg, agent_id, req.portfolio_id, trigger)
         return {"run_id": run_id, "status": "accepted", "agent_id": agent_id}
 
-    result = await run_one(agent_id=agent_id, portfolio_id=req.portfolio_id)
+    # Synchronous: execute in-request so the run is durable and verifiable.
+    result = await run_one(agent_id=agent_id, portfolio_id=req.portfolio_id, trigger=trigger)
+    if result.get("failed"):
+        response.status_code = 500  # signal Cloud Scheduler to retry
     return result
 
 
-async def _run_one_bg(agent_id: str, run_id: str, portfolio_id: Optional[str]) -> None:
+async def _run_one_bg(agent_id: str, portfolio_id: Optional[str], trigger: str) -> None:
     try:
-        await ensure_agent_outputs_table()
-        result = await run_one(agent_id=agent_id, portfolio_id=portfolio_id)
-        log.info("agents.single_run_complete", agent_id=agent_id, run_id=run_id, result=result)
+        result = await run_one(agent_id=agent_id, portfolio_id=portfolio_id, trigger=trigger)
+        log.info("agents.single_run_complete", agent_id=agent_id, result=result)
     except Exception as e:
-        log.error("agents.single_run_failed", agent_id=agent_id, run_id=run_id, error=str(e))
+        log.error("agents.single_run_failed", agent_id=agent_id, error=str(e))
 
 
 # ─── GET /agents/registry ────────────────────────────────────────────────────
@@ -248,6 +282,70 @@ async def get_status():
     except Exception as e:
         log.error("agents.status_query_failed", error=str(e))
         return {"date": today, "ran": [], "pending": [], "error": str(e)}
+
+
+# ─── GET /agents/runs ─────────────────────────────────────────────────────────
+
+@router.get("/runs")
+async def get_runs(
+    status: Optional[str] = Query(None, description="started|completed|completed_with_errors|failed"),
+    agent_id: Optional[str] = Query(None),
+    days: int = Query(default=2, ge=1, le=30),
+    limit: int = Query(default=50, ge=1, le=200),
+):
+    """Operational reporting over the durable run ledger (artifacts.agent_runs).
+
+    Returns the latest row per run_id (the terminal 'finish' row wins over the
+    'started' row). A run whose latest row is still 'started' was killed before
+    completing — surfaced here as the reliability signal.
+    """
+    table = fully_qualified(settings.BQ_DATASET_ARTIFACTS, "agent_runs")
+    wheres = ["run_date >= DATE_SUB(CURRENT_DATE(), INTERVAL @days DAY)"]
+    params = [
+        bigquery.ScalarQueryParameter("days", "INT64", days),
+        bigquery.ScalarQueryParameter("lim", "INT64", limit),
+    ]
+    if agent_id:
+        wheres.append("agent_id = @agent_id")
+        params.append(bigquery.ScalarQueryParameter("agent_id", "STRING", agent_id))
+    where_clause = " AND ".join(wheres)
+
+    # completed_at is non-null only on the finish row, so DESC (NULLs last) makes
+    # the terminal row win per run_id.
+    status_filter = ""
+    if status:
+        status_filter = "WHERE status = @status"
+        params.append(bigquery.ScalarQueryParameter("status", "STRING", status))
+
+    sql = f"""
+        WITH ranked AS (
+            SELECT *,
+                   ROW_NUMBER() OVER (
+                     PARTITION BY run_id ORDER BY completed_at DESC
+                   ) AS rn
+            FROM `{table}`
+            WHERE {where_clause}
+        )
+        SELECT run_id, agent_id, trigger, status, started_at, completed_at,
+               duration_ms, attempt, output_count, inserted, skipped,
+               portfolio_id, error, agent_results
+        FROM ranked
+        WHERE rn = 1
+        {status_filter}
+        ORDER BY started_at DESC
+        LIMIT @lim
+    """
+    try:
+        rows = run_query(sql, params)
+        runs = [dict(r) for r in rows]
+        return {
+            "runs": runs,
+            "count": len(runs),
+            "failed_count": sum(1 for r in runs if r.get("status") in ("failed", "started")),
+        }
+    except Exception as e:
+        log.error("agents.runs_query_failed", error=str(e))
+        return {"runs": [], "count": 0, "error": str(e)}
 
 
 # ─── GET /agents/reasoning ───────────────────────────────────────────────────

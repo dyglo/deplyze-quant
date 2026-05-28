@@ -793,3 +793,32 @@ PORTFOLIO_AWARENESS_SYNTHESIS = [
     S("lineage_id", "STRING", "REQUIRED"),
     S("is_test", "BOOL", "NULLABLE"),
 ]
+
+# ─── Agent run ledger (Stage 2 reliability) ──────────────────────────────────
+
+# Durable execution record for every agent invocation. Two rows are written per
+# run sharing the same run_id: one with status="started" at the beginning and
+# one terminal row ("completed" | "completed_with_errors" | "failed") at the end.
+# A started row with no terminal partner = a crashed / killed run (visibility
+# that FastAPI BackgroundTasks could never provide). Reporting reads the latest
+# row per run_id. Partitioned on run_date for cheap recent-window scans.
+
+AGENT_RUNS = [
+    S("run_id", "STRING", "REQUIRED"),
+    S("agent_id", "STRING", "REQUIRED"),      # specific agent_id, or "ALL" for a full run
+    S("trigger", "STRING", "NULLABLE"),       # scheduled | manual | full
+    S("status", "STRING", "REQUIRED"),        # started | completed | completed_with_errors | failed
+    S("phase", "STRING", "NULLABLE"),         # start | finish (which write produced this row)
+    S("started_at", "TIMESTAMP", "REQUIRED"),
+    S("completed_at", "TIMESTAMP", "NULLABLE"),
+    S("duration_ms", "INT64", "NULLABLE"),
+    S("attempt", "INT64", "NULLABLE"),        # in-process attempt index (0-based)
+    S("output_count", "INT64", "NULLABLE"),
+    S("inserted", "INT64", "NULLABLE"),
+    S("skipped", "INT64", "NULLABLE"),
+    S("portfolio_id", "STRING", "NULLABLE"),
+    S("error", "STRING", "NULLABLE"),
+    S("agent_results", "JSON", "NULLABLE"),   # per-agent {output_count, error} map for full runs
+    S("run_date", "DATE", "REQUIRED"),
+    S("is_test", "BOOL", "NULLABLE"),
+]

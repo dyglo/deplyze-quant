@@ -16,6 +16,19 @@ if [[ -z "$SERVICE_URL" || -z "$SA" ]]; then
   exit 1
 fi
 
+# Retry + deadline policy (Stage 2 reliability):
+#   - Agent runs now execute SYNCHRONOUSLY inside the request and return 5xx on
+#     failure, so Cloud Scheduler's retry policy actually retries failed runs.
+#   - --attempt-deadline gives the synchronous run room to complete (must be
+#     <= the Cloud Run request timeout; raise both together if a run needs more).
+RETRY_FLAGS=(
+  --max-retry-attempts=3
+  --min-backoff=30s
+  --max-backoff=300s
+  --max-doublings=3
+  --attempt-deadline=300s
+)
+
 create_or_update() {
   local name="$1" schedule="$2" path="$3" body="$4"
   echo "→ Ensuring scheduler: $name  [$schedule]"
@@ -30,7 +43,8 @@ create_or_update() {
       --message-body="$body" \
       --headers="Content-Type=application/json" \
       --oidc-service-account-email="$SA" \
-      --oidc-token-audience="$SERVICE_URL"
+      --oidc-token-audience="$SERVICE_URL" \
+      "${RETRY_FLAGS[@]}"
   else
     gcloud scheduler jobs create http "$name" \
       --project="$PROJECT" \
@@ -42,13 +56,16 @@ create_or_update() {
       --message-body="$body" \
       --headers="Content-Type=application/json" \
       --oidc-service-account-email="$SA" \
-      --oidc-token-audience="$SERVICE_URL"
+      --oidc-token-audience="$SERVICE_URL" \
+      "${RETRY_FLAGS[@]}"
   fi
 }
 
 # ── V4 Agent cadences ─────────────────────────────────────────────────────────
 # Each job hits POST /agents/run/{agent_id} on the quant-engine service.
-# The background task runs async and returns 202 immediately.
+# The run executes synchronously and returns 200 on success / 5xx on failure;
+# a 5xx triggers the retry policy above. Runs are recorded in artifacts.agent_runs
+# (query GET /agents/runs for status).
 
 # Earnings Agent — 06:30 ET weekdays (after EDGAR ingestor 06:00)
 create_or_update "v4-agent-earnings"    "30 6 * * 1-5"  "/agents/run/earnings_agent"    '{"dry_run":false}'

@@ -33,6 +33,7 @@ import type {
   Holding,
   PortfolioIntelligenceObservation,
   IntelligenceWatchlist,
+  Transaction,
 } from '../lib/portfolio/schemas';
 import { DEFAULT_BENCHMARK_ID } from '../lib/portfolio/benchmarks';
 
@@ -68,10 +69,18 @@ export async function createPortfolio(
     type?: Portfolio['type'];
     currency?: string;
     benchmarkId?: string;
+    additionalBenchmarkIds?: string[];
     isWatchlist?: boolean;
     tags?: string[];
+    startingCapital?: number;
+    cashBalance?: number;
+    riskProfile?: Portfolio['riskProfile'];
   }
 ): Promise<string> {
+  // Cash defaults to the funded capital when capital is set but cash is omitted.
+  const cashBalance =
+    params.cashBalance ?? (params.startingCapital != null ? params.startingCapital : null);
+
   const ref = await addDoc(collection(db, 'portfolios'), {
     uid,
     workspaceId,
@@ -81,9 +90,13 @@ export async function createPortfolio(
     status: 'active',
     currency: params.currency ?? 'USD',
     benchmarkId: params.benchmarkId ?? DEFAULT_BENCHMARK_ID,
-    additionalBenchmarkIds: [],
+    additionalBenchmarkIds: params.additionalBenchmarkIds ?? [],
     isWatchlist: params.isWatchlist ?? false,
     tags: params.tags ?? [],
+    startingCapital: params.startingCapital ?? null,
+    cashBalance,
+    realizedPnl: 0,
+    riskProfile: params.riskProfile ?? null,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
@@ -113,9 +126,13 @@ export async function archivePortfolio(portfolioId: string): Promise<void> {
 }
 
 export async function deletePortfolio(portfolioId: string): Promise<void> {
-  // Delete holdings subcollection first
+  // Delete subcollections first (holdings + transaction ledger)
   const holdingsSnap = await getDocs(collection(db, 'portfolios', portfolioId, 'holdings'));
   for (const d of holdingsSnap.docs) {
+    await deleteDoc(d.ref);
+  }
+  const txSnap = await getDocs(collection(db, 'portfolios', portfolioId, 'transactions'));
+  for (const d of txSnap.docs) {
     await deleteDoc(d.ref);
   }
   await deleteDoc(doc(db, 'portfolios', portfolioId));
@@ -177,6 +194,11 @@ export async function addHolding(
     conviction?: Holding['conviction'];
     tags?: string[];
     notes?: string;
+    status?: Holding['status'];
+    entryDate?: number;
+    targetWeight?: number;
+    realizedPnl?: number;
+    thesis?: string;
   }
 ): Promise<string> {
   const ref = await addDoc(collection(db, 'portfolios', portfolioId, 'holdings'), {
@@ -195,6 +217,11 @@ export async function addHolding(
     conviction: params.conviction ?? 'medium',
     tags: params.tags ?? [],
     notes: params.notes ?? '',
+    status: params.status ?? 'active',
+    entryDate: params.entryDate ?? null,
+    targetWeight: params.targetWeight ?? null,
+    realizedPnl: params.realizedPnl ?? 0,
+    thesis: params.thesis ?? '',
     addedAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
@@ -226,6 +253,7 @@ export async function getHoldings(portfolioId: string): Promise<Holding[]> {
     return {
       id: d.id,
       ...data,
+      status: data.status ?? 'active',
       addedAt: toMs(data.addedAt),
       updatedAt: toMs(data.updatedAt),
     } as Holding;
@@ -249,6 +277,7 @@ export function subscribeToHoldings(
         return {
           id: d.id,
           ...data,
+          status: data.status ?? 'active',
           addedAt: toMs(data.addedAt),
           updatedAt: toMs(data.updatedAt),
         } as Holding;
@@ -260,6 +289,90 @@ export function subscribeToHoldings(
       cb([]);
     },
   );
+}
+
+// ─── Transaction Ledger ────────────────────────────────────────────────────────
+// Storage layer only — the PR2 transaction engine consumes these writes to fold
+// holdings and mutate cash. Stored at portfolios/{portfolioId}/transactions/{txId}.
+
+export async function addTransaction(
+  portfolioId: string,
+  workspaceId: string,
+  uid: string,
+  params: {
+    symbol: string;
+    action: Transaction['action'];
+    quantity: number;
+    price: number;
+    grossValue: number;
+    cashImpact: number;
+    fees?: number;
+    slippage?: number;
+    note?: string;
+    thesis?: string;
+    linkedArtifactIds?: string[];
+    ts?: number;
+  }
+): Promise<string> {
+  const ref = await addDoc(collection(db, 'portfolios', portfolioId, 'transactions'), {
+    portfolioId,
+    workspaceId,
+    uid,
+    symbol: params.symbol.toUpperCase(),
+    action: params.action,
+    quantity: params.quantity,
+    price: params.price,
+    grossValue: params.grossValue,
+    cashImpact: params.cashImpact,
+    fees: params.fees ?? 0,
+    slippage: params.slippage ?? 0,
+    note: params.note ?? '',
+    thesis: params.thesis ?? '',
+    linkedArtifactIds: params.linkedArtifactIds ?? [],
+    ts: params.ts ?? Date.now(),
+  });
+  return ref.id;
+}
+
+export async function getTransactions(portfolioId: string): Promise<Transaction[]> {
+  const snap = await getDocs(
+    query(collection(db, 'portfolios', portfolioId, 'transactions'), orderBy('ts', 'asc'))
+  );
+  return snap.docs.map((d) => {
+    const data = d.data();
+    const toMs = (v: unknown) => (v instanceof Timestamp ? v.toMillis() : (v as number) ?? tsNow());
+    return { id: d.id, ...data, ts: toMs(data.ts) } as Transaction;
+  });
+}
+
+export function subscribeToTransactions(
+  portfolioId: string,
+  cb: (transactions: Transaction[]) => void
+): Unsubscribe {
+  const q = query(
+    collection(db, 'portfolios', portfolioId, 'transactions'),
+    orderBy('ts', 'asc')
+  );
+  return onSnapshot(
+    q,
+    (snap) => {
+      const transactions: Transaction[] = snap.docs.map((d) => {
+        const data = d.data();
+        const toMs = (v: unknown) => (v instanceof Timestamp ? v.toMillis() : (v as number) ?? tsNow());
+        return { id: d.id, ...data, ts: toMs(data.ts) } as Transaction;
+      });
+      cb(transactions);
+    },
+    (err) => {
+      console.error('[portfolioService] subscribeToTransactions error:', err.message);
+      cb([]);
+    },
+  );
+}
+
+/** Delete a ledger entry — for corrections only. PR2 re-reconciles after this. */
+export async function deleteTransaction(portfolioId: string, txId: string): Promise<void> {
+  await deleteDoc(doc(db, 'portfolios', portfolioId, 'transactions', txId));
 }
 
 // ─── Portfolio Intelligence Observations ──────────────────────────────────────

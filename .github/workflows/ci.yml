@@ -237,7 +237,7 @@ jobs:
       - name: Run rules tests against the Firestore emulator
         run: >-
           firebase emulators:exec --only firestore --project=demo-deplyze
-          "node --test firestore-tests/"
+          "node --test firestore-tests/rules.test.mjs"
 
   # ─── Gate ──────────────────────────────────────────────────────────────
   ci-passed:

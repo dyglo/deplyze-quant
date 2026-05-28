@@ -24,6 +24,7 @@ import {
   orderBy,
   onSnapshot,
   serverTimestamp,
+  writeBatch,
   Timestamp,
   type Unsubscribe,
 } from 'firebase/firestore';
@@ -36,6 +37,18 @@ import type {
   Transaction,
 } from '../lib/portfolio/schemas';
 import { DEFAULT_BENCHMARK_ID } from '../lib/portfolio/benchmarks';
+import {
+  grossValue,
+  signedCashImpact,
+  validateTransactionInput,
+  isReducingAction,
+} from '../lib/portfolio/ledger';
+import {
+  foldPosition,
+  netCashImpact,
+  totalRealizedPnl,
+  type TxLike,
+} from '../lib/portfolio/engine';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -370,9 +383,250 @@ export function subscribeToTransactions(
   );
 }
 
-/** Delete a ledger entry — for corrections only. PR2 re-reconciles after this. */
+/** Delete a ledger entry — for corrections only. Re-reconcile after this. */
 export async function deleteTransaction(portfolioId: string, txId: string): Promise<void> {
   await deleteDoc(doc(db, 'portfolios', portfolioId, 'transactions', txId));
+}
+
+// ─── Transaction Engine Actions ────────────────────────────────────────────────
+// Record a simulated action, then atomically: write the ledger entry, reconcile
+// the affected holding snapshot from the full ledger, and update portfolio cash +
+// realised-P&L aggregates. Simulated only — no execution.
+
+export interface RecordTransactionParams {
+  symbol: string;
+  /** Required when opening a brand-new position (no existing holding). */
+  name?: string;
+  assetClass?: Holding['assetClass'];
+  action: Transaction['action'];
+  quantity: number;
+  price: number;
+  fees?: number;
+  slippage?: number;
+  note?: string;
+  thesis?: string;
+  sector?: string;
+  region?: string;
+  country?: string;
+  conviction?: Holding['conviction'];
+  targetWeight?: number;
+  linkedArtifactIds?: string[];
+  ts?: number;
+}
+
+/**
+ * Core action: validate → write ledger → reconcile holding → update portfolio.
+ * The whole snapshot write is atomic (single batch). For a `close`, the entire
+ * held quantity is exited regardless of the quantity passed.
+ */
+export async function recordTransaction(
+  portfolioId: string,
+  workspaceId: string,
+  uid: string,
+  params: RecordTransactionParams
+): Promise<{ transactionId: string }> {
+  const symbol = params.symbol.toUpperCase();
+  const [portfolio, holdings, existingTxs] = await Promise.all([
+    getPortfolio(portfolioId),
+    getHoldings(portfolioId),
+    getTransactions(portfolioId),
+  ]);
+  if (!portfolio) throw new Error('Portfolio not found');
+
+  const existing = holdings.find((h) => h.symbol === symbol) ?? null;
+  const currentQty = existing?.quantity ?? 0;
+
+  // A close exits the full position.
+  const quantity = params.action === 'close' ? currentQty : params.quantity;
+
+  const v = validateTransactionInput({
+    action: params.action,
+    quantity,
+    price: params.price,
+    fees: params.fees,
+    slippage: params.slippage,
+    currentQuantity: isReducingAction(params.action) ? currentQty : undefined,
+  });
+  if (!v.ok) throw new Error(v.error);
+
+  const ts = params.ts ?? Date.now();
+  const gross = grossValue(quantity, params.price);
+  const cashImpact = signedCashImpact(
+    params.action,
+    quantity,
+    params.price,
+    params.fees ?? 0,
+    params.slippage ?? 0
+  );
+
+  // Reconcile in-memory: existing ledger + this new entry.
+  const newTx: TxLike = { symbol, action: params.action, quantity, price: params.price, cashImpact, ts };
+  const allTxs: TxLike[] = [...existingTxs, newTx];
+  const pos = foldPosition(symbol, allTxs);
+
+  const batch = writeBatch(db);
+
+  // 1) Ledger entry.
+  const txRef = doc(collection(db, 'portfolios', portfolioId, 'transactions'));
+  batch.set(txRef, {
+    portfolioId,
+    workspaceId,
+    uid,
+    symbol,
+    action: params.action,
+    quantity,
+    price: params.price,
+    grossValue: gross,
+    cashImpact,
+    fees: params.fees ?? 0,
+    slippage: params.slippage ?? 0,
+    note: params.note ?? '',
+    thesis: params.thesis ?? '',
+    linkedArtifactIds: params.linkedArtifactIds ?? [],
+    ts,
+  });
+
+  // 2) Reconciled holding snapshot.
+  if (existing) {
+    batch.update(doc(db, 'portfolios', portfolioId, 'holdings', existing.id), {
+      quantity: pos.quantity,
+      costBasis: pos.quantity > 0 ? pos.avgCost : null,
+      realizedPnl: pos.realizedPnl,
+      status: pos.status,
+      closedAt: pos.closedAt ?? null,
+      entryDate: existing.entryDate ?? pos.firstEntryTs ?? null,
+      ...(params.thesis ? { thesis: params.thesis } : {}),
+      ...(params.targetWeight != null ? { targetWeight: params.targetWeight } : {}),
+      updatedAt: serverTimestamp(),
+    });
+  } else {
+    if (!params.name || !params.assetClass) {
+      throw new Error('name and assetClass are required to open a new holding');
+    }
+    const holdingRef = doc(collection(db, 'portfolios', portfolioId, 'holdings'));
+    batch.set(holdingRef, {
+      portfolioId,
+      workspaceId,
+      symbol,
+      name: params.name,
+      assetClass: params.assetClass,
+      weight: null,
+      quantity: pos.quantity,
+      costBasis: pos.quantity > 0 ? pos.avgCost : null,
+      currency: portfolio.currency ?? 'USD',
+      sector: params.sector ?? null,
+      region: params.region ?? null,
+      country: params.country ?? null,
+      conviction: params.conviction ?? 'medium',
+      tags: [],
+      notes: params.note ?? '',
+      status: pos.status,
+      entryDate: pos.firstEntryTs ?? ts,
+      targetWeight: params.targetWeight ?? null,
+      realizedPnl: pos.realizedPnl,
+      closedAt: pos.closedAt ?? null,
+      thesis: params.thesis ?? '',
+      addedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+  }
+
+  // 3) Portfolio cash + realised-P&L aggregate.
+  const nextCash =
+    portfolio.startingCapital != null
+      ? portfolio.startingCapital + netCashImpact(allTxs)
+      : portfolio.cashBalance != null
+        ? portfolio.cashBalance + cashImpact
+        : null;
+  batch.update(doc(db, 'portfolios', portfolioId), {
+    realizedPnl: totalRealizedPnl(allTxs),
+    ...(nextCash != null ? { cashBalance: nextCash } : {}),
+    updatedAt: serverTimestamp(),
+  });
+
+  await batch.commit();
+  return { transactionId: txRef.id };
+}
+
+type ActionParams = Omit<RecordTransactionParams, 'action'>;
+
+/** Open a new position (or top up if one already exists). */
+export const recordBuy = (pid: string, wid: string, uid: string, p: ActionParams) =>
+  recordTransaction(pid, wid, uid, { ...p, action: 'buy' });
+
+/** Increase an existing position. */
+export const recordAdd = (pid: string, wid: string, uid: string, p: ActionParams) =>
+  recordTransaction(pid, wid, uid, { ...p, action: 'add' });
+
+/** Reduce part of a position (cost basis unchanged, realises P&L). */
+export const recordTrim = (pid: string, wid: string, uid: string, p: ActionParams) =>
+  recordTransaction(pid, wid, uid, { ...p, action: 'trim' });
+
+/** Partial exit — numerically identical to a trim. */
+export const recordSell = (pid: string, wid: string, uid: string, p: ActionParams) =>
+  recordTransaction(pid, wid, uid, { ...p, action: 'sell' });
+
+/** Fully exit a position (quantity is forced to the held amount). */
+export const recordClose = (pid: string, wid: string, uid: string, p: ActionParams) =>
+  recordTransaction(pid, wid, uid, { ...p, action: 'close' });
+
+/**
+ * Deposit (+) or withdraw (-) simulated cash. Writes a cash_adjust ledger entry
+ * and updates the portfolio cash balance. No position is affected.
+ */
+export async function adjustCash(
+  portfolioId: string,
+  workspaceId: string,
+  uid: string,
+  amount: number,
+  note?: string
+): Promise<{ transactionId: string }> {
+  if (!Number.isFinite(amount) || amount === 0) {
+    throw new Error('Cash adjustment must be a non-zero finite amount.');
+  }
+  const [portfolio, existingTxs] = await Promise.all([
+    getPortfolio(portfolioId),
+    getTransactions(portfolioId),
+  ]);
+  if (!portfolio) throw new Error('Portfolio not found');
+
+  const ts = Date.now();
+  const allTxs: TxLike[] = [
+    ...existingTxs,
+    { symbol: 'CASH', action: 'cash_adjust', quantity: 0, price: 0, cashImpact: amount, ts },
+  ];
+
+  const batch = writeBatch(db);
+  const txRef = doc(collection(db, 'portfolios', portfolioId, 'transactions'));
+  batch.set(txRef, {
+    portfolioId,
+    workspaceId,
+    uid,
+    symbol: 'CASH',
+    action: 'cash_adjust',
+    quantity: 0,
+    price: 0,
+    grossValue: 0,
+    cashImpact: amount,
+    fees: 0,
+    slippage: 0,
+    note: note ?? '',
+    thesis: '',
+    linkedArtifactIds: [],
+    ts,
+  });
+
+  const nextCash =
+    portfolio.startingCapital != null
+      ? portfolio.startingCapital + netCashImpact(allTxs)
+      : (portfolio.cashBalance ?? 0) + amount;
+  batch.update(doc(db, 'portfolios', portfolioId), {
+    cashBalance: nextCash,
+    updatedAt: serverTimestamp(),
+  });
+
+  await batch.commit();
+  return { transactionId: txRef.id };
 }
 
 // ─── Portfolio Intelligence Observations ──────────────────────────────────────

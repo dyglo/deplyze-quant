@@ -25,8 +25,12 @@ from app.agents import (
 )
 from app.agents.schemas import AgentOutput, AGENT_OUTPUTS_SCHEMA
 from app.agents.registry import AGENT_REGISTRY, REGISTRY_BY_ID
+from app.agents import run_ledger
 from app.bigquery.client import get_bigquery_client, fully_qualified
 from app.core.config import settings
+
+# Per-agent in-process attempts before giving up (transient errors).
+_AGENT_MAX_ATTEMPTS = 2
 
 log = structlog.get_logger("quant_engine.agents.orchestrator")
 
@@ -59,16 +63,24 @@ async def _run_agent(
     portfolio_id: Optional[str],
     run_id: str,
 ) -> tuple[str, list[AgentOutput], Optional[str]]:
-    """Run a single agent; return (agent_id, outputs, error)."""
+    """Run a single agent with a small in-process retry; return (id, outputs, error)."""
     runner = _AGENT_RUNNERS.get(agent_id)
     if not runner:
         return agent_id, [], f"No runner registered for {agent_id}"
-    try:
-        outputs = await runner(portfolio_id=portfolio_id)
-        return agent_id, outputs, None
-    except Exception as e:
-        log.error("orchestrator.agent_failed", agent_id=agent_id, run_id=run_id, error=str(e))
-        return agent_id, [], str(e)
+    last_error: Optional[str] = None
+    for attempt in range(_AGENT_MAX_ATTEMPTS):
+        try:
+            outputs = await runner(portfolio_id=portfolio_id)
+            return agent_id, outputs, None
+        except Exception as e:
+            last_error = str(e)
+            log.error(
+                "orchestrator.agent_failed",
+                agent_id=agent_id, run_id=run_id, attempt=attempt, error=last_error,
+            )
+            if attempt + 1 < _AGENT_MAX_ATTEMPTS:
+                await asyncio.sleep(1.5 * (attempt + 1))  # brief transient backoff
+    return agent_id, [], last_error
 
 
 async def _persist(outputs: list[AgentOutput]) -> dict:
@@ -113,49 +125,109 @@ async def _persist(outputs: list[AgentOutput]) -> dict:
     return {"inserted": inserted, "skipped": skipped, "errors": errors}
 
 
-async def run_all(portfolio_id: Optional[str] = None) -> dict:
-    """Run all scheduled agents in dependency order."""
+async def run_all(
+    portfolio_id: Optional[str] = None,
+    trigger: str = "full",
+    attempt: int = 0,
+) -> dict:
+    """Run all scheduled agents in dependency order, recording a durable ledger.
+
+    Returns a result dict including `status` and `failed` so the caller can map
+    to an HTTP status code (a non-2xx lets Cloud Scheduler retry the run).
+    """
     run_id = str(uuid.uuid4())
-    started = datetime.now(timezone.utc).isoformat()
+    started_at = run_ledger.record_start(
+        run_id, run_ledger.ALL_AGENTS, trigger, portfolio_id, attempt
+    )
     total_outputs: list[AgentOutput] = []
     agent_results: dict[str, dict] = {}
+    total_output_count = 0
+    inserted = 0
+    skipped = 0
+    status = "failed"
+    fatal_error: Optional[str] = None
 
-    for tier in _DEPENDENCY_ORDER:
-        tier_tasks = [
-            _run_agent(agent_id, portfolio_id, run_id)
-            for agent_id in tier
-            if agent_id in _AGENT_RUNNERS
-        ]
-        results = await asyncio.gather(*tier_tasks)
-        for agent_id, outputs, error in results:
-            agent_results[agent_id] = {
-                "output_count": len(outputs),
-                "error": error,
-            }
-            total_outputs.extend(outputs)
+    try:
+        for tier in _DEPENDENCY_ORDER:
+            tier_tasks = [
+                _run_agent(agent_id, portfolio_id, run_id)
+                for agent_id in tier
+                if agent_id in _AGENT_RUNNERS
+            ]
+            results = await asyncio.gather(*tier_tasks)
+            for agent_id, outputs, error in results:
+                agent_results[agent_id] = {"output_count": len(outputs), "error": error}
+                total_output_count += len(outputs)
+                total_outputs.extend(outputs)
 
-        # Persist after each tier so downstream agents can read today's outputs
-        if total_outputs:
-            await _persist(total_outputs)
-            total_outputs = []
+            # Persist after each tier so downstream agents read today's outputs.
+            if total_outputs:
+                p = await _persist(total_outputs)
+                inserted += p.get("inserted", 0)
+                skipped += p.get("skipped", 0)
+                total_outputs = []
+
+        any_agent_error = any(r["error"] for r in agent_results.values())
+        status = "completed_with_errors" if any_agent_error else "completed"
+    except Exception as e:
+        fatal_error = str(e)
+        log.error("orchestrator.run_all_failed", run_id=run_id, error=fatal_error)
+
+    run_ledger.record_finish(
+        run_id, run_ledger.ALL_AGENTS, status, started_at,
+        trigger=trigger, output_count=total_output_count,
+        inserted=inserted, skipped=skipped, error=fatal_error,
+        agent_results=agent_results, portfolio_id=portfolio_id, attempt=attempt,
+    )
 
     return {
         "run_id": run_id,
-        "started_at": started,
+        "started_at": started_at.isoformat(),
         "completed_at": datetime.now(timezone.utc).isoformat(),
+        "status": status,
+        "failed": status == "failed",
         "agent_results": agent_results,
+        "inserted": inserted,
+        "skipped": skipped,
         "portfolio_id": portfolio_id,
     }
 
 
-async def run_one(agent_id: str, portfolio_id: Optional[str] = None) -> dict:
-    """Run a single agent and persist its outputs."""
+async def run_one(
+    agent_id: str,
+    portfolio_id: Optional[str] = None,
+    trigger: str = "manual",
+    attempt: int = 0,
+) -> dict:
+    """Run a single agent, persist its outputs, and record a durable ledger row."""
     run_id = str(uuid.uuid4())
-    _, outputs, error = await _run_agent(agent_id, portfolio_id, run_id)
-    persist_result = await _persist(outputs)
+    started_at = run_ledger.record_start(run_id, agent_id, trigger, portfolio_id, attempt)
+
+    persist_result = {"inserted": 0, "skipped": 0, "errors": []}
+    status = "failed"
+    error: Optional[str] = None
+    outputs: list[AgentOutput] = []
+    try:
+        _, outputs, error = await _run_agent(agent_id, portfolio_id, run_id)
+        persist_result = await _persist(outputs)
+        status = "failed" if error else "completed"
+    except Exception as e:
+        error = str(e)
+        log.error("orchestrator.run_one_failed", run_id=run_id, agent_id=agent_id, error=error)
+
+    run_ledger.record_finish(
+        run_id, agent_id, status, started_at,
+        trigger=trigger, output_count=len(outputs),
+        inserted=persist_result.get("inserted", 0),
+        skipped=persist_result.get("skipped", 0),
+        error=error, portfolio_id=portfolio_id, attempt=attempt,
+    )
+
     return {
         "run_id": run_id,
         "agent_id": agent_id,
+        "status": status,
+        "failed": status == "failed",
         "output_count": len(outputs),
         "persist": persist_result,
         "error": error,

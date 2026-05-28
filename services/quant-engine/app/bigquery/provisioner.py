@@ -89,6 +89,8 @@ TABLE_REGISTRY = [
     (settings.BQ_DATASET_MODEL_OUTPUTS, "model_runs", S.MODEL_RUNS, "started_at", None),
     # V4 — Agentic Intelligence Layer
     (settings.BQ_DATASET_ARTIFACTS, "agent_outputs", S.AGENT_OUTPUTS, "observation_date", ["agent_id", "domain"]),
+    # Stage 2 — durable agent run ledger (execution verification + reporting)
+    (settings.BQ_DATASET_ARTIFACTS, "agent_runs", S.AGENT_RUNS, "run_date", ["agent_id", "status"]),
     # V5 P3 — Portfolio Awareness Synthesis snapshots
     (settings.BQ_DATASET_ARTIFACTS, "portfolio_awareness_synthesis", S.PORTFOLIO_AWARENESS_SYNTHESIS, "snapshot_date", ["portfolio_id"]),
 ]

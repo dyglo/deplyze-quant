@@ -231,6 +231,51 @@ router.get('/status', async (req, res, next) => {
   }
 });
 
+// ─── GET /agents/runs ─────────────────────────────────────────────────────────
+// Durable run-ledger reporting (Stage 2). Latest row per run_id wins; a run
+// still in "started" was killed before finishing — the reliability signal.
+
+const RunsQuery = z.object({
+  status: z.enum(['started', 'completed', 'completed_with_errors', 'failed']).optional(),
+  agent_id: z.string().optional(),
+  days: z.coerce.number().int().min(1).max(30).default(2),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+});
+
+router.get('/runs', async (req, res, next) => {
+  try {
+    const q = RunsQuery.parse(req.query);
+    const cacheKey = `agents:runs:${JSON.stringify(q)}`;
+    const rows = await withCache<Record<string, unknown>[]>(cacheKey, TTL.quote * 2, () => {
+      const wheres = ['run_date >= DATE_SUB(CURRENT_DATE(), INTERVAL @days DAY)'];
+      const params: Record<string, unknown> = { days: q.days, lim: q.limit };
+      const types: Record<string, string | string[]> = { days: 'INT64', lim: 'INT64' };
+      if (q.agent_id) { wheres.push('agent_id = @agent_id'); params.agent_id = q.agent_id; types.agent_id = 'STRING'; }
+      let statusFilter = '';
+      if (q.status) { statusFilter = 'WHERE status = @status'; params.status = q.status; types.status = 'STRING'; }
+      return runQuery<Record<string, unknown>>(`
+        WITH ranked AS (
+          SELECT *, ROW_NUMBER() OVER (PARTITION BY run_id ORDER BY completed_at DESC) AS rn
+          FROM \`${PROJECT}.${ARTIFACTS_DS}.agent_runs\`
+          WHERE ${wheres.join(' AND ')}
+        )
+        SELECT run_id, agent_id, trigger, status, started_at, completed_at,
+               duration_ms, attempt, output_count, inserted, skipped,
+               portfolio_id, error, agent_results
+        FROM ranked
+        WHERE rn = 1
+        ${statusFilter}
+        ORDER BY started_at DESC
+        LIMIT @lim
+      `, params, types);
+    });
+    const failedCount = rows.filter((r) => r.status === 'failed' || r.status === 'started').length;
+    res.json({ runs: rows, count: rows.length, failed_count: failedCount });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // ─── GET /agents/regime ──────────────────────────────────────────────────────
 
 router.get('/regime', async (_req, res, next) => {

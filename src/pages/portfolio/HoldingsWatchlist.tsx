@@ -5,7 +5,7 @@ import {
 import {
   Plus, X, Search, Briefcase, ListTree, Loader2, Trash2, ChevronDown,
   ChevronRight, TrendingUp, TrendingDown, Activity, AlertCircle,
-  BarChart2, Globe, Zap, Star,
+  BarChart2, Globe, Zap, Star, Wallet, Archive,
 } from 'lucide-react';
 import { usePortfolioWorkspace } from '../../hooks/usePortfolioWorkspace';
 import { usePortfolioIntelligence } from '../../hooks/usePortfolioIntelligence';
@@ -18,6 +18,7 @@ import type { Holding } from '../../lib/portfolio/schemas';
 import { PortfolioIntelligencePanel } from '../../components/portfolio/PortfolioIntelligencePanel';
 import { fetchOHLCV, symbolSearch } from '../../services/marketService';
 import type { OHLCVBar } from '../../types';
+import { marketValue, unrealizedPnl, unrealizedPnlPct } from '../../lib/portfolio/holdingMath';
 import {
   logReturns, cumulativeLogReturns, rebase100,
 } from '../../lib/quant/returns';
@@ -35,6 +36,18 @@ function fmtPct(v: number, sign = true): string {
 }
 function fmtDate(ts: number): string {
   return new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+function fmtUSD(v: number, currency = 'USD'): string {
+  if (!isFinite(v)) return '—';
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: Math.abs(v) >= 1000 ? 0 : 2 }).format(v);
+}
+function fmtQty(v: number): string {
+  if (!isFinite(v)) return '—';
+  return v.toLocaleString('en-US', { maximumFractionDigits: 4 });
+}
+/** Most recent close from a bar series — a simple current-price proxy. */
+function lastClose(bars: OHLCVBar[]): number | null {
+  return bars.length > 0 ? bars[bars.length - 1].close : null;
 }
 
 const CONVICTION_COLORS: Record<string, string> = {
@@ -61,13 +74,25 @@ const MiniSparkline: React.FC<{ bars: OHLCVBar[]; color?: string }> = ({ bars, c
 
 interface AddHoldingModalProps {
   onClose: () => void;
+  /** Watchlist-style add — metadata only, no position. */
   onAdd: (params: {
     symbol: string; name: string; assetClass: AssetClass;
     conviction?: Holding['conviction']; notes?: string;
   }) => Promise<void>;
+  /** Transactional buy — opens a position-backed holding via the ledger. */
+  onBuy: (params: {
+    symbol: string; name: string; assetClass: AssetClass;
+    quantity: number; price: number; entryDate?: number;
+    targetWeight?: number; conviction?: Holding['conviction'];
+    thesis?: string; note?: string;
+  }) => Promise<unknown>;
+  currency?: string;
 }
 
-const AddHoldingModal: React.FC<AddHoldingModalProps> = ({ onClose, onAdd }) => {
+const labelStyle: React.CSSProperties = { fontSize: 10, fontWeight: 700, color: 'var(--muted-foreground)', display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.05em' };
+const fieldStyle: React.CSSProperties = { width: '100%', boxSizing: 'border-box', padding: '7px 9px', borderRadius: 5, fontSize: 12, border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--foreground)', outline: 'none', fontVariantNumeric: 'tabular-nums' };
+
+const AddHoldingModal: React.FC<AddHoldingModalProps> = ({ onClose, onAdd, onBuy, currency = 'USD' }) => {
   const [inputValue, setInputValue] = useState('');
   const [results, setResults] = useState<Array<{ symbol: string; name: string; type: string }>>([]);
   const [searching, setSearching] = useState(false);
@@ -77,6 +102,16 @@ const AddHoldingModal: React.FC<AddHoldingModalProps> = ({ onClose, onAdd }) => 
   const [notes, setNotes] = useState('');
   const [adding, setAdding] = useState(false);
   const reqId = useRef(0);
+
+  // Position-entry state.
+  const [mode, setMode] = useState<'position' | 'watchlist'>('position');
+  const [amountMode, setAmountMode] = useState<'dollars' | 'shares'>('dollars');
+  const [amountStr, setAmountStr] = useState('');
+  const [sharesStr, setSharesStr] = useState('');
+  const [priceStr, setPriceStr] = useState('');
+  const [priceLoading, setPriceLoading] = useState(false);
+  const [dateStr, setDateStr] = useState(() => new Date().toISOString().slice(0, 10));
+  const [targetStr, setTargetStr] = useState('');
 
   useEffect(() => {
     const raw = inputValue.trim();
@@ -92,7 +127,6 @@ const AddHoldingModal: React.FC<AddHoldingModalProps> = ({ onClose, onAdd }) => 
     const tid = setTimeout(async () => {
       try {
         const hits = await symbolSearch(raw);
-        // Discard if a newer request has started
         if (reqId.current !== current) return;
         const seen = new Set<string>();
         const deduped = hits
@@ -110,11 +144,19 @@ const AddHoldingModal: React.FC<AddHoldingModalProps> = ({ onClose, onAdd }) => 
     return () => clearTimeout(tid);
   }, [inputValue, selected]);
 
-  const handleSelect = (r: { symbol: string; name: string }) => {
+  const handleSelect = async (r: { symbol: string; name: string }) => {
     setSelected(r);
     setInputValue(`${r.symbol} — ${r.name}`);
     setResults([]);
     setSearching(false);
+    // Pre-fill entry price with the latest close.
+    setPriceLoading(true);
+    try {
+      const { bars } = await fetchOHLCV(r.symbol, '1day', 5);
+      const px = lastClose(bars);
+      if (px != null) setPriceStr(String(Number(px.toFixed(4))));
+    } catch { /* leave price blank — user can enter manually */ }
+    finally { setPriceLoading(false); }
   };
 
   const handleInputChange = (val: string) => {
@@ -123,26 +165,70 @@ const AddHoldingModal: React.FC<AddHoldingModalProps> = ({ onClose, onAdd }) => 
     if (!val.trim()) setResults([]);
   };
 
-  const handleAdd = async () => {
-    if (!selected) return;
+  const price = Number(priceStr);
+  const priceValid = Number.isFinite(price) && price > 0;
+  const shares = amountMode === 'shares'
+    ? Number(sharesStr)
+    : (priceValid && amountStr ? Number(amountStr) / price : 0);
+  const dollarValue = priceValid ? shares * price : 0;
+  const sharesValid = Number.isFinite(shares) && shares > 0;
+  const positionReady = mode === 'watchlist' || (priceValid && sharesValid);
+  const canSubmit = !!selected && positionReady && !adding;
+
+  const handleSubmit = async () => {
+    if (!selected || !canSubmit) return;
     setAdding(true);
     try {
-      await onAdd({ symbol: selected.symbol, name: selected.name, assetClass, conviction, notes: notes.trim() });
+      if (mode === 'watchlist') {
+        await onAdd({ symbol: selected.symbol, name: selected.name, assetClass, conviction, notes: notes.trim() });
+      } else {
+        const target = targetStr.trim() === '' ? undefined : Number(targetStr) / 100;
+        await onBuy({
+          symbol: selected.symbol,
+          name: selected.name,
+          assetClass,
+          quantity: shares,
+          price,
+          entryDate: Date.parse(dateStr) || Date.now(),
+          targetWeight: target != null && Number.isFinite(target) ? target : undefined,
+          conviction,
+          thesis: notes.trim() || undefined,
+        });
+      }
       onClose();
     } catch { setAdding(false); }
   };
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onClose}>
-      <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, padding: 24, width: 420, maxWidth: '92vw', maxHeight: '85vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+      <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, padding: 24, width: 440, maxWidth: '94vw', maxHeight: '88vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
           <p style={{ margin: 0, fontSize: 14, fontWeight: 700, letterSpacing: '-0.02em' }}>Add Holding</p>
           <button onClick={onClose} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--muted-foreground)', display: 'flex' }}><X size={16} /></button>
         </div>
 
+        {/* Mode toggle */}
+        <div style={{ display: 'flex', gap: 6, marginBottom: 16, background: 'var(--muted)', padding: 3, borderRadius: 7 }}>
+          {(['position', 'watchlist'] as const).map(m => (
+            <button
+              key={m}
+              onClick={() => setMode(m)}
+              style={{
+                flex: 1, padding: '6px 8px', borderRadius: 5, fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                border: 'none', textTransform: 'capitalize',
+                background: mode === m ? 'var(--card)' : 'transparent',
+                color: mode === m ? 'var(--foreground)' : 'var(--muted-foreground)',
+                boxShadow: mode === m ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+              }}
+            >
+              {m === 'position' ? 'Position (buy)' : 'Watchlist only'}
+            </button>
+          ))}
+        </div>
+
         {/* Symbol search */}
         <div style={{ marginBottom: 14 }}>
-          <label style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted-foreground)', display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Symbol or Name</label>
+          <label style={labelStyle}>Symbol or Name</label>
           <div style={{ position: 'relative' }}>
             <Search size={12} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted-foreground)' }} />
             <input
@@ -150,7 +236,7 @@ const AddHoldingModal: React.FC<AddHoldingModalProps> = ({ onClose, onAdd }) => 
               value={inputValue}
               onChange={e => handleInputChange(e.target.value)}
               placeholder="Search AAPL, MSFT, BTC..."
-              style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px 8px 30px', borderRadius: 6, fontSize: 13, border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--foreground)', outline: 'none' }}
+              style={{ ...fieldStyle, padding: '8px 10px 8px 30px', fontSize: 13 }}
             />
             {searching && <Loader2 size={12} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', animation: 'spin 1s linear infinite', color: 'var(--primary)' }} />}
           </div>
@@ -182,14 +268,14 @@ const AddHoldingModal: React.FC<AddHoldingModalProps> = ({ onClose, onAdd }) => 
         {/* Asset class + conviction */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
           <div>
-            <label style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted-foreground)', display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Asset Class</label>
-            <select value={assetClass} onChange={e => setAssetClass(e.target.value as Holding['assetClass'])} style={{ width: '100%', padding: '7px 8px', borderRadius: 5, fontSize: 12, border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--foreground)' }}>
+            <label style={labelStyle}>Asset Class</label>
+            <select value={assetClass} onChange={e => setAssetClass(e.target.value as Holding['assetClass'])} style={fieldStyle}>
               {ASSET_CLASSES.map(ac => <option key={ac} value={ac}>{ac}</option>)}
             </select>
           </div>
           <div>
-            <label style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted-foreground)', display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Conviction</label>
-            <select value={conviction} onChange={e => setConviction(e.target.value as Holding['conviction'])} style={{ width: '100%', padding: '7px 8px', borderRadius: 5, fontSize: 12, border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--foreground)' }}>
+            <label style={labelStyle}>Conviction</label>
+            <select value={conviction} onChange={e => setConviction(e.target.value as Holding['conviction'])} style={fieldStyle}>
               <option value="highest">Highest</option>
               <option value="high">High</option>
               <option value="medium">Medium</option>
@@ -198,18 +284,208 @@ const AddHoldingModal: React.FC<AddHoldingModalProps> = ({ onClose, onAdd }) => 
           </div>
         </div>
 
-        {/* Notes */}
+        {/* Position details — only in position mode */}
+        {mode === 'position' && (
+          <div style={{ marginBottom: 14, padding: 12, borderRadius: 8, background: 'var(--muted)', border: '1px solid var(--border)' }}>
+            {/* Entry price + date */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+              <div>
+                <label style={labelStyle}>Entry Price</label>
+                <div style={{ position: 'relative' }}>
+                  <input value={priceStr} onChange={e => setPriceStr(e.target.value.replace(/[^0-9.]/g, ''))} inputMode="decimal" placeholder="0.00" style={fieldStyle} />
+                  {priceLoading && <Loader2 size={11} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', animation: 'spin 1s linear infinite', color: 'var(--primary)' }} />}
+                </div>
+              </div>
+              <div>
+                <label style={labelStyle}>Purchase Date</label>
+                <input type="date" value={dateStr} max={new Date().toISOString().slice(0, 10)} onChange={e => setDateStr(e.target.value)} style={fieldStyle} />
+              </div>
+            </div>
+
+            {/* Amount mode toggle */}
+            <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+              {(['dollars', 'shares'] as const).map(am => (
+                <button
+                  key={am}
+                  onClick={() => setAmountMode(am)}
+                  style={{
+                    flex: 1, padding: '5px 8px', borderRadius: 5, fontSize: 11, fontWeight: 600, cursor: 'pointer', textTransform: 'capitalize',
+                    border: `1px solid ${amountMode === am ? 'var(--primary)' : 'var(--border)'}`,
+                    background: amountMode === am ? 'color-mix(in srgb, var(--primary) 12%, transparent)' : 'var(--background)',
+                    color: amountMode === am ? 'var(--primary)' : 'var(--muted-foreground)',
+                  }}
+                >
+                  {am === 'dollars' ? `Amount (${currency})` : 'Shares'}
+                </button>
+              ))}
+            </div>
+
+            {amountMode === 'dollars' ? (
+              <input value={amountStr} onChange={e => setAmountStr(e.target.value.replace(/[^0-9.]/g, ''))} inputMode="decimal" placeholder={`Amount to allocate (${currency})`} style={fieldStyle} />
+            ) : (
+              <input value={sharesStr} onChange={e => setSharesStr(e.target.value.replace(/[^0-9.]/g, ''))} inputMode="decimal" placeholder="Number of shares" style={fieldStyle} />
+            )}
+
+            {/* Computed summary */}
+            {priceValid && sharesValid && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, fontSize: 11, color: 'var(--muted-foreground)' }}>
+                <span>{amountMode === 'dollars' ? `≈ ${fmtQty(shares)} shares` : `≈ ${fmtUSD(dollarValue, currency)}`}</span>
+                <span>Cost basis {fmtUSD(dollarValue, currency)}</span>
+              </div>
+            )}
+
+            {/* Target allocation */}
+            <div style={{ marginTop: 10 }}>
+              <label style={labelStyle}>Target Allocation % (optional)</label>
+              <input value={targetStr} onChange={e => setTargetStr(e.target.value.replace(/[^0-9.]/g, ''))} inputMode="decimal" placeholder="e.g. 5" style={fieldStyle} />
+            </div>
+          </div>
+        )}
+
+        {/* Thesis / notes */}
         <div style={{ marginBottom: 18 }}>
-          <label style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted-foreground)', display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Notes (optional)</label>
-          <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Thesis, context, narrative exposure..." style={{ width: '100%', boxSizing: 'border-box', padding: '7px 10px', borderRadius: 5, fontSize: 12, border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--foreground)', resize: 'none', outline: 'none' }} />
+          <label style={labelStyle}>{mode === 'position' ? 'Thesis (optional)' : 'Notes (optional)'}</label>
+          <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Thesis, context, narrative exposure..." style={{ ...fieldStyle, resize: 'none' }} />
         </div>
 
         <button
-          disabled={!selected || adding}
-          onClick={handleAdd}
-          style={{ width: '100%', padding: '10px', borderRadius: 7, fontSize: 13, fontWeight: 600, background: selected ? 'var(--primary)' : 'var(--muted)', color: selected ? 'var(--primary-foreground)' : 'var(--muted-foreground)', border: 'none', cursor: selected ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+          disabled={!canSubmit}
+          onClick={handleSubmit}
+          style={{ width: '100%', padding: '10px', borderRadius: 7, fontSize: 13, fontWeight: 600, background: canSubmit ? 'var(--primary)' : 'var(--muted)', color: canSubmit ? 'var(--primary-foreground)' : 'var(--muted-foreground)', border: 'none', cursor: canSubmit ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
         >
-          {adding ? <><Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> Adding…</> : <><Plus size={13} /> Add to Portfolio</>}
+          {adding ? <><Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> Saving…</> : <><Plus size={13} /> {mode === 'position' ? 'Buy & Add Position' : 'Add to Watchlist'}</>}
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// ─── Transaction Action Modal (manage existing position) ───────────────────────
+
+interface TransactionActionModalProps {
+  holding: Holding;
+  currency?: string;
+  onClose: () => void;
+  onAddTo: (p: { symbol: string; quantity: number; price: number; note?: string }) => Promise<unknown>;
+  onTrim: (p: { symbol: string; quantity: number; price: number; note?: string }) => Promise<unknown>;
+  onSell: (p: { symbol: string; quantity: number; price: number; note?: string }) => Promise<unknown>;
+  onClosePosition: (p: { symbol: string; quantity: number; price: number; note?: string }) => Promise<unknown>;
+}
+
+type ManageAction = 'add' | 'trim' | 'sell' | 'close';
+
+const TransactionActionModal: React.FC<TransactionActionModalProps> = ({ holding, currency = 'USD', onClose, onAddTo, onTrim, onSell, onClosePosition }) => {
+  const heldQty = holding.quantity ?? 0;
+  const [action, setAction] = useState<ManageAction>('add');
+  const [qtyStr, setQtyStr] = useState('');
+  const [priceStr, setPriceStr] = useState('');
+  const [priceLoading, setPriceLoading] = useState(true);
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    setPriceLoading(true);
+    fetchOHLCV(holding.symbol, '1day', 5)
+      .then(({ bars }) => { const px = lastClose(bars); if (px != null) setPriceStr(String(Number(px.toFixed(4)))); })
+      .catch(() => {})
+      .finally(() => setPriceLoading(false));
+  }, [holding.symbol]);
+
+  const price = Number(priceStr);
+  const priceValid = Number.isFinite(price) && price > 0;
+  const isReducing = action === 'trim' || action === 'sell';
+  const qty = action === 'close' ? heldQty : Number(qtyStr);
+  const qtyValid = action === 'close'
+    ? heldQty > 0
+    : Number.isFinite(qty) && qty > 0 && (!isReducing || qty <= heldQty + 1e-9);
+  const canSubmit = priceValid && qtyValid && !busy;
+
+  const ACTIONS: { key: ManageAction; label: string; color: string }[] = [
+    { key: 'add', label: 'Add', color: 'var(--chart-2)' },
+    { key: 'trim', label: 'Trim', color: 'var(--chart-4)' },
+    { key: 'sell', label: 'Sell', color: 'var(--chart-4)' },
+    { key: 'close', label: 'Close', color: 'var(--destructive)' },
+  ];
+
+  const submit = async () => {
+    if (!canSubmit) return;
+    setBusy(true);
+    const p = { symbol: holding.symbol, quantity: qty, price, note: note.trim() || undefined };
+    try {
+      if (action === 'add') await onAddTo(p);
+      else if (action === 'trim') await onTrim(p);
+      else if (action === 'sell') await onSell(p);
+      else await onClosePosition(p);
+      onClose();
+    } catch { setBusy(false); }
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 210, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onClose}>
+      <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, padding: 24, width: 420, maxWidth: '94vw' }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+          <p style={{ margin: 0, fontSize: 14, fontWeight: 700, letterSpacing: '-0.02em' }}>Manage {holding.symbol}</p>
+          <button onClick={onClose} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--muted-foreground)', display: 'flex' }}><X size={16} /></button>
+        </div>
+        <p style={{ margin: '0 0 16px', fontSize: 11, color: 'var(--muted-foreground)' }}>
+          Holding {fmtQty(heldQty)} units · avg cost {holding.costBasis != null ? fmtUSD(holding.costBasis, currency) : '—'}
+        </p>
+
+        {/* Action picker */}
+        <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
+          {ACTIONS.map(a => (
+            <button
+              key={a.key}
+              onClick={() => setAction(a.key)}
+              style={{
+                flex: 1, padding: '7px 4px', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                border: `1px solid ${action === a.key ? a.color : 'var(--border)'}`,
+                background: action === a.key ? `color-mix(in srgb, ${a.color} 14%, transparent)` : 'var(--background)',
+                color: action === a.key ? a.color : 'var(--muted-foreground)',
+              }}
+            >
+              {a.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Quantity + price */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+          <div>
+            <label style={labelStyle}>{action === 'close' ? 'Quantity (full)' : 'Quantity'}</label>
+            <input
+              value={action === 'close' ? fmtQty(heldQty) : qtyStr}
+              onChange={e => setQtyStr(e.target.value.replace(/[^0-9.]/g, ''))}
+              disabled={action === 'close'}
+              inputMode="decimal"
+              placeholder={isReducing ? `Max ${fmtQty(heldQty)}` : '0'}
+              style={{ ...fieldStyle, opacity: action === 'close' ? 0.6 : 1 }}
+            />
+          </div>
+          <div>
+            <label style={labelStyle}>Price</label>
+            <div style={{ position: 'relative' }}>
+              <input value={priceStr} onChange={e => setPriceStr(e.target.value.replace(/[^0-9.]/g, ''))} inputMode="decimal" placeholder="0.00" style={fieldStyle} />
+              {priceLoading && <Loader2 size={11} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', animation: 'spin 1s linear infinite', color: 'var(--primary)' }} />}
+            </div>
+          </div>
+        </div>
+
+        {isReducing && qty > heldQty && (
+          <p style={{ margin: '0 0 12px', fontSize: 11, color: 'var(--destructive)' }}>Cannot reduce more than the {fmtQty(heldQty)} units held.</p>
+        )}
+
+        <div style={{ marginBottom: 16 }}>
+          <label style={labelStyle}>Note (optional)</label>
+          <textarea value={note} onChange={e => setNote(e.target.value)} rows={2} placeholder="Thesis review, reason for the action…" style={{ ...fieldStyle, resize: 'none' }} />
+        </div>
+
+        <button
+          disabled={!canSubmit}
+          onClick={submit}
+          style={{ width: '100%', padding: '10px', borderRadius: 7, fontSize: 13, fontWeight: 600, background: canSubmit ? 'var(--primary)' : 'var(--muted)', color: canSubmit ? 'var(--primary-foreground)' : 'var(--muted-foreground)', border: 'none', cursor: canSubmit ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+        >
+          {busy ? <><Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> Recording…</> : <>Record {action.charAt(0).toUpperCase() + action.slice(1)}</>}
         </button>
       </div>
     </div>
@@ -403,25 +679,34 @@ const HoldingRow: React.FC<{
   holding: Holding;
   weight: number;
   index: number;
+  currency: string;
   onOpen: () => void;
-}> = ({ holding, weight, index, onOpen }) => {
+  onManage: () => void;
+}> = ({ holding, weight, index, currency, onOpen, onManage }) => {
   const [bars, setBars] = useState<OHLCVBar[]>([]);
 
   useEffect(() => {
     fetchOHLCV(holding.symbol, '1day', 30).then(r => setBars(r.bars)).catch(() => {});
   }, [holding.symbol]);
 
-  const { totalReturn, trendKey } = useMemo(() => {
-    if (bars.length < 5) return { totalReturn: 0, trendKey: 'neutral' };
+  const { totalReturn, trendKey, price } = useMemo(() => {
+    if (bars.length < 5) return { totalReturn: 0, trendKey: 'neutral', price: null as number | null };
     const closes = bars.map(b => b.close);
     const lr = logReturns(closes);
     const totalReturn = Math.exp(lr.reduce((a, b) => a + b, 0)) - 1;
     const { label } = trendLabel(closes);
     const trendKey = (label === 'strong-up' || label === 'up') ? 'bull' : (label === 'down' || label === 'strong-down') ? 'bear' : 'neutral';
-    return { totalReturn, trendKey };
+    return { totalReturn, trendKey, price: lastClose(bars) };
   }, [bars]);
 
   const TREND_DOT: Record<string, string> = { bull: 'var(--chart-2)', bear: 'var(--destructive)', neutral: 'var(--muted-foreground)' };
+
+  const qty = holding.quantity ?? 0;
+  const avgCost = holding.costBasis ?? 0;
+  const hasPos = qty > 0;
+  const mv = hasPos && price != null ? marketValue(qty, price) : null;
+  const upnl = hasPos && price != null && avgCost > 0 ? unrealizedPnl(qty, price, avgCost) : null;
+  const upnlPct = price != null && avgCost > 0 ? unrealizedPnlPct(price, avgCost) : null;
 
   return (
     <tr
@@ -441,13 +726,20 @@ const HoldingRow: React.FC<{
           {holding.symbol}
         </div>
       </td>
-      <td style={{ padding: '10px 12px', fontSize: 12, color: 'var(--muted-foreground)', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{holding.name}</td>
+      <td style={{ padding: '10px 12px', fontSize: 12, color: 'var(--muted-foreground)', maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{holding.name}</td>
       <td style={{ padding: '10px 12px', fontSize: 11 }}>
         <span style={{ padding: '2px 6px', borderRadius: 4, background: 'var(--muted)', border: '1px solid var(--border)', color: 'var(--muted-foreground)', fontWeight: 600 }}>
           {holding.assetClass}
         </span>
       </td>
-      <td style={{ padding: '10px 12px', fontSize: 12, color: 'var(--muted-foreground)' }}>{holding.sector ?? '—'}</td>
+      <td style={{ padding: '10px 12px', fontSize: 12, fontVariantNumeric: 'tabular-nums', color: hasPos ? 'var(--foreground)' : 'var(--muted-foreground)' }}>{hasPos ? fmtQty(qty) : '—'}</td>
+      <td style={{ padding: '10px 12px', fontSize: 12, fontVariantNumeric: 'tabular-nums', color: 'var(--muted-foreground)' }}>{hasPos && avgCost > 0 ? fmtUSD(avgCost, currency) : '—'}</td>
+      <td style={{ padding: '10px 12px', fontSize: 12, fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{mv != null ? fmtUSD(mv, currency) : '—'}</td>
+      <td style={{ padding: '10px 12px', fontSize: 12, fontVariantNumeric: 'tabular-nums', fontWeight: 700, color: upnl == null ? 'var(--muted-foreground)' : upnl >= 0 ? 'var(--chart-2)' : 'var(--destructive)' }}>
+        {upnl != null ? (
+          <span>{fmtUSD(upnl, currency)}{upnlPct != null ? <span style={{ fontWeight: 500, fontSize: 10, opacity: 0.8 }}> ({fmtPct(upnlPct)})</span> : null}</span>
+        ) : '—'}
+      </td>
       <td style={{ padding: '10px 12px', fontWeight: 600, fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>{(weight * 100).toFixed(1)}%</td>
       <td style={{ padding: '10px 12px', fontWeight: 700, fontSize: 12, color: totalReturn >= 0 ? 'var(--chart-2)' : 'var(--destructive)', fontVariantNumeric: 'tabular-nums' }}>
         {bars.length > 3 ? fmtPct(totalReturn) : '—'}
@@ -460,12 +752,54 @@ const HoldingRow: React.FC<{
           {holding.conviction ?? 'medium'}
         </span>
       </td>
-      <td style={{ padding: '10px 12px' }}>
-        <ChevronRight size={12} style={{ color: 'var(--muted-foreground)' }} />
+      <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
+        <button
+          onClick={e => { e.stopPropagation(); onManage(); }}
+          title="Buy / Add / Trim / Sell / Close"
+          style={{ padding: '4px 10px', borderRadius: 5, fontSize: 11, fontWeight: 600, border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--foreground)', cursor: 'pointer' }}
+        >
+          Manage
+        </button>
       </td>
     </tr>
   );
 };
+
+// ─── Closed positions table ────────────────────────────────────────────────────
+
+const ClosedPositions: React.FC<{ holdings: Holding[]; currency: string }> = ({ holdings, currency }) => (
+  <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
+    <div style={{ padding: '10px 12px 8px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 7 }}>
+      <Archive size={13} style={{ color: 'var(--muted-foreground)' }} />
+      <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: 'var(--foreground)' }}>Closed Positions ({holdings.length})</p>
+      <span style={{ fontSize: 10, color: 'var(--muted-foreground)' }}>· Retained for history</span>
+    </div>
+    <div style={{ overflowX: 'auto' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+        <thead>
+          <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--muted)' }}>
+            {['Symbol', 'Name', 'Realized P&L', 'Closed'].map(h => (
+              <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontSize: 10, fontWeight: 700, color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {holdings.map((h, i) => {
+            const rp = h.realizedPnl ?? 0;
+            return (
+              <tr key={h.id} style={{ borderBottom: '1px solid var(--border)', background: i % 2 === 0 ? 'transparent' : 'color-mix(in srgb, var(--muted) 25%, transparent)' }}>
+                <td style={{ padding: '9px 12px', fontWeight: 700 }}>{h.symbol}</td>
+                <td style={{ padding: '9px 12px', color: 'var(--muted-foreground)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h.name}</td>
+                <td style={{ padding: '9px 12px', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: rp >= 0 ? 'var(--chart-2)' : 'var(--destructive)' }}>{fmtUSD(rp, currency)}</td>
+                <td style={{ padding: '9px 12px', color: 'var(--muted-foreground)', fontVariantNumeric: 'tabular-nums' }}>{h.closedAt ? new Date(h.closedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '—'}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  </div>
+);
 
 // ─── Empty state ──────────────────────────────────────────────────────────────
 
@@ -488,18 +822,22 @@ const EmptyHoldings: React.FC<{ onAdd: () => void; portfolioName: string }> = ({
 
 export const HoldingsWatchlist: React.FC = () => {
   const {
-    portfolios, selectedPortfolio, holdings, loading, holdingsLoading,
+    portfolios, selectedPortfolio, activeHoldings, closedHoldings, loading, holdingsLoading,
     selectPortfolio, createNew,
     addNewHolding, removeExistingHolding,
+    buyHolding, addToHolding, trimHolding, sellHolding, closeHolding,
     effectiveWeights,
   } = usePortfolioWorkspace();
 
   const [showAdd, setShowAdd] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [drawerHolding, setDrawerHolding] = useState<Holding | null>(null);
+  const [manageHolding, setManageHolding] = useState<Holding | null>(null);
   const [filter, setFilter] = useState('');
   const [sortCol, setSortCol] = useState<'weight' | 'symbol' | 'return' | 'conviction'>('weight');
   const [sortDir, setSortDir] = useState<1 | -1>(-1);
+
+  const currency = selectedPortfolio?.currency ?? 'USD';
 
   const handleSort = useCallback((col: typeof sortCol) => {
     setSortCol(prev => {
@@ -510,9 +848,9 @@ export const HoldingsWatchlist: React.FC = () => {
   }, []);
 
   const filtered = useMemo(() =>
-    holdings.filter(h =>
+    activeHoldings.filter(h =>
       !filter || h.symbol.toUpperCase().includes(filter.toUpperCase()) || h.name.toLowerCase().includes(filter.toLowerCase())
-    ), [holdings, filter]);
+    ), [activeHoldings, filter]);
 
   const benchmarkId = selectedPortfolio?.benchmarkId ?? DEFAULT_BENCHMARK_ID;
 
@@ -527,11 +865,11 @@ export const HoldingsWatchlist: React.FC = () => {
 
   const { observations, acknowledge } = usePortfolioIntelligence(
     selectedPortfolio?.id,
-    holdings.length > 0 ? { holdings, effectiveWeights, hhi, top3Weight } : null,
+    activeHoldings.length > 0 ? { holdings: activeHoldings, effectiveWeights, hhi, top3Weight } : null,
   );
 
   // V4: per-holding agent observations + vulnerability
-  const holdingSymbols = holdings.map(h => h.symbol);
+  const holdingSymbols = activeHoldings.map(h => h.symbol);
   const holdingsAgentOutputs = useAgentOutputs({
     placement: 'PortfolioOverview',
     limit: 20,
@@ -540,7 +878,7 @@ export const HoldingsWatchlist: React.FC = () => {
     o => o.symbols?.some(s => holdingSymbols.includes(s))
   );
 
-  const vulnHoldings = holdings.map(h => ({
+  const vulnHoldings = activeHoldings.map(h => ({
     symbol: h.symbol,
     weight: effectiveWeights[h.symbol] ?? 0,
     asset_class: h.assetClass,
@@ -580,7 +918,8 @@ export const HoldingsWatchlist: React.FC = () => {
         <div>
           <p style={{ margin: 0, fontSize: 13, fontWeight: 700, letterSpacing: '-0.02em' }}>Holdings & Watchlist</p>
           <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--muted-foreground)' }}>
-            {selectedPortfolio?.name} · {holdings.length} position{holdings.length !== 1 ? 's' : ''}
+            {selectedPortfolio?.name} · {activeHoldings.length} active{closedHoldings.length > 0 ? ` · ${closedHoldings.length} closed` : ''}
+            {selectedPortfolio?.cashBalance != null ? ` · Cash ${fmtUSD(selectedPortfolio.cashBalance, currency)}` : ''}
           </p>
         </div>
 
@@ -597,7 +936,7 @@ export const HoldingsWatchlist: React.FC = () => {
           )}
 
           {/* Filter */}
-          {holdings.length > 0 && (
+          {activeHoldings.length > 0 && (
             <div style={{ position: 'relative' }}>
               <Search size={11} style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted-foreground)' }} />
               <input
@@ -626,7 +965,7 @@ export const HoldingsWatchlist: React.FC = () => {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 16, color: 'var(--muted-foreground)', fontSize: 12 }}>
             <Loader2 size={13} style={{ animation: 'spin 1s linear infinite', color: 'var(--primary)' }} /> Loading holdings…
           </div>
-        ) : filtered.length === 0 && holdings.length === 0 ? (
+        ) : filtered.length === 0 && activeHoldings.length === 0 && closedHoldings.length === 0 ? (
           <EmptyHoldings onAdd={() => setShowAdd(true)} portfolioName={selectedPortfolio?.name ?? 'Portfolio'} />
         ) : (
           <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
@@ -645,7 +984,10 @@ export const HoldingsWatchlist: React.FC = () => {
                       { key: 'symbol', label: 'Symbol' },
                       { key: null, label: 'Name' },
                       { key: null, label: 'Class' },
-                      { key: null, label: 'Sector' },
+                      { key: null, label: 'Qty' },
+                      { key: null, label: 'Avg Cost' },
+                      { key: null, label: 'Mkt Value' },
+                      { key: null, label: 'Unrl P&L' },
                       { key: 'weight', label: 'Weight' },
                       { key: 'return', label: '30D Return' },
                       { key: null, label: 'Trend' },
@@ -690,7 +1032,9 @@ export const HoldingsWatchlist: React.FC = () => {
                         holding={h}
                         weight={effectiveWeights[h.symbol] ?? 0}
                         index={i}
+                        currency={currency}
                         onOpen={() => setDrawerHolding(h)}
+                        onManage={() => setManageHolding(h)}
                       />
                     ))}
                 </tbody>
@@ -700,9 +1044,16 @@ export const HoldingsWatchlist: React.FC = () => {
         )}
       </div>
 
+      {/* Closed positions — retained history */}
+      {closedHoldings.length > 0 && (
+        <div style={{ padding: '0 24px 16px' }}>
+          <ClosedPositions holdings={closedHoldings} currency={currency} />
+        </div>
+      )}
+
       {/* ── V4: Regime Vulnerability + Per-holding Agent Observations ───────── */}
       <div style={{ padding: '0 24px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <PortfolioVulnerabilityPanel result={vulnerability.data} loading={vulnerability.loading} holdingsCount={holdings.length} />
+        <PortfolioVulnerabilityPanel result={vulnerability.data} loading={vulnerability.loading} holdingsCount={activeHoldings.length} />
         {holdingOutputs.length > 0 && (
           <div>
             <h4 style={{ margin: '0 0 10px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--muted-foreground)' }}>
@@ -722,7 +1073,24 @@ export const HoldingsWatchlist: React.FC = () => {
 
       {/* Modals & drawers */}
       {showAdd && (
-        <AddHoldingModal onClose={() => setShowAdd(false)} onAdd={(p) => addNewHolding(p).then(() => undefined)} />
+        <AddHoldingModal
+          onClose={() => setShowAdd(false)}
+          onAdd={(p) => addNewHolding(p).then(() => undefined)}
+          onBuy={(p) => buyHolding(p)}
+          currency={currency}
+        />
+      )}
+
+      {manageHolding && (
+        <TransactionActionModal
+          holding={manageHolding}
+          currency={currency}
+          onClose={() => setManageHolding(null)}
+          onAddTo={(p) => addToHolding(p)}
+          onTrim={(p) => trimHolding(p)}
+          onSell={(p) => sellHolding(p)}
+          onClosePosition={(p) => closeHolding(p)}
+        />
       )}
 
       {drawerHolding && (

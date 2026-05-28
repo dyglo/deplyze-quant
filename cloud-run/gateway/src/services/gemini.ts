@@ -56,6 +56,66 @@ export async function geminiGenerate({
   return text;
 }
 
+// ─── Tool-use (function calling) ────────────────────────────────────────────
+
+export interface ToolDeclaration {
+  name: string;
+  description: string;
+  // JSON-schema-ish object accepted by the Gemini SDK (Type enum string values).
+  parameters: Record<string, unknown>;
+}
+
+export interface GeminiToolTurn {
+  text: string | null;
+  functionCalls: { name: string; args: Record<string, unknown> }[];
+  /** The model's turn (with functionCall parts) to append back into contents. */
+  modelContent: unknown;
+}
+
+export interface GeminiContentCall {
+  systemInstruction: string;
+  contents: unknown[];               // multi-turn Content[] for the genai SDK
+  tools?: ToolDeclaration[];
+  model?: string;
+  temperature?: number;
+  maxOutputTokens?: number;
+}
+
+/**
+ * Lower-level generate that supports function-calling and multi-turn contents.
+ * Returns the model's text and any functionCalls so a caller can run a
+ * tool-use loop. The compliance footer is still enforced on the system prompt.
+ */
+export async function geminiGenerateContent({
+  systemInstruction,
+  contents,
+  tools,
+  model = 'gemini-2.5-flash',
+  temperature = 0.3,
+  maxOutputTokens = 1024,
+}: GeminiContentCall): Promise<GeminiToolTurn> {
+  const ai = getClient();
+  const config: Record<string, unknown> = {
+    systemInstruction: `${systemInstruction}\n\n${COMPLIANCE_FOOTER}`,
+    temperature,
+    maxOutputTokens,
+  };
+  if (tools && tools.length) {
+    config.tools = [{ functionDeclarations: tools }];
+  }
+
+  const response = await ai.models.generateContent({ model, contents: contents as never, config });
+
+  const rawCalls = response.functionCalls ?? [];
+  const functionCalls = rawCalls.map((fc) => ({
+    name: fc.name ?? '',
+    args: (fc.args ?? {}) as Record<string, unknown>,
+  }));
+  const modelContent = response.candidates?.[0]?.content ?? null;
+
+  return { text: response.text ?? null, functionCalls, modelContent };
+}
+
 export const SYSTEM_PROMPTS = {
   researchCopilot: `
 You are the Deplyze Quant Research Copilot — an institutional-grade quantitative

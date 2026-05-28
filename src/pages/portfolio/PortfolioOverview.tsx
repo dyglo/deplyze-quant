@@ -7,11 +7,9 @@ import {
 import {
   Briefcase, Plus, ChevronDown, TrendingUp,
   Activity, BarChart3, ShieldAlert, PieChart, AlertCircle, X, Check,
-  Loader2, LayoutDashboard, Brain, RefreshCw, Sparkles, Search,
+  Loader2, LayoutDashboard, Brain, RefreshCw, Sparkles,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { symbolSearch } from '../../services/marketService';
-import { parseSymbolTokens } from '../../lib/portfolio/symbolInput';
 import { usePortfolioWorkspace } from '../../hooks/usePortfolioWorkspace';
 import { isAwarenessWorkspaceEnabled } from '../../lib/portfolio/awarenessFlag';
 import { logOpen } from '../../lib/telemetry';
@@ -202,13 +200,9 @@ const PortfolioValueInput: React.FC<{
 
 // ─── Create Portfolio Modal ───────────────────────────────────────────────────
 
-const MARKET_SYMBOL_RE = /^[A-Z0-9./:^_-]{1,20}$/;
-
 type RiskProfile = 'conservative' | 'balanced' | 'growth' | 'aggressive';
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'CHF', 'CAD', 'AUD'] as const;
 const RISK_PROFILES: RiskProfile[] = ['conservative', 'balanced', 'growth', 'aggressive'];
-
-type SeedSymbol = { symbol: string; name: string; assetClass: Holding['assetClass'] };
 
 export interface CreatePortfolioParams {
   name: string;
@@ -217,142 +211,31 @@ export interface CreatePortfolioParams {
   startingCapital?: number;
   cashBalance?: number;
   riskProfile?: RiskProfile;
-  seedSymbols?: SeedSymbol[];
-}
-
-/** Best-effort map from a search-result type to our AssetClass union. */
-function toAssetClass(type?: string): Holding['assetClass'] {
-  const t = (type ?? '').toLowerCase();
-  if (t.includes('crypto')) return 'crypto';
-  if (t.includes('fx') || t.includes('forex') || t.includes('currency')) return 'fx';
-  if (t.includes('index') || t.includes('etf')) return 'index';
-  if (t.includes('bond') || t.includes('treasur')) return 'bond';
-  if (t.includes('commodit') || t.includes('future')) return 'commodity';
-  return 'equity';
 }
 
 const CreatePortfolioModal: React.FC<{ onClose: () => void; onCreate: (params: CreatePortfolioParams) => void }> = ({ onClose, onCreate }) => {
   const [name, setName] = useState('');
-  const [bm, setBm] = useState(DEFAULT_BENCHMARK_ID);
-  const [customMode, setCustomMode] = useState(false);
-  const [customBm, setCustomBm] = useState('');
   const [currency, setCurrency] = useState('USD');
   const [capitalStr, setCapitalStr] = useState('');
   const [riskProfile, setRiskProfile] = useState<RiskProfile>('balanced');
 
-  // Custom-benchmark symbol search (so any ticker can be picked, not just the registry).
-  const [customResults, setCustomResults] = useState<Array<{ symbol: string; name: string }>>([]);
-  const [customSearching, setCustomSearching] = useState(false);
-  const [customPicked, setCustomPicked] = useState(false);
-  const customReqId = useRef(0);
-
-  // Initial holdings to seed the portfolio with (multi-symbol; quantities set later).
-  const [seeds, setSeeds] = useState<SeedSymbol[]>([]);
-  const [seedInput, setSeedInput] = useState('');
-  const [seedResults, setSeedResults] = useState<Array<{ symbol: string; name: string; type?: string }>>([]);
-  const [seedSearching, setSeedSearching] = useState(false);
-  const seedReqId = useRef(0);
-
-  const addSeed = (s: SeedSymbol) => {
-    setSeeds(prev => prev.some(p => p.symbol === s.symbol) ? prev : [...prev, s]);
-    setSeedInput('');
-    setSeedResults([]);
-  };
-  const removeSeed = (symbol: string) => setSeeds(prev => prev.filter(p => p.symbol !== symbol));
-
-  // Commit comma-/enter-delimited free-typed tickers as seeds.
-  const commitTypedSeeds = (raw: string) => {
-    const valid = parseSymbolTokens(raw);
-    if (valid.length === 0) return;
-    setSeeds(prev => {
-      const next = [...prev];
-      for (const sym of valid) if (!next.some(p => p.symbol === sym)) next.push({ symbol: sym, name: sym, assetClass: 'equity' });
-      return next;
-    });
-    setSeedInput('');
-    setSeedResults([]);
-  };
-
-  useEffect(() => {
-    const raw = seedInput.trim();
-    // While typing the current token (after the last comma) — search it.
-    const token = raw.includes(',') ? raw.slice(raw.lastIndexOf(',') + 1).trim() : raw;
-    if (token.length < 2) { setSeedResults([]); setSeedSearching(false); return; }
-    setSeedSearching(true);
-    const current = ++seedReqId.current;
-    const tid = setTimeout(async () => {
-      try {
-        const hits = await symbolSearch(token);
-        if (seedReqId.current !== current) return;
-        const seen = new Set<string>();
-        setSeedResults(hits
-          .filter(h => { if (seen.has(h.symbol)) return false; seen.add(h.symbol); return true; })
-          .slice(0, 8)
-          .map(h => ({ symbol: h.symbol, name: h.name ?? h.symbol, type: h.type })));
-      } catch {
-        if (seedReqId.current === current) setSeedResults([]);
-      } finally {
-        if (seedReqId.current === current) setSeedSearching(false);
-      }
-    }, 300);
-    return () => clearTimeout(tid);
-  }, [seedInput]);
-
-  useEffect(() => {
-    if (!customMode) { setCustomResults([]); setCustomSearching(false); return; }
-    const raw = customBm.trim();
-    if (raw.length < 2 || customPicked) { setCustomResults([]); setCustomSearching(false); return; }
-    setCustomSearching(true);
-    const current = ++customReqId.current;
-    const tid = setTimeout(async () => {
-      try {
-        const hits = await symbolSearch(raw);
-        if (customReqId.current !== current) return;
-        const seen = new Set<string>();
-        setCustomResults(hits
-          .filter(h => { if (seen.has(h.symbol)) return false; seen.add(h.symbol); return true; })
-          .slice(0, 8)
-          .map(h => ({ symbol: h.symbol, name: h.name ?? h.symbol })));
-      } catch {
-        if (customReqId.current === current) setCustomResults([]);
-      } finally {
-        if (customReqId.current === current) setCustomSearching(false);
-      }
-    }, 300);
-    return () => clearTimeout(tid);
-  }, [customBm, customMode, customPicked]);
-
-  // Benchmark resolves to a single symbol. A custom entry is used when it's a
-  // clean single symbol; otherwise we fall back to the default benchmark so the
-  // benchmark field can never block creation.
-  const customTyped = customBm.trim().toUpperCase();
-  const customBenchmarkValid = customMode && MARKET_SYMBOL_RE.test(customTyped);
-  const resolvedBenchmark = customMode
-    ? (customBenchmarkValid ? customTyped : DEFAULT_BENCHMARK_ID)
-    : bm;
-
   const startingCapital = capitalStr.trim() === '' ? undefined : Number(capitalStr);
   const capitalValid = startingCapital === undefined || (Number.isFinite(startingCapital) && startingCapital >= 0);
-  // Create is gated only on essentials — benchmark always resolves, holdings are optional.
+  // Create needs only a name (capital optional). Symbols are added afterwards in
+  // Holdings & Watchlist, with price and share count.
   const canCreate = !!name.trim() && capitalValid;
 
   const submit = () => {
     if (!canCreate) return;
-    // Fold the chips plus any uncommitted typed text into the final seed list.
-    const finalSeeds = [...seeds];
-    for (const sym of parseSymbolTokens(seedInput)) {
-      if (!finalSeeds.some(p => p.symbol === sym)) {
-        finalSeeds.push({ symbol: sym, name: sym, assetClass: 'equity' });
-      }
-    }
     onCreate({
       name: name.trim(),
-      benchmarkId: resolvedBenchmark,
+      // Benchmark is no longer a creation-time choice — the service defaults it
+      // (SPY); it can be changed later from the portfolio view.
+      benchmarkId: DEFAULT_BENCHMARK_ID,
       currency,
       startingCapital,
       cashBalance: startingCapital,
       riskProfile,
-      seedSymbols: finalSeeds,
     });
   };
 
@@ -391,93 +274,6 @@ const CreatePortfolioModal: React.FC<{ onClose: () => void; onCreate: (params: C
                 color: 'var(--foreground)', outline: 'none',
               }}
             />
-          </div>
-
-          {/* Benchmark */}
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-              <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                Benchmark
-              </label>
-              <button
-                onClick={() => { setCustomMode(m => !m); setCustomBm(''); setCustomPicked(false); setCustomResults([]); }}
-                style={{
-                  fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 4,
-                  border: '1px solid var(--border)',
-                  background: customMode ? 'var(--primary)' : 'transparent',
-                  color: customMode ? 'var(--primary-foreground)' : 'var(--muted-foreground)',
-                  cursor: 'pointer',
-                }}
-              >
-                {customMode ? 'Use registry' : 'Custom symbol'}
-              </button>
-            </div>
-
-            {customMode ? (
-              <div style={{ position: 'relative' }}>
-                <Search size={12} style={{ position: 'absolute', left: 10, top: 17, transform: 'translateY(-50%)', color: 'var(--muted-foreground)' }} />
-                <input
-                  autoFocus
-                  value={customBm}
-                  onChange={e => { setCustomBm(e.target.value); setCustomPicked(false); }}
-                  placeholder="Search or type any ticker — MSFT, ^GSPC, BTC-USD…"
-                  style={{
-                    width: '100%', boxSizing: 'border-box',
-                    padding: '8px 10px 8px 30px', borderRadius: 6, fontSize: 13,
-                    border: '1px solid var(--border)',
-                    background: 'var(--background)',
-                    color: 'var(--foreground)', outline: 'none',
-                    textTransform: 'uppercase',
-                  }}
-                />
-                {customSearching && <Loader2 size={12} style={{ position: 'absolute', right: 10, top: 17, transform: 'translateY(-50%)', animation: 'spin 1s linear infinite', color: 'var(--primary)' }} />}
-
-                {customResults.length > 0 && !customPicked && (
-                  <div style={{ border: '1px solid var(--border)', borderRadius: 6, marginTop: 4, overflow: 'hidden', background: 'var(--popover)', maxHeight: 200, overflowY: 'auto' }}>
-                    {customResults.map(r => (
-                      <button
-                        key={r.symbol}
-                        onClick={() => { setCustomBm(r.symbol); setCustomPicked(true); setCustomResults([]); }}
-                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '7px 12px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 12, color: 'var(--foreground)', textAlign: 'left' }}
-                        onMouseEnter={e => (e.currentTarget.style.background = 'var(--accent)')}
-                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                      >
-                        <span style={{ fontWeight: 600 }}>{r.symbol}</span>
-                        <span style={{ color: 'var(--muted-foreground)', fontSize: 11, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {customBenchmarkValid && customBm.trim() ? (
-                  <p style={{ margin: '4px 0 0', fontSize: 10, color: 'var(--muted-foreground)' }}>
-                    Benchmark: <strong style={{ color: 'var(--foreground)' }}>{resolvedBenchmark}</strong> — a single index used for comparison.
-                  </p>
-                ) : customBm.trim() ? (
-                  <p style={{ margin: '4px 0 0', fontSize: 10, color: 'var(--muted-foreground)' }}>
-                    Not a single symbol — falling back to <strong style={{ color: 'var(--foreground)' }}>{DEFAULT_BENCHMARK_ID}</strong>. To add multiple symbols, use Initial Holdings below.
-                  </p>
-                ) : (
-                  <p style={{ margin: '4px 0 0', fontSize: 10, color: 'var(--muted-foreground)' }}>
-                    A single index for comparison (e.g. SPY, QQQ, ^GSPC). To add the symbols you want, use Initial Holdings below.
-                  </p>
-                )}
-              </div>
-            ) : (
-              <select
-                value={bm}
-                onChange={e => setBm(e.target.value)}
-                style={{
-                  width: '100%', padding: '8px 10px', borderRadius: 6, fontSize: 12,
-                  border: '1px solid var(--border)', background: 'var(--background)',
-                  color: 'var(--foreground)', cursor: 'pointer',
-                }}
-              >
-                {BENCHMARK_REGISTRY.map(b => (
-                  <option key={b.id} value={b.id}>{b.id} — {b.name}</option>
-                ))}
-              </select>
-            )}
           </div>
 
           {/* Capital setup */}
@@ -540,66 +336,10 @@ const CreatePortfolioModal: React.FC<{ onClose: () => void; onCreate: (params: C
             </div>
           </div>
 
-          {/* Initial holdings (optional, multi-symbol) */}
-          <div>
-            <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted-foreground)', display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-              Initial Holdings (optional)
-            </label>
-
-            {/* Selected chips */}
-            {seeds.length > 0 && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
-                {seeds.map(s => (
-                  <span key={s.symbol} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 6px 3px 8px', borderRadius: 5, fontSize: 11, fontWeight: 600, background: 'color-mix(in srgb, var(--primary) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--primary) 25%, transparent)', color: 'var(--primary)' }}>
-                    {s.symbol}
-                    <button onClick={() => removeSeed(s.symbol)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--primary)', display: 'flex', padding: 0 }} title="Remove">
-                      <X size={11} />
-                    </button>
-                  </span>
-                ))}
-              </div>
-            )}
-
-            <div style={{ position: 'relative' }}>
-              <Search size={12} style={{ position: 'absolute', left: 10, top: 17, transform: 'translateY(-50%)', color: 'var(--muted-foreground)' }} />
-              <input
-                value={seedInput}
-                onChange={e => setSeedInput(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') { e.preventDefault(); commitTypedSeeds(seedInput); }
-                  else if (e.key === ',') { e.preventDefault(); commitTypedSeeds(seedInput); }
-                }}
-                placeholder="Search and add symbols — AAPL, MSFT, NVDA…"
-                style={{
-                  width: '100%', boxSizing: 'border-box',
-                  padding: '8px 10px 8px 30px', borderRadius: 6, fontSize: 13,
-                  border: '1px solid var(--border)', background: 'var(--background)',
-                  color: 'var(--foreground)', outline: 'none', textTransform: 'uppercase',
-                }}
-              />
-              {seedSearching && <Loader2 size={12} style={{ position: 'absolute', right: 10, top: 17, transform: 'translateY(-50%)', animation: 'spin 1s linear infinite', color: 'var(--primary)' }} />}
-
-              {seedResults.length > 0 && (
-                <div style={{ border: '1px solid var(--border)', borderRadius: 6, marginTop: 4, overflow: 'hidden', background: 'var(--popover)', maxHeight: 200, overflowY: 'auto', position: 'absolute', left: 0, right: 0, zIndex: 10 }}>
-                  {seedResults.map(r => (
-                    <button
-                      key={r.symbol}
-                      onClick={() => addSeed({ symbol: r.symbol, name: r.name, assetClass: toAssetClass(r.type) })}
-                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '7px 12px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 12, color: 'var(--foreground)', textAlign: 'left' }}
-                      onMouseEnter={e => (e.currentTarget.style.background = 'var(--accent)')}
-                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                    >
-                      <span style={{ fontWeight: 600 }}>{r.symbol}</span>
-                      <span style={{ color: 'var(--muted-foreground)', fontSize: 11, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-            <p style={{ margin: '4px 0 0', fontSize: 10, color: 'var(--muted-foreground)' }}>
-              Add as many as you like — pick from results, or type tickers separated by commas. Set quantities later via Manage / Buy.
-            </p>
-          </div>
+          {/* Symbols are added after creation, in Holdings & Watchlist. */}
+          <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--muted-foreground)', lineHeight: 1.5 }}>
+            Add holdings after creating — open <strong style={{ color: 'var(--foreground)', fontWeight: 600 }}>Holdings &amp; Watchlist</strong> and use <strong style={{ color: 'var(--foreground)', fontWeight: 600 }}>Add Holding</strong> to enter each symbol with its price and share count.
+          </p>
 
           <button
             disabled={!canCreate}
@@ -1234,7 +974,7 @@ export const PortfolioOverview: React.FC = () => {
   const {
     portfolios, selectedPortfolio, holdings,
     loading, holdingsLoading,
-    selectPortfolio, createNew, createNewWithSeeds, updateSelected,
+    selectPortfolio, createNew, updateSelected,
     effectiveWeights,
   } = usePortfolioWorkspace();
 
@@ -1266,19 +1006,16 @@ export const PortfolioOverview: React.FC = () => {
 
   const handleCreate = useCallback(async (params: CreatePortfolioParams) => {
     setShowCreate(false);
-    const createParams = {
+    await createNew({
       name: params.name,
       benchmarkId: params.benchmarkId,
-      type: 'long-only' as const,
+      type: 'long-only',
       currency: params.currency,
       startingCapital: params.startingCapital,
       cashBalance: params.cashBalance,
       riskProfile: params.riskProfile,
-    };
-    const seeds = params.seedSymbols ?? [];
-    if (seeds.length > 0) await createNewWithSeeds(createParams, seeds);
-    else await createNew(createParams);
-  }, [createNew, createNewWithSeeds]);
+    });
+  }, [createNew]);
 
   const handleSetValue = useCallback((v: number | undefined) => {
     updateSelected({ totalValue: v });

@@ -40,10 +40,6 @@ interface UsePortfolioWorkspaceReturn {
 
   selectPortfolio: (id: string | null) => void;
   createNew: (params: Parameters<typeof createPortfolio>[2]) => Promise<string>;
-  createNewWithSeeds: (
-    params: Parameters<typeof createPortfolio>[2],
-    seeds: Array<{ symbol: string; name: string; assetClass: Holding['assetClass'] }>,
-  ) => Promise<string>;
   updateSelected: (updates: Parameters<typeof updatePortfolio>[1]) => Promise<void>;
   archiveSelected: () => Promise<void>;
 
@@ -152,21 +148,6 @@ export function usePortfolioWorkspace(): UsePortfolioWorkspaceReturn {
     return id;
   }, [user, currentWorkspace, selectPortfolio]);
 
-  /** Create a portfolio and seed it with holdings (metadata-only; quantities set later). */
-  const createNewWithSeeds = useCallback(async (
-    params: Parameters<typeof createPortfolio>[2],
-    seeds: Array<{ symbol: string; name: string; assetClass: Holding['assetClass'] }>,
-  ) => {
-    if (!user || !currentWorkspace) throw new Error('No active session');
-    const id = await createPortfolio(user.uid, currentWorkspace.id, params);
-    for (const s of seeds) {
-      await addHolding(id, currentWorkspace.id, { symbol: s.symbol, name: s.name, assetClass: s.assetClass });
-    }
-    selectPortfolio(id);
-    toast.success(`Portfolio "${params.name}" created${seeds.length ? ` with ${seeds.length} holding${seeds.length > 1 ? 's' : ''}` : ''}`);
-    return id;
-  }, [user, currentWorkspace, selectPortfolio]);
-
   const updateSelected = useCallback(async (updates: Parameters<typeof updatePortfolio>[1]) => {
     if (!selectedId) return;
     await updatePortfolio(selectedId, updates);
@@ -249,7 +230,6 @@ export function usePortfolioWorkspace(): UsePortfolioWorkspaceReturn {
     holdingsLoading,
     selectPortfolio,
     createNew,
-    createNewWithSeeds,
     updateSelected,
     archiveSelected,
     addNewHolding,

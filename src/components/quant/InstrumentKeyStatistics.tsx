@@ -22,7 +22,7 @@ function fmtPrice(v: number): string {
 
 interface StatRowProps {
   label: string;
-  value: React.ReactNode;
+  value?: React.ReactNode;
   highlight?: boolean;
   locked?: boolean;
 }
@@ -169,7 +169,7 @@ export const InstrumentKeyStatistics: React.FC<Props> = ({ symbol, quote: q }) =
           <StatRow label="Net Income"     value={latestFinancials?.netIncome != null ? fmtBig(latestFinancials.netIncome) : null} highlight />
           <StatRow label="EPS"            value={f?.eps != null ? f.eps.toFixed(2) : latestFinancials?.eps != null ? latestFinancials.eps.toFixed(2) : null} />
           <StatRow label="EPS Growth Forecast" locked />
-          <StatRow label="Next Earnings Date" value={nextEarningsDate ? new Date(nextEarningsDate).toLocaleDateString(undefined, { month: 'short', d: undefined, day: 'numeric', year: 'numeric' }) : null} highlight />
+          <StatRow label="Next Earnings Date" value={nextEarningsDate ? new Date(nextEarningsDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : null} highlight />
           <StatRow label="Dividend (Yield)"
             value={dividendAnnual != null && dividendYield != null
               ? `${dividendAnnual.toFixed(2)} (${(dividendYield * 100).toFixed(1)}%)`

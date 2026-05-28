@@ -101,6 +101,11 @@ service cloud.firestore {
       match /holdings/{holdingId} {
         allow read, write: if isSignedIn();
       }
+
+      // Simulated transaction ledger — no execution, scoped under owned portfolio.
+      match /transactions/{transactionId} {
+        allow read, write: if isSignedIn();
+      }
     }
 
     match /portfolioIntelligence/{observationId} {

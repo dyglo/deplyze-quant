@@ -23,6 +23,9 @@ export type PortfolioType =
 
 export type PortfolioStatus = 'active' | 'archived';
 
+/** Coarse risk-tolerance label for the portfolio (UI/intelligence framing only). */
+export type PortfolioRiskProfile = 'conservative' | 'balanced' | 'growth' | 'aggressive';
+
 export interface Portfolio {
   id: string;
   uid: string;
@@ -49,6 +52,20 @@ export interface Portfolio {
    */
   totalValue?: number;
 
+  /**
+   * Simulated capital model. All values are simulated — never broker balances.
+   * - startingCapital: capital the portfolio was funded with.
+   * - cashBalance: uninvested simulated cash (mutated by the PR2 transaction engine).
+   * - realizedPnl: cumulative realised P&L across closed/trimmed positions.
+   * All optional so existing portfolios remain valid without migration.
+   */
+  startingCapital?: number;
+  cashBalance?: number;
+  realizedPnl?: number;
+
+  /** Coarse risk-tolerance label (intelligence/UI framing only). */
+  riskProfile?: PortfolioRiskProfile;
+
   tags?: string[];
   notes?: string;
 
@@ -59,6 +76,9 @@ export interface Portfolio {
 // ─── Holding ─────────────────────────────────────────────────────────────────
 
 export type HoldingConviction = 'low' | 'medium' | 'high' | 'highest';
+
+/** Lifecycle state. Closed positions are retained for history, not deleted. */
+export type HoldingStatus = 'active' | 'closed';
 
 export interface Holding {
   id: string;
@@ -87,8 +107,69 @@ export interface Holding {
   tags?: string[];
   notes?: string;
 
+  /**
+   * Lifecycle state. Absent on legacy docs — treated as 'active' at read-time.
+   * Closed positions remain stored so transaction/performance history survives.
+   */
+  status?: HoldingStatus;
+  /** Purchase / first-entry date (unix ms). */
+  entryDate?: number;
+  /** Target allocation 0–1, for allocation-drift analytics. */
+  targetWeight?: number;
+  /** Cumulative realised P&L on this position (trims/sells/closes). */
+  realizedPnl?: number;
+  /** When the position was closed (unix ms). Set alongside status='closed'. */
+  closedAt?: number;
+  /** Investment thesis — distinct from operational `notes`. */
+  thesis?: string;
+
   addedAt: number;            // unix ms
   updatedAt?: number;         // unix ms
+}
+
+// ─── Transaction Ledger ────────────────────────────────────────────────────────
+
+/**
+ * Portfolio actions. Execution-free / simulated — these record intent against
+ * simulated capital, not broker orders.
+ * - buy:   open a new position
+ * - add:   increase an existing position
+ * - trim:  reduce part of a position
+ * - sell:  reduce a position (alias of trim for partial exits)
+ * - close: fully exit a position
+ * - cash_adjust: deposit/withdraw simulated cash (no symbol position change)
+ */
+export type TransactionAction = 'buy' | 'add' | 'trim' | 'sell' | 'close' | 'cash_adjust';
+
+export interface Transaction {
+  id: string;
+  portfolioId: string;
+  workspaceId: string;
+  uid: string;
+
+  symbol: string;
+  action: TransactionAction;
+
+  /** Units transacted (>= 0). Zero only valid for cash_adjust. */
+  quantity: number;
+  /** Per-unit price at transaction time. */
+  price: number;
+  /** quantity * price (always >= 0). */
+  grossValue: number;
+
+  /** Optional frictions, default 0. Always reduce net cash received / increase cost. */
+  fees?: number;
+  slippage?: number;
+
+  /** Signed effect on simulated cash: negative for buys/adds, positive for exits. */
+  cashImpact: number;
+
+  note?: string;
+  thesis?: string;
+  /** Intelligence/artifact ids that informed this action. */
+  linkedArtifactIds?: string[];
+
+  ts: number;                 // unix ms — when the transaction occurred
 }
 
 // ─── Benchmark Registry ───────────────────────────────────────────────────────

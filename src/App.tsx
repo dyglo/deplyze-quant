@@ -11,10 +11,6 @@ import { Activity } from 'lucide-react';
 import { MarketHome } from './pages/MarketHome';
 import { IntelligenceTerminal } from './pages/IntelligenceTerminal';
 import { Investigations } from './pages/Investigations';
-import { MoversWorkspace } from './pages/instruments/MoversWorkspace';
-import { HeatmapWorkspace } from './pages/instruments/HeatmapWorkspace';
-import { NarrativeIntelligence } from './pages/instruments/NarrativeIntelligence';
-import { VolatilityDesk } from './pages/instruments/VolatilityDesk';
 import { InstrumentDetail } from './pages/InstrumentDetail';
 import { MacroRegimeDesk } from './pages/MacroRegimeDesk';
 import { RelationsMap } from './pages/RelationsMap';
@@ -84,11 +80,6 @@ export default function App() {
             <Route path="/"                     element={<ProtectedRoute><MarketHome /></ProtectedRoute>} />
             <Route path="/terminal"             element={<ProtectedRoute><IntelligenceTerminal /></ProtectedRoute>} />
             <Route path="/investigations"       element={<ProtectedRoute><Investigations /></ProtectedRoute>} />
-            {/* Discovery workspaces (deep-linked from Market Home; must precede :symbol) */}
-            <Route path="/instruments/movers"      element={<ProtectedRoute><MoversWorkspace /></ProtectedRoute>} />
-            <Route path="/instruments/heatmap"     element={<ProtectedRoute><HeatmapWorkspace /></ProtectedRoute>} />
-            <Route path="/instruments/narratives"  element={<ProtectedRoute><NarrativeIntelligence /></ProtectedRoute>} />
-            <Route path="/instruments/volatility"  element={<ProtectedRoute><VolatilityDesk /></ProtectedRoute>} />
             {/* Single-asset research */}
             <Route path="/instruments/:symbol"     element={<ProtectedRoute><InstrumentDetail /></ProtectedRoute>} />
             <Route path="/macro"                element={<ProtectedRoute><MacroRegimeDesk /></ProtectedRoute>} />

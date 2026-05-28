@@ -532,16 +532,17 @@ export async function recordTransaction(
   }
 
   // 3) Portfolio cash + realised-P&L aggregate.
-  const portfolioUpdates: Record<string, unknown> = {
+  const nextCash =
+    portfolio.startingCapital != null
+      ? portfolio.startingCapital + netCashImpact(allTxs)
+      : portfolio.cashBalance != null
+        ? portfolio.cashBalance + cashImpact
+        : null;
+  batch.update(doc(db, 'portfolios', portfolioId), {
     realizedPnl: totalRealizedPnl(allTxs),
+    ...(nextCash != null ? { cashBalance: nextCash } : {}),
     updatedAt: serverTimestamp(),
-  };
-  if (portfolio.startingCapital != null) {
-    portfolioUpdates.cashBalance = portfolio.startingCapital + netCashImpact(allTxs);
-  } else if (portfolio.cashBalance != null) {
-    portfolioUpdates.cashBalance = portfolio.cashBalance + cashImpact;
-  }
-  batch.update(doc(db, 'portfolios', portfolioId), portfolioUpdates);
+  });
 
   await batch.commit();
   return { transactionId: txRef.id };
@@ -615,12 +616,14 @@ export async function adjustCash(
     ts,
   });
 
-  const updates: Record<string, unknown> = { updatedAt: serverTimestamp() };
-  updates.cashBalance =
+  const nextCash =
     portfolio.startingCapital != null
       ? portfolio.startingCapital + netCashImpact(allTxs)
       : (portfolio.cashBalance ?? 0) + amount;
-  batch.update(doc(db, 'portfolios', portfolioId), updates);
+  batch.update(doc(db, 'portfolios', portfolioId), {
+    cashBalance: nextCash,
+    updatedAt: serverTimestamp(),
+  });
 
   await batch.commit();
   return { transactionId: txRef.id };

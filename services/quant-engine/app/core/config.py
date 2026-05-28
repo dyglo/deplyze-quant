@@ -14,6 +14,13 @@ class Settings(BaseSettings):
     GCP_PROJECT_ID: str = "deplyze-quant"
     BIGQUERY_LOCATION: str = "US"
 
+    # ─── BigQuery cost / runtime guards ──────────────────────────────────────
+    # Hard ceiling on bytes a single query may bill (cancels above this), and a
+    # wall-clock job timeout. Applied via the client's default job config and
+    # the run_query() helper so no query can run away. Defaults: 2 GiB, 60s.
+    BQ_MAX_BYTES_BILLED: int = 2 * 1024 * 1024 * 1024
+    BQ_JOB_TIMEOUT_MS: int = 60_000
+
     # ─── Service identity ────────────────────────────────────────────────────
     QUANT_ENGINE_ENV: str = "development"   # development | production
 

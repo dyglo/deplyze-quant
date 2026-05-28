@@ -35,7 +35,7 @@ import structlog
 from google.cloud import bigquery
 from google.cloud import firestore as fs
 
-from app.bigquery.client import get_bigquery_client, fully_qualified
+from app.bigquery.client import get_bigquery_client, fully_qualified, query_job_config
 from app.core.config import settings
 from app.portfolio_awareness.writer import SynthesisPayload, write_snapshot
 
@@ -150,15 +150,17 @@ def _find_stale_portfolios(
     cutoff = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
 
     if portfolio_ids:
-        pid_clause = ", ".join(f"'{p}'" for p in portfolio_ids)
         q = f"""
             SELECT portfolio_id, MAX(generated_at) AS last_generated
             FROM {table}
-            WHERE portfolio_id IN ({pid_clause})
+            WHERE portfolio_id IN UNNEST(@portfolio_ids)
               AND is_test = FALSE
             GROUP BY portfolio_id
         """
-        rows = list(client.query(q).result())
+        job_config = query_job_config(
+            [bigquery.ArrayQueryParameter("portfolio_ids", "STRING", list(portfolio_ids))]
+        )
+        rows = list(client.query(q, job_config=job_config).result())
         seen: Dict[str, datetime] = {}
         for r in rows:
             last = r.last_generated
@@ -203,18 +205,21 @@ def _load_ohlcv_batch(
     if not symbols:
         return {}
 
-    sym_list = ", ".join(f"'{s}'" for s in symbols)
     table = f"`{fully_qualified(CLEANED_DS, TABLE_OHLCV)}`"
     q = f"""
         SELECT symbol, observation_time,
                COALESCE(adjusted_close, close) AS close
         FROM {table}
-        WHERE symbol IN ({sym_list})
-          AND observation_time >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {lookback_days} DAY)
+        WHERE symbol IN UNNEST(@symbols)
+          AND observation_time >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL @lookback_days DAY)
           AND COALESCE(adjusted_close, close) > 0
         ORDER BY symbol, observation_time ASC
     """
-    rows = list(client.query(q).result())
+    job_config = query_job_config([
+        bigquery.ArrayQueryParameter("symbols", "STRING", list(symbols)),
+        bigquery.ScalarQueryParameter("lookback_days", "INT64", int(lookback_days)),
+    ])
+    rows = list(client.query(q, job_config=job_config).result())
     result: Dict[str, List[float]] = {}
     for r in rows:
         sym = r.symbol

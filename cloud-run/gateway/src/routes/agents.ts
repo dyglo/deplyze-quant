@@ -17,7 +17,7 @@
 
 import { Router } from 'express';
 import { z } from 'zod';
-import { BigQuery } from '@google-cloud/bigquery';
+import { BigQuery, type Query } from '@google-cloud/bigquery';
 import { withCache, TTL } from '../services/cache';
 
 const router = Router();
@@ -36,14 +36,21 @@ function getBQ(): BigQuery {
 const PROJECT = process.env.FIREBASE_PROJECT_ID ?? 'deplyze-quant';
 const ARTIFACTS_DS = process.env.BQ_DATASET_ARTIFACTS ?? 'artifacts';
 
-async function runQuery<T>(query: string, params: Record<string, unknown> = {}): Promise<T[]> {
+async function runQuery<T>(
+  query: string,
+  params: Record<string, unknown> = {},
+  types: Record<string, string | string[]> = {},
+): Promise<T[]> {
   const bq = getBQ();
-  const [rows] = await bq.query({
+  const options: Query = {
     query,
     params,
     location: 'US',
     maximumBytesBilled: String(100 * 1024 * 1024), // 100 MB cap
-  });
+    jobTimeoutMs: 30_000, // hard 30s ceiling — fail fast on runaway scans
+  };
+  if (Object.keys(types).length) options.types = types as Query['types'];
+  const [rows] = await bq.query(options);
   return rows as T[];
 }
 
@@ -88,14 +95,16 @@ router.get('/outputs', async (req, res, next) => {
     const cacheKey = `agents:outputs:${JSON.stringify(q)}`;
     const rows = await withCache<AgentOutputRow[]>(cacheKey, TTL.quote * 5, async () => {
       const wheres: string[] = [
-        `DATE(observation_date) >= DATE_SUB(CURRENT_DATE(), INTERVAL ${q.days} DAY)`,
+        `DATE(observation_date) >= DATE_SUB(CURRENT_DATE(), INTERVAL @days DAY)`,
         `is_test = FALSE`,
       ];
-      if (q.domain) wheres.push(`domain = '${q.domain}'`);
-      if (q.severity) wheres.push(`severity = '${q.severity}'`);
-      if (q.artifact_type) wheres.push(`artifact_type = '${q.artifact_type}'`);
-      if (q.symbol) wheres.push(`'${q.symbol}' IN UNNEST(symbols)`);
-      if (q.placement) wheres.push(`'${q.placement}' IN UNNEST(recommended_placements)`);
+      const params: Record<string, unknown> = { days: q.days, lim: q.limit };
+      const types: Record<string, string | string[]> = { days: 'INT64', lim: 'INT64' };
+      if (q.domain) { wheres.push(`domain = @domain`); params.domain = q.domain; types.domain = 'STRING'; }
+      if (q.severity) { wheres.push(`severity = @severity`); params.severity = q.severity; types.severity = 'STRING'; }
+      if (q.artifact_type) { wheres.push(`artifact_type = @artifact_type`); params.artifact_type = q.artifact_type; types.artifact_type = 'STRING'; }
+      if (q.symbol) { wheres.push(`@symbol IN UNNEST(symbols)`); params.symbol = q.symbol; types.symbol = 'STRING'; }
+      if (q.placement) { wheres.push(`@placement IN UNNEST(recommended_placements)`); params.placement = q.placement; types.placement = 'STRING'; }
 
       return runQuery<AgentOutputRow>(`
         SELECT
@@ -107,8 +116,8 @@ router.get('/outputs', async (req, res, next) => {
         FROM \`${PROJECT}.${ARTIFACTS_DS}.agent_outputs\`
         WHERE ${wheres.join(' AND ')}
         ORDER BY generated_at DESC
-        LIMIT ${q.limit}
-      `);
+        LIMIT @lim
+      `, params, types);
     });
     res.json({ outputs: rows, count: rows.length });
   } catch (err) {
@@ -133,12 +142,12 @@ router.get('/outputs/:domain', async (req, res, next) => {
           source_tables, generated_at, observation_date,
           recommended_placements, tags
         FROM \`${PROJECT}.${ARTIFACTS_DS}.agent_outputs\`
-        WHERE domain = '${domain}'
-          AND DATE(observation_date) >= DATE_SUB(CURRENT_DATE(), INTERVAL ${days} DAY)
+        WHERE domain = @domain
+          AND DATE(observation_date) >= DATE_SUB(CURRENT_DATE(), INTERVAL @days DAY)
           AND is_test = FALSE
         ORDER BY generated_at DESC
-        LIMIT ${limit}
-      `),
+        LIMIT @lim
+      `, { domain, days, lim: limit }, { domain: 'STRING', days: 'INT64', lim: 'INT64' }),
     );
     res.json({ outputs: rows, domain, count: rows.length });
   } catch (err) {
@@ -164,14 +173,14 @@ router.get('/portfolio/:portfolioId', async (req, res, next) => {
           recommended_placements, tags
         FROM \`${PROJECT}.${ARTIFACTS_DS}.agent_outputs\`
         WHERE (
-            portfolio_id = '${pid}'
+            portfolio_id = @pid
             OR domain IN ('macro', 'regime', 'risk', 'liquidity')
           )
-          AND DATE(observation_date) >= DATE_SUB(CURRENT_DATE(), INTERVAL ${days} DAY)
+          AND DATE(observation_date) >= DATE_SUB(CURRENT_DATE(), INTERVAL @days DAY)
           AND is_test = FALSE
         ORDER BY generated_at DESC
-        LIMIT ${limit}
-      `),
+        LIMIT @lim
+      `, { pid, days, lim: limit }, { pid: 'STRING', days: 'INT64', lim: 'INT64' }),
     );
     res.json({ outputs: rows, portfolio_id: pid, count: rows.length });
   } catch (err) {
@@ -372,12 +381,11 @@ router.get('/narrative-exposure', async (req, res, next) => {
     const rows = await withCache<unknown[]>(cacheKey, TTL.quote * 15, async () => {
       const symList = symbols.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
       if (!symList.length) return [];
-      const symIn = symList.map(s => `'${s}'`).join(',');
 
       return runQuery<unknown>(`
         WITH sym_set AS (
           SELECT unnested AS symbol
-          FROM UNNEST([${symIn}]) AS unnested
+          FROM UNNEST(@symbols) AS unnested
         )
         SELECT
           m.theme_id,
@@ -397,12 +405,12 @@ router.get('/narrative-exposure', async (req, res, next) => {
           AND m.theme_label IS NOT NULL
           AND EXISTS (
             SELECT 1 FROM UNNEST(m.related_symbols) rs
-            WHERE rs IN (${symIn})
+            WHERE rs IN UNNEST(@symbols)
           )
         QUALIFY ROW_NUMBER() OVER (PARTITION BY m.theme_id ORDER BY m.last_seen_at DESC) = 1
         ORDER BY m.lifetime_score DESC
         LIMIT 20
-      `);
+      `, { symbols: symList }, { symbols: ['STRING'] });
     });
 
     res.json({ exposures: rows, symbols: symbols.split(',').map(s => s.trim().toUpperCase()), count: (rows as unknown[]).length });

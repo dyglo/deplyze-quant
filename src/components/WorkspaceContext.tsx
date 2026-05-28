@@ -537,17 +537,21 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
 
     try {
-      // 1. Delete all sites (projects) for this workspace
-      const sitesSnap = await getDocs(collection(db, 'sites'));
-      const workspaceSites = sitesSnap.docs.filter(d => d.data().orgId === workspaceId);
-      for (const s of workspaceSites) {
+      // 1. Delete all sites (projects) for this workspace.
+      // Org-scoped query (not a full-collection read) so it satisfies the
+      // tenant-isolation rules — clients may only read sites in their own org.
+      const sitesSnap = await getDocs(
+        query(collection(db, 'sites'), where('orgId', '==', workspaceId))
+      );
+      for (const s of sitesSnap.docs) {
         await deleteDoc(doc(db, 'sites', s.id));
       }
 
-      // 2. Delete all memberships
-      const membershipsSnap = await getDocs(collection(db, 'memberships'));
-      const workspaceMembers = membershipsSnap.docs.filter(d => d.data().orgId === workspaceId);
-      for (const m of workspaceMembers) {
+      // 2. Delete all memberships for this workspace (org-scoped query).
+      const membershipsSnap = await getDocs(
+        query(collection(db, 'memberships'), where('orgId', '==', workspaceId))
+      );
+      for (const m of membershipsSnap.docs) {
         await deleteDoc(doc(db, 'memberships', m.id));
       }
 

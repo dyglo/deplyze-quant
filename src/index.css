@@ -780,6 +780,26 @@ textarea.ds-input {
   100% { background-position: 600px 0; }
 }
 
+@keyframes price-flash {
+  0%   { opacity: 0.15; }
+  100% { opacity: 0; }
+}
+.price-flash-up,
+.price-flash-down {
+  position: relative;
+}
+.price-flash-up::after,
+.price-flash-down::after {
+  content: '';
+  position: absolute;
+  inset: -2px -4px;
+  border-radius: 4px;
+  pointer-events: none;
+  animation: price-flash 0.8s ease-out forwards;
+}
+.price-flash-up::after   { background: var(--ds-gain); }
+.price-flash-down::after { background: var(--ds-loss); }
+
 .ds-skeleton {
   background: linear-gradient(90deg, var(--muted) 25%, var(--border) 50%, var(--muted) 75%);
   background-size: 1200px 100%;

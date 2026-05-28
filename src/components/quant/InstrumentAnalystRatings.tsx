@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
+import { Link } from 'react-router-dom';
+import { Lock, ExternalLink } from 'lucide-react';
 import { useAnalystRatings } from '../../hooks/useAnalystRatings';
 import type { AnalystRatings } from '../../services/instrumentService';
-
-// ─── Consensus derivation ─────────────────────────────────────────────────
 
 type ConsensusLabel = 'Strong Buy' | 'Buy' | 'Hold' | 'Sell' | 'Strong Sell';
 
@@ -18,199 +18,259 @@ function deriveConsensus(rec: NonNullable<AnalystRatings['recommendations']>): C
   return 'Strong Sell';
 }
 
-const CONSENSUS_COLORS: Record<ConsensusLabel, { bg: string; fg: string }> = {
-  'Strong Buy': { bg: 'rgba(78, 96, 64, 0.12)', fg: '#4E6040' },
-  'Buy':        { bg: 'rgba(78, 96, 64, 0.08)', fg: '#5A7052' },
-  'Hold':       { bg: 'var(--muted)',           fg: 'var(--muted-foreground)' },
-  'Sell':       { bg: 'rgba(193, 95, 60, 0.08)', fg: 'var(--primary)' },
-  'Strong Sell':{ bg: 'rgba(176, 58, 46, 0.12)', fg: '#B03A2E' },
+const CONSENSUS_COLOR: Record<ConsensusLabel, { bg: string; fg: string }> = {
+  'Strong Buy':  { bg: 'rgba(34,197,94,0.14)',  fg: '#22c55e' },
+  'Buy':         { bg: 'rgba(132,204,18,0.14)', fg: '#84cc16' },
+  'Hold':        { bg: 'rgba(234,179,8,0.14)',  fg: '#ca8a04' },
+  'Sell':        { bg: 'rgba(249,115,22,0.14)', fg: '#f97316' },
+  'Strong Sell': { bg: 'rgba(239,68,68,0.14)',  fg: '#ef4444' },
 };
 
-// ─── Ratings distribution bar ─────────────────────────────────────────────
+const POSITION_COLOR: Record<string, string> = {
+  buy: '#22c55e', 'strong buy': '#22c55e', outperform: '#22c55e', overweight: '#22c55e',
+  hold: '#ca8a04', neutral: '#ca8a04', 'market perform': '#ca8a04', 'equal-weight': '#ca8a04',
+  sell: '#ef4444', 'strong sell': '#ef4444', underperform: '#ef4444', underweight: '#ef4444',
+};
 
-const RatingsBar: React.FC<{ rec: NonNullable<AnalystRatings['recommendations']> }> = ({ rec }) => {
-  const total = rec.strongBuy + rec.buy + rec.hold + rec.sell + rec.strongSell || 1;
-  const segments = [
-    { label: 'Strong Buy', count: rec.strongBuy, color: '#4E6040' },
-    { label: 'Buy',        count: rec.buy,        color: '#5A7052' },
-    { label: 'Hold',       count: rec.hold,       color: '#8A8F82' },
-    { label: 'Sell',       count: rec.sell,       color: 'var(--primary)' },
-    { label: 'Strong Sell',count: rec.strongSell, color: '#B03A2E' },
-  ].filter((s) => s.count > 0);
+function posColor(pos: string): string {
+  return POSITION_COLOR[pos.toLowerCase()] ?? 'var(--muted-foreground)';
+}
+
+// ─── SVG Donut ────────────────────────────────────────────────────────────────
+
+interface DonutProps {
+  buy: number;
+  hold: number;
+  sell: number;
+  total: number;
+}
+
+const DonutChart: React.FC<DonutProps> = ({ buy, hold, sell, total }) => {
+  const size = 120;
+  const cx = 60, cy = 60, R = 46, sw = 14;
+
+  function arc(startPct: number, endPct: number, color: string) {
+    if (startPct === endPct) return null;
+    const toRad = (pct: number) => (pct * 2 * Math.PI) - Math.PI / 2;
+    const x1 = cx + R * Math.cos(toRad(startPct));
+    const y1 = cy + R * Math.sin(toRad(startPct));
+    const x2 = cx + R * Math.cos(toRad(endPct));
+    const y2 = cy + R * Math.sin(toRad(endPct));
+    const large = (endPct - startPct) > 0.5 ? 1 : 0;
+    return <path d={`M ${x1} ${y1} A ${R} ${R} 0 ${large} 1 ${x2} ${y2}`}
+      stroke={color} strokeWidth={sw} fill="none" strokeLinecap="butt" />;
+  }
+
+  const t = total || 1;
+  const buyEnd   = buy / t;
+  const holdEnd  = buyEnd + hold / t;
+  // sell goes rest
 
   return (
-    <div>
-      {/* Stacked bar */}
-      <div style={{ display: 'flex', height: 8, borderRadius: 4, overflow: 'hidden', gap: 1, marginBottom: 10 }}>
-        {segments.map((s) => (
-          <div
-            key={s.label}
-            style={{ flex: s.count / total * 100, background: s.color, minWidth: s.count > 0 ? 2 : 0 }}
-            title={`${s.label}: ${s.count}`}
-          />
-        ))}
-      </div>
-      {/* Legend */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 4 }}>
-        {[
-          { label: 'Strong Buy', count: rec.strongBuy, color: '#4E6040' },
-          { label: 'Buy',        count: rec.buy,       color: '#5A7052' },
-          { label: 'Hold',       count: rec.hold,      color: '#8A8F82' },
-          { label: 'Sell',       count: rec.sell,      color: 'var(--primary)' },
-          { label: 'Strong Sell',count: rec.strongSell,color: '#B03A2E' },
-        ].map((s) => (
-          <div key={s.label} style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: s.color, fontVariantNumeric: 'tabular-nums' }}>{s.count}</div>
-            <div style={{ fontSize: 9, color: 'var(--muted-foreground)', lineHeight: 1.2, marginTop: 1 }}>{s.label}</div>
-          </div>
-        ))}
-      </div>
-    </div>
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+      <circle cx={cx} cy={cy} r={R} fill="none" stroke="var(--border)" strokeWidth={sw} />
+      {arc(0, buyEnd, '#22c55e')}
+      {arc(buyEnd, holdEnd, '#ca8a04')}
+      {arc(holdEnd, 1, '#ef4444')}
+      <text x={cx} y={cy - 4} textAnchor="middle" fill="var(--foreground)"
+        fontSize={18} fontWeight={700} fontFamily="inherit">{total}</text>
+      <text x={cx} y={cy + 13} textAnchor="middle" fill="var(--muted-foreground)"
+        fontSize={9} fontFamily="inherit">Analysts</text>
+    </svg>
   );
 };
 
-// ─── Price target gauge ───────────────────────────────────────────────────
-
-const PriceTargetGauge: React.FC<{
-  pt: AnalystRatings['priceTargets'];
-  currentPrice?: number;
-}> = ({ pt, currentPrice }) => {
-  if (!pt.avg || !pt.low || !pt.high) return null;
-
-  const rangeSpan = pt.high - pt.low;
-  const avgPct = rangeSpan > 0 ? ((pt.avg - pt.low) / rangeSpan) * 100 : 50;
-  const curPct = currentPrice != null && rangeSpan > 0
-    ? Math.min(100, Math.max(0, ((currentPrice - pt.low) / rangeSpan) * 100))
-    : null;
-  const upside = currentPrice != null ? ((pt.avg - currentPrice) / currentPrice) * 100 : null;
-
-  return (
-    <div>
-      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.8, textTransform: 'uppercase', color: 'var(--muted-foreground)', marginBottom: 12 }}>
-        Price Target ({pt.count} analysts)
-      </div>
-
-      {/* Avg PT + upside */}
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 16 }}>
-        <span style={{ fontSize: 24, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-          ${pt.avg.toFixed(2)}
-        </span>
-        {upside != null && (
-          <span style={{
-            fontSize: 13, fontWeight: 600, fontVariantNumeric: 'tabular-nums',
-            color: upside >= 0 ? 'var(--ds-gain)' : 'var(--ds-loss)',
-          }}>
-            {upside >= 0 ? '+' : ''}{upside.toFixed(1)}% potential
-          </span>
-        )}
-      </div>
-
-      {/* Range bar */}
-      <div style={{ position: 'relative', height: 4, background: 'var(--border)', borderRadius: 2, marginBottom: 6 }}>
-        {/* Fill from low to high (full bar, lighter) */}
-        <div style={{ position: 'absolute', left: 0, right: 0, top: 0, height: '100%', background: 'rgba(90,112,82,0.15)', borderRadius: 2 }} />
-        {/* Avg marker */}
-        <div style={{
-          position: 'absolute', left: `${avgPct}%`, top: '50%',
-          transform: 'translate(-50%, -50%)',
-          width: 10, height: 10, borderRadius: '50%',
-          background: '#5A7052', border: '2px solid var(--background)',
-        }} />
-        {/* Current price marker */}
-        {curPct != null && (
-          <div style={{
-            position: 'absolute', left: `${curPct}%`, top: '50%',
-            transform: 'translate(-50%, -50%)',
-            width: 8, height: 8, borderRadius: '50%',
-            background: 'var(--foreground)', border: '2px solid var(--background)',
-            zIndex: 1,
-          }} />
-        )}
-      </div>
-
-      {/* Low / High labels */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-        <div style={{ textAlign: 'left' }}>
-          <div style={{ fontSize: 11, fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: 'var(--ds-loss)' }}>${pt.low.toFixed(2)}</div>
-          <div style={{ fontSize: 9, color: 'var(--muted-foreground)' }}>Low PT</div>
-        </div>
-        <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: 11, fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: 'var(--ds-gain)' }}>${pt.high.toFixed(2)}</div>
-          <div style={{ fontSize: 9, color: 'var(--muted-foreground)' }}>High PT</div>
-        </div>
-      </div>
-
-      {/* Recent targets */}
-      {pt.recent.length > 0 && (
-        <div>
-          <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.8, textTransform: 'uppercase', color: 'var(--muted-foreground)', marginBottom: 6 }}>Recent Targets</div>
-          {pt.recent.map((r, i) => (
-            <div key={i} style={{
-              display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
-              padding: '5px 0', borderBottom: '1px solid var(--border)', fontSize: 11,
-            }}>
-              <div>
-                <span style={{ fontWeight: 500 }}>{r.company || r.analyst}</span>
-                <span style={{ color: 'var(--muted-foreground)', marginLeft: 6, fontSize: 10 }}>
-                  {new Date(r.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: '2-digit' })}
-                </span>
-              </div>
-              <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>${r.target.toFixed(2)}</span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-};
-
-// ─── Main component ────────────────────────────────────────────────────────
+// ─── Main component ────────────────────────────────────────────────────────────
 
 export const InstrumentAnalystRatings: React.FC<{ symbol: string; currentPrice?: number }> = ({ symbol, currentPrice }) => {
   const ratings = useAnalystRatings(symbol);
-  const data = ratings.data;
-  const rec = data?.recommendations ?? null;
-  const consensus = rec ? deriveConsensus(rec) : null;
-  const consColors = consensus ? CONSENSUS_COLORS[consensus] : null;
-  const totalAnalysts = rec ? rec.strongBuy + rec.buy + rec.hold + rec.sell + rec.strongSell : 0;
+  const data    = ratings.data;
+  const rec     = data?.recommendations ?? null;
+  const pt      = data?.priceTargets;
+
+  const consensus = useMemo(() => rec ? deriveConsensus(rec) : null, [rec]);
+  const totalAnalysts = rec
+    ? rec.strongBuy + rec.buy + rec.hold + rec.sell + rec.strongSell
+    : 0;
+  const buyCount  = rec ? rec.strongBuy + rec.buy  : 0;
+  const holdCount = rec ? rec.hold                 : 0;
+  const sellCount = rec ? rec.sell + rec.strongSell : 0;
+
+  const upside = pt?.avg != null && currentPrice
+    ? ((pt.avg - currentPrice) / currentPrice) * 100
+    : null;
+
+  if (!ratings.loading && (!data || (!rec && !pt?.avg))) return null;
 
   return (
     <section style={{ marginBottom: 32 }}>
-      <div style={{ paddingBottom: 10, borderBottom: '1px solid var(--border)', marginBottom: 20 }}>
-        <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Analyst Ratings</h2>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 14, borderBottom: '1px solid var(--border)', marginBottom: 20 }}>
+        <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--foreground)' }}>Analyst Ratings</h2>
+        <Link to={`/copilot?symbol=${symbol}`} style={{ fontSize: 12, color: 'var(--primary)', textDecoration: 'none', fontWeight: 500 }}>
+          See full analyst report
+        </Link>
       </div>
 
-      {ratings.loading && !data ? (
-        <p style={{ color: 'var(--muted-foreground)', fontSize: 12, margin: 0 }}>Loading analyst data…</p>
-      ) : !data || (!rec && !data.priceTargets.avg) ? (
-        <p style={{ color: 'var(--muted-foreground)', fontSize: 12, margin: 0 }}>No analyst coverage data available.</p>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 48 }}>
+      {ratings.loading && !data ? null : (
+        <>
+          {/* Top row: donut + consensus + price target */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr 1fr', gap: '0 40px', alignItems: 'start', marginBottom: 28 }}>
 
-          {/* Left: consensus badge + ratings distribution */}
-          <div>
-            {consensus && consColors && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20 }}>
+            {/* Donut + buy/hold/sell counts */}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+              <DonutChart buy={buyCount} hold={holdCount} sell={sellCount} total={totalAnalysts} />
+              <div style={{ display: 'flex', gap: 16 }}>
+                {[
+                  { label: 'Buy', count: buyCount, color: '#22c55e' },
+                  { label: 'Hold', count: holdCount, color: '#ca8a04' },
+                  { label: 'Sell', count: sellCount, color: '#ef4444' },
+                ].map(({ label, count, color }) => (
+                  <div key={label} style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, color, fontVariantNumeric: 'tabular-nums' }}>{count}</div>
+                    <div style={{ fontSize: 10, color: 'var(--muted-foreground)' }}>{label}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Consensus */}
+            <div style={{ paddingTop: 8 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.8, textTransform: 'uppercase', color: 'var(--muted-foreground)', marginBottom: 12 }}>
+                Overall Consensus
+              </div>
+              {consensus && (
                 <div style={{
-                  padding: '8px 18px', borderRadius: 8,
-                  background: consColors.bg, color: consColors.fg,
-                  fontSize: 15, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.5,
-                  border: `1px solid ${consColors.fg}22`,
+                  display: 'inline-block', padding: '8px 22px',
+                  borderRadius: 8, fontSize: 17, fontWeight: 800,
+                  background: CONSENSUS_COLOR[consensus].bg,
+                  color: CONSENSUS_COLOR[consensus].fg,
+                  border: `1px solid ${CONSENSUS_COLOR[consensus].fg}30`,
+                  letterSpacing: 0.3, marginBottom: 14,
                 }}>
                   {consensus}
                 </div>
-                <div style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>
-                  {totalAnalysts} analyst{totalAnalysts !== 1 ? 's' : ''}
-                  {rec?.date ? ` · ${new Date(rec.date).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}` : ''}
+              )}
+              <div style={{ fontSize: 11.5, color: 'var(--muted-foreground)' }}>
+                Based on {totalAnalysts} analyst{totalAnalysts !== 1 ? 's' : ''}
+                {rec?.date ? ` · Updated ${new Date(rec.date).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}` : ''}
+              </div>
+            </div>
+
+            {/* 12-Month Price Target */}
+            {pt?.avg != null && (
+              <div style={{ paddingTop: 8, borderLeft: '1px solid var(--border)', paddingLeft: 32 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.8, textTransform: 'uppercase', color: 'var(--muted-foreground)', marginBottom: 12 }}>
+                  Analysts 12-Month Price Target
                 </div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 8 }}>
+                  <span style={{ fontSize: 26, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--foreground)' }}>
+                    ${pt.avg.toFixed(2)}
+                  </span>
+                  {upside != null && (
+                    <span style={{
+                      fontSize: 13, fontWeight: 700, fontVariantNumeric: 'tabular-nums',
+                      color: upside >= 0 ? '#22c55e' : '#ef4444',
+                    }}>
+                      {upside >= 0 ? '+' : ''}{upside.toFixed(2)}% {upside >= 0 ? 'Upside' : 'Downside'}
+                    </span>
+                  )}
+                </div>
+                {pt.low != null && pt.high != null && (() => {
+                  const span = pt.high! - pt.low!;
+                  const avgPct = span > 0 ? ((pt.avg! - pt.low!) / span) * 100 : 50;
+                  const curPct = currentPrice != null && span > 0
+                    ? Math.min(100, Math.max(0, ((currentPrice - pt.low!) / span) * 100)) : null;
+                  return (
+                    <>
+                      <div style={{ position: 'relative', height: 4, background: 'var(--border)', borderRadius: 2, marginBottom: 6 }}>
+                        <div style={{ position: 'absolute', left: `${avgPct}%`, top: '50%', transform: 'translate(-50%,-50%)', width: 10, height: 10, borderRadius: '50%', background: 'var(--primary)', border: '2px solid var(--background)' }} />
+                        {curPct != null && (
+                          <div style={{ position: 'absolute', left: `${curPct}%`, top: '50%', transform: 'translate(-50%,-50%)', width: 8, height: 8, borderRadius: '50%', background: 'var(--foreground)', border: '2px solid var(--background)', zIndex: 1 }} />
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ fontSize: 10, color: '#ef4444', fontVariantNumeric: 'tabular-nums' }}>${pt.low!.toFixed(2)} Low</span>
+                        <span style={{ fontSize: 10, color: '#22c55e', fontVariantNumeric: 'tabular-nums' }}>High ${pt.high!.toFixed(2)}</span>
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
             )}
-            {rec && <RatingsBar rec={rec} />}
           </div>
 
-          {/* Right: price target */}
-          <PriceTargetGauge pt={data.priceTargets} currentPrice={currentPrice} />
-        </div>
+          {/* Recent ratings table */}
+          {pt?.recent && pt.recent.length > 0 && (
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.8, textTransform: 'uppercase', color: 'var(--muted-foreground)', marginBottom: 10 }}>
+                Recent Analyst Ratings
+              </div>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                      {['Firm', '', 'Position', 'Price Target', 'Upside / Downside', 'From Price Target', 'Action', 'Date'].map((h, i) => (
+                        <th key={i} style={{
+                          padding: '6px 8px', textAlign: i === 0 ? 'left' : 'right',
+                          fontSize: 10, fontWeight: 700, letterSpacing: 0.6,
+                          textTransform: 'uppercase', color: 'var(--muted-foreground)',
+                          whiteSpace: 'nowrap',
+                        }}>
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pt.recent.map((r, i) => {
+                      const tgtUpside = currentPrice && r.target
+                        ? ((r.target - currentPrice) / currentPrice) * 100 : null;
+                      return (
+                        <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}
+                          onMouseEnter={e => (e.currentTarget.style.background = 'var(--secondary)')}
+                          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                          <td style={{ padding: '8px 8px', fontWeight: 600, color: 'var(--foreground)' }}>
+                            {r.company || r.analyst || '—'}
+                          </td>
+                          <td style={{ padding: '8px 4px', textAlign: 'right' }}>
+                            <ExternalLink size={11} style={{ color: 'var(--muted-foreground)', cursor: 'pointer' }} />
+                          </td>
+                          <td style={{ padding: '8px 8px', textAlign: 'right' }}>
+                            {r.rating ? (
+                              <span style={{
+                                fontSize: 11, fontWeight: 700, color: posColor(r.rating),
+                                background: `${posColor(r.rating)}1a`, padding: '2px 8px', borderRadius: 4,
+                              }}>{r.rating}</span>
+                            ) : (
+                              <span style={{ fontSize: 11, color: 'var(--muted-foreground)' }}>—</span>
+                            )}
+                          </td>
+                          <td style={{ padding: '8px 8px', textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+                            {r.target ? `$${r.target.toFixed(2)}` : '—'}
+                          </td>
+                          <td style={{ padding: '8px 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600, color: tgtUpside != null ? (tgtUpside >= 0 ? '#22c55e' : '#ef4444') : 'var(--foreground)' }}>
+                            {tgtUpside != null ? `${tgtUpside >= 0 ? '+' : ''}${tgtUpside.toFixed(1)}%` : '—'}
+                          </td>
+                          <td style={{ padding: '8px 8px', textAlign: 'right' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 3, color: 'var(--primary)', fontSize: 11, cursor: 'pointer' }}>
+                              <Lock size={9} /> Unlock
+                            </div>
+                          </td>
+                          <td style={{ padding: '8px 8px', textAlign: 'right', color: 'var(--muted-foreground)', textTransform: 'capitalize' }}>
+                            {r.action ?? '—'}
+                          </td>
+                          <td style={{ padding: '8px 8px', textAlign: 'right', color: 'var(--muted-foreground)', whiteSpace: 'nowrap' }}>
+                            {new Date(r.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </section>
   );

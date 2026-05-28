@@ -30,6 +30,7 @@ router.get('/:symbol/profile', async (req, res, next) => {
                 marketCap: p.mktCap, beta: p.beta, cik: p.cik,
                 isin: p.isin, ceo: p.ceo,
                 employees: p.fullTimeEmployees ? parseInt(p.fullTimeEmployees, 10) : undefined,
+                sharesOutstanding: p.sharesOutstanding,
                 description: p.description, website: p.website,
                 logo: p.image, ipoDate: p.ipoDate,
                 isEtf: p.isEtf, isActivelyTrading: p.isActivelyTrading,
@@ -90,6 +91,7 @@ router.get('/:symbol/metrics', async (req, res, next) => {
                   debtToEquity: m.debtToEquity, currentRatio: m.currentRatio,
                   roe: m.roe, roic: m.roic, dividendYield: m.dividendYield,
                   earningsYield: m.earningsYield, fcfYield: m.freeCashFlowYield,
+                  bookValuePerShare: m.bookValuePerShare,
                   netMargin: income[i]?.netIncomeRatio,
                   operatingMargin: income[i]?.operatingIncomeRatio,
                   revenue: income[i]?.revenue, netIncome: income[i]?.netIncome,
@@ -183,12 +185,14 @@ router.get('/:symbol/analyst', async (req, res, next) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
     const data = await withCache(`fund:analyst:${symbol}`, TTL.fundamentals, async () => {
-      const [recsR, targetsR] = await Promise.allSettled([
+      const [recsR, targetsR, upgradesR] = await Promise.allSettled([
         fmp.getAnalystRecommendations(symbol, 1),
         fmp.getPriceTargets(symbol, 20),
+        fmp.getUpgradesDowngrades(symbol, 20),
       ]);
       const recs = recsR.status === 'fulfilled' ? recsR.value : [];
       const targets = targetsR.status === 'fulfilled' ? targetsR.value : [];
+      const upgrades = upgradesR.status === 'fulfilled' ? upgradesR.value : [];
 
       const rec = recs[0] ?? null;
       const ptValues = targets
@@ -214,12 +218,26 @@ router.get('/:symbol/analyst', async (req, res, next) => {
           low: ptLow,
           avg: ptAvg,
           count: ptValues.length,
-          recent: targets.slice(0, 8).map((t) => ({
-            date: t.publishedDate,
-            target: t.adjPriceTarget > 0 ? t.adjPriceTarget : t.priceTarget,
-            analyst: t.analystName,
-            company: t.analystCompany,
-          })),
+          recent: targets.slice(0, 8).map((t) => {
+            const tMs = new Date(t.publishedDate).getTime();
+            // Match upgrade/downgrade by same company within ±30 days of the price target
+            const match = upgrades.find((u) => {
+              const uMs = new Date(u.publishedDate).getTime();
+              return (
+                u.gradingCompany.toLowerCase() === t.analystCompany.toLowerCase() &&
+                Math.abs(uMs - tMs) < 30 * 86_400_000
+              );
+            });
+            return {
+              date: t.publishedDate,
+              target: t.adjPriceTarget > 0 ? t.adjPriceTarget : t.priceTarget,
+              analyst: t.analystName,
+              company: t.analystCompany,
+              action: match?.action,
+              rating: match?.newGrade,
+              previousRating: match?.previousGrade,
+            };
+          }),
         },
       };
     });
@@ -246,6 +264,18 @@ router.get('/:symbol/peers', async (req, res, next) => {
           volume: q.volume,
         })),
       };
+    });
+    res.json(data);
+  } catch (err) { next(err); }
+});
+
+// ─── /fundamentals/:symbol/ownership ──────────────────────────────────────
+router.get('/:symbol/ownership', async (req, res, next) => {
+  try {
+    const symbol = req.params.symbol.toUpperCase();
+    const data = await withCache(`fund:ownership:${symbol}`, TTL.fundamentals, async () => {
+      const holders = await fmp.getInstitutionalHolders(symbol, 10);
+      return { holders };
     });
     res.json(data);
   } catch (err) { next(err); }

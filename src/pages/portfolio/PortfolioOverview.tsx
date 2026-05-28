@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { symbolSearch } from '../../services/marketService';
+import { parseSymbolTokens } from '../../lib/portfolio/symbolInput';
 import { usePortfolioWorkspace } from '../../hooks/usePortfolioWorkspace';
 import { isAwarenessWorkspaceEnabled } from '../../lib/portfolio/awarenessFlag';
 import { logOpen } from '../../lib/telemetry';
@@ -261,8 +262,7 @@ const CreatePortfolioModal: React.FC<{ onClose: () => void; onCreate: (params: C
 
   // Commit comma-/enter-delimited free-typed tickers as seeds.
   const commitTypedSeeds = (raw: string) => {
-    const tokens = raw.split(',').map(t => t.trim()).filter(Boolean);
-    const valid = tokens.map(t => t.toUpperCase()).filter(t => MARKET_SYMBOL_RE.test(t));
+    const valid = parseSymbolTokens(raw);
     if (valid.length === 0) return;
     setSeeds(prev => {
       const next = [...prev];
@@ -322,29 +322,32 @@ const CreatePortfolioModal: React.FC<{ onClose: () => void; onCreate: (params: C
     return () => clearTimeout(tid);
   }, [customBm, customMode, customPicked]);
 
-  // A typed ticker is accepted as long as it matches the symbol pattern — search
-  // is a convenience, not a requirement, so any provider symbol can be used.
-  const effectiveBm = customMode ? customBm.trim().toUpperCase() : bm;
-  const customBenchmarkValid = !customMode || MARKET_SYMBOL_RE.test(effectiveBm);
+  // Benchmark resolves to a single symbol. A custom entry is used when it's a
+  // clean single symbol; otherwise we fall back to the default benchmark so the
+  // benchmark field can never block creation.
+  const customTyped = customBm.trim().toUpperCase();
+  const customBenchmarkValid = customMode && MARKET_SYMBOL_RE.test(customTyped);
+  const resolvedBenchmark = customMode
+    ? (customBenchmarkValid ? customTyped : DEFAULT_BENCHMARK_ID)
+    : bm;
+
   const startingCapital = capitalStr.trim() === '' ? undefined : Number(capitalStr);
   const capitalValid = startingCapital === undefined || (Number.isFinite(startingCapital) && startingCapital >= 0);
-  const canCreate = !!name.trim() && effectiveBm.length > 0 && customBenchmarkValid && capitalValid;
+  // Create is gated only on essentials — benchmark always resolves, holdings are optional.
+  const canCreate = !!name.trim() && capitalValid;
 
   const submit = () => {
     if (!canCreate) return;
-    // Fold any unsubmitted typed text into seeds before creating.
-    const pending = seedInput.trim();
+    // Fold the chips plus any uncommitted typed text into the final seed list.
     const finalSeeds = [...seeds];
-    if (pending) {
-      for (const t of pending.split(',').map(x => x.trim().toUpperCase()).filter(Boolean)) {
-        if (MARKET_SYMBOL_RE.test(t) && !finalSeeds.some(p => p.symbol === t)) {
-          finalSeeds.push({ symbol: t, name: t, assetClass: 'equity' });
-        }
+    for (const sym of parseSymbolTokens(seedInput)) {
+      if (!finalSeeds.some(p => p.symbol === sym)) {
+        finalSeeds.push({ symbol: sym, name: sym, assetClass: 'equity' });
       }
     }
     onCreate({
       name: name.trim(),
-      benchmarkId: effectiveBm,
+      benchmarkId: resolvedBenchmark,
       currency,
       startingCapital,
       cashBalance: startingCapital,
@@ -360,7 +363,7 @@ const CreatePortfolioModal: React.FC<{ onClose: () => void; onCreate: (params: C
       display: 'flex', alignItems: 'center', justifyContent: 'center',
     }} onClick={onClose}>
       <div
-        style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, padding: 24, width: 400, maxWidth: '90vw' }}
+        style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, padding: 24, width: 400, maxWidth: '90vw', maxHeight: '88vh', overflowY: 'auto' }}
         onClick={e => e.stopPropagation()}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
@@ -421,7 +424,7 @@ const CreatePortfolioModal: React.FC<{ onClose: () => void; onCreate: (params: C
                   style={{
                     width: '100%', boxSizing: 'border-box',
                     padding: '8px 10px 8px 30px', borderRadius: 6, fontSize: 13,
-                    border: `1px solid ${customBenchmarkValid || !customBm.trim() ? 'var(--border)' : 'var(--destructive)'}`,
+                    border: '1px solid var(--border)',
                     background: 'var(--background)',
                     color: 'var(--foreground)', outline: 'none',
                     textTransform: 'uppercase',
@@ -448,15 +451,15 @@ const CreatePortfolioModal: React.FC<{ onClose: () => void; onCreate: (params: C
 
                 {customBenchmarkValid && customBm.trim() ? (
                   <p style={{ margin: '4px 0 0', fontSize: 10, color: 'var(--muted-foreground)' }}>
-                    Using <strong style={{ color: 'var(--foreground)' }}>{effectiveBm}</strong> as benchmark. Pick a result or just type a ticker.
+                    Benchmark: <strong style={{ color: 'var(--foreground)' }}>{resolvedBenchmark}</strong> — a single index used for comparison.
                   </p>
                 ) : customBm.trim() ? (
-                  <p style={{ margin: '4px 0 0', fontSize: 10, color: 'var(--destructive)' }}>
-                    Use a single symbol such as SPY, QQQ, ^GSPC, or BTC-USD (no spaces).
+                  <p style={{ margin: '4px 0 0', fontSize: 10, color: 'var(--muted-foreground)' }}>
+                    Not a single symbol — falling back to <strong style={{ color: 'var(--foreground)' }}>{DEFAULT_BENCHMARK_ID}</strong>. To add multiple symbols, use Initial Holdings below.
                   </p>
                 ) : (
                   <p style={{ margin: '4px 0 0', fontSize: 10, color: 'var(--muted-foreground)' }}>
-                    Enter one provider symbol. Comma-separated lists are not valid benchmarks.
+                    A single index for comparison (e.g. SPY, QQQ, ^GSPC). To add the symbols you want, use Initial Holdings below.
                   </p>
                 )}
               </div>

@@ -202,15 +202,45 @@ const PortfolioValueInput: React.FC<{
 
 const MARKET_SYMBOL_RE = /^[A-Z0-9./:^_-]{1,20}$/;
 
-const CreatePortfolioModal: React.FC<{ onClose: () => void; onCreate: (name: string, benchmarkId: string) => void }> = ({ onClose, onCreate }) => {
+type RiskProfile = 'conservative' | 'balanced' | 'growth' | 'aggressive';
+const CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'CHF', 'CAD', 'AUD'] as const;
+const RISK_PROFILES: RiskProfile[] = ['conservative', 'balanced', 'growth', 'aggressive'];
+
+export interface CreatePortfolioParams {
+  name: string;
+  benchmarkId: string;
+  currency: string;
+  startingCapital?: number;
+  cashBalance?: number;
+  riskProfile?: RiskProfile;
+}
+
+const CreatePortfolioModal: React.FC<{ onClose: () => void; onCreate: (params: CreatePortfolioParams) => void }> = ({ onClose, onCreate }) => {
   const [name, setName] = useState('');
   const [bm, setBm] = useState(DEFAULT_BENCHMARK_ID);
   const [customMode, setCustomMode] = useState(false);
   const [customBm, setCustomBm] = useState('');
+  const [currency, setCurrency] = useState('USD');
+  const [capitalStr, setCapitalStr] = useState('');
+  const [riskProfile, setRiskProfile] = useState<RiskProfile>('balanced');
 
   const effectiveBm = customMode ? customBm.trim().toUpperCase() : bm;
   const customBenchmarkValid = !customMode || MARKET_SYMBOL_RE.test(effectiveBm);
-  const canCreate = name.trim() && effectiveBm.length > 0 && customBenchmarkValid;
+  const startingCapital = capitalStr.trim() === '' ? undefined : Number(capitalStr);
+  const capitalValid = startingCapital === undefined || (Number.isFinite(startingCapital) && startingCapital >= 0);
+  const canCreate = !!name.trim() && effectiveBm.length > 0 && customBenchmarkValid && capitalValid;
+
+  const submit = () => {
+    if (!canCreate) return;
+    onCreate({
+      name: name.trim(),
+      benchmarkId: effectiveBm,
+      currency,
+      startingCapital,
+      cashBalance: startingCapital,
+      riskProfile,
+    });
+  };
 
   return (
     <div style={{
@@ -310,9 +340,69 @@ const CreatePortfolioModal: React.FC<{ onClose: () => void; onCreate: (name: str
             )}
           </div>
 
+          {/* Capital setup */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 10 }}>
+            <div>
+              <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted-foreground)', display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Starting Capital
+              </label>
+              <input
+                value={capitalStr}
+                onChange={e => setCapitalStr(e.target.value.replace(/[^0-9.]/g, ''))}
+                inputMode="decimal"
+                placeholder="e.g. 100000"
+                style={{
+                  width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: 6, fontSize: 13,
+                  border: `1px solid ${capitalValid ? 'var(--border)' : 'var(--destructive)'}`,
+                  background: 'var(--background)', color: 'var(--foreground)', outline: 'none',
+                  fontVariantNumeric: 'tabular-nums',
+                }}
+              />
+              <p style={{ margin: '4px 0 0', fontSize: 10, color: 'var(--muted-foreground)' }}>
+                Simulated capital. Optional — enables cash & P&L tracking.
+              </p>
+            </div>
+            <div>
+              <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted-foreground)', display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Base Currency
+              </label>
+              <select
+                value={currency}
+                onChange={e => setCurrency(e.target.value)}
+                style={{ width: '100%', padding: '8px 10px', borderRadius: 6, fontSize: 12, border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--foreground)', cursor: 'pointer' }}
+              >
+                {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {/* Risk profile */}
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted-foreground)', display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              Risk Profile
+            </label>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {RISK_PROFILES.map(r => (
+                <button
+                  key={r}
+                  onClick={() => setRiskProfile(r)}
+                  style={{
+                    flex: 1, padding: '7px 4px', borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                    textTransform: 'capitalize',
+                    border: `1px solid ${riskProfile === r ? 'var(--primary)' : 'var(--border)'}`,
+                    background: riskProfile === r ? 'color-mix(in srgb, var(--primary) 12%, transparent)' : 'transparent',
+                    color: riskProfile === r ? 'var(--primary)' : 'var(--muted-foreground)',
+                  }}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <button
             disabled={!canCreate}
-            onClick={() => { if (canCreate) onCreate(name.trim(), effectiveBm); }}
+            onClick={submit}
             style={{
               padding: '9px 16px', borderRadius: 6, fontSize: 13, fontWeight: 600,
               background: canCreate ? 'var(--primary)' : 'var(--muted)',
@@ -973,9 +1063,17 @@ export const PortfolioOverview: React.FC = () => {
     retry: perfRetry,
   } = usePortfolioPerformance(symbols, effectiveWeights, benchmarkId, periodDays);
 
-  const handleCreate = useCallback(async (name: string, bm: string) => {
+  const handleCreate = useCallback(async (params: CreatePortfolioParams) => {
     setShowCreate(false);
-    await createNew({ name, benchmarkId: bm, type: 'long-only' });
+    await createNew({
+      name: params.name,
+      benchmarkId: params.benchmarkId,
+      type: 'long-only',
+      currency: params.currency,
+      startingCapital: params.startingCapital,
+      cashBalance: params.cashBalance,
+      riskProfile: params.riskProfile,
+    });
   }, [createNew]);
 
   const handleSetValue = useCallback((v: number | undefined) => {

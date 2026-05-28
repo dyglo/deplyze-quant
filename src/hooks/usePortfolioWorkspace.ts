@@ -17,9 +17,18 @@ import {
   updateHolding,
   removeHolding,
   subscribeToPortfolioObservations,
+  recordBuy,
+  recordAdd,
+  recordTrim,
+  recordSell,
+  recordClose,
+  adjustCash,
+  type RecordTransactionParams,
 } from '../services/portfolioService';
 import type { Portfolio, Holding, PortfolioIntelligenceObservation } from '../lib/portfolio/schemas';
 import { toast } from 'sonner';
+
+type ActionParams = Omit<RecordTransactionParams, 'action'>;
 
 interface UsePortfolioWorkspaceReturn {
   portfolios: Portfolio[];
@@ -38,7 +47,20 @@ interface UsePortfolioWorkspaceReturn {
   updateExistingHolding: (holdingId: string, updates: Parameters<typeof updateHolding>[2]) => Promise<void>;
   removeExistingHolding: (holdingId: string) => Promise<void>;
 
-  /** Computed equal-weight allocation when no explicit weights set */
+  /** Active holdings (status !== 'closed'). */
+  activeHoldings: Holding[];
+  /** Closed positions, retained for history. */
+  closedHoldings: Holding[];
+
+  /** Transaction-engine actions (simulated; write ledger + reconcile snapshot). */
+  buyHolding: (params: ActionParams) => Promise<{ transactionId: string }>;
+  addToHolding: (params: ActionParams) => Promise<{ transactionId: string }>;
+  trimHolding: (params: ActionParams) => Promise<{ transactionId: string }>;
+  sellHolding: (params: ActionParams) => Promise<{ transactionId: string }>;
+  closeHolding: (params: ActionParams) => Promise<{ transactionId: string }>;
+  adjustCashBalance: (amount: number, note?: string) => Promise<{ transactionId: string }>;
+
+  /** Computed equal-weight allocation when no explicit weights set (active only) */
   effectiveWeights: Record<string, number>;
 }
 
@@ -95,16 +117,21 @@ export function usePortfolioWorkspace(): UsePortfolioWorkspaceReturn {
 
   const selectedPortfolio = portfolios.find(p => p.id === selectedId) ?? null;
 
-  // Effective weights: use explicit weights if all set, otherwise equal-weight
+  // Closed positions are retained for history but excluded from live allocation.
+  const activeHoldings = holdings.filter(h => h.status !== 'closed');
+  const closedHoldings = holdings.filter(h => h.status === 'closed');
+
+  // Effective weights: use explicit weights if all set, otherwise equal-weight.
+  // Computed over active holdings only so closed positions don't dilute allocation.
   const effectiveWeights: Record<string, number> = (() => {
-    if (holdings.length === 0) return {};
-    const hasWeights = holdings.every(h => typeof h.weight === 'number' && h.weight > 0);
+    if (activeHoldings.length === 0) return {};
+    const hasWeights = activeHoldings.every(h => typeof h.weight === 'number' && h.weight > 0);
     if (hasWeights) {
-      const total = holdings.reduce((s, h) => s + (h.weight ?? 0), 0);
-      return Object.fromEntries(holdings.map(h => [h.symbol, (h.weight ?? 0) / total]));
+      const total = activeHoldings.reduce((s, h) => s + (h.weight ?? 0), 0);
+      return Object.fromEntries(activeHoldings.map(h => [h.symbol, (h.weight ?? 0) / total]));
     }
-    const eq = 1 / holdings.length;
-    return Object.fromEntries(holdings.map(h => [h.symbol, eq]));
+    const eq = 1 / activeHoldings.length;
+    return Object.fromEntries(activeHoldings.map(h => [h.symbol, eq]));
   })();
 
   const selectPortfolio = useCallback((id: string | null) => {
@@ -152,6 +179,48 @@ export function usePortfolioWorkspace(): UsePortfolioWorkspaceReturn {
     if (h) toast.info(`${h.symbol} removed from portfolio`);
   }, [selectedId, holdings]);
 
+  const buyHolding = useCallback(async (params: ActionParams) => {
+    if (!selectedId || !currentWorkspace || !user) throw new Error('No active portfolio');
+    const res = await recordBuy(selectedId, currentWorkspace.id, user.uid, params);
+    toast.success(`Bought ${params.symbol.toUpperCase()}`);
+    return res;
+  }, [selectedId, currentWorkspace, user]);
+
+  const addToHolding = useCallback(async (params: ActionParams) => {
+    if (!selectedId || !currentWorkspace || !user) throw new Error('No active portfolio');
+    const res = await recordAdd(selectedId, currentWorkspace.id, user.uid, params);
+    toast.success(`Added to ${params.symbol.toUpperCase()}`);
+    return res;
+  }, [selectedId, currentWorkspace, user]);
+
+  const trimHolding = useCallback(async (params: ActionParams) => {
+    if (!selectedId || !currentWorkspace || !user) throw new Error('No active portfolio');
+    const res = await recordTrim(selectedId, currentWorkspace.id, user.uid, params);
+    toast.success(`Trimmed ${params.symbol.toUpperCase()}`);
+    return res;
+  }, [selectedId, currentWorkspace, user]);
+
+  const sellHolding = useCallback(async (params: ActionParams) => {
+    if (!selectedId || !currentWorkspace || !user) throw new Error('No active portfolio');
+    const res = await recordSell(selectedId, currentWorkspace.id, user.uid, params);
+    toast.success(`Sold ${params.symbol.toUpperCase()}`);
+    return res;
+  }, [selectedId, currentWorkspace, user]);
+
+  const closeHolding = useCallback(async (params: ActionParams) => {
+    if (!selectedId || !currentWorkspace || !user) throw new Error('No active portfolio');
+    const res = await recordClose(selectedId, currentWorkspace.id, user.uid, params);
+    toast.info(`Closed ${params.symbol.toUpperCase()}`);
+    return res;
+  }, [selectedId, currentWorkspace, user]);
+
+  const adjustCashBalance = useCallback(async (amount: number, note?: string) => {
+    if (!selectedId || !currentWorkspace || !user) throw new Error('No active portfolio');
+    const res = await adjustCash(selectedId, currentWorkspace.id, user.uid, amount, note);
+    toast.success(`Cash ${amount >= 0 ? 'added' : 'withdrawn'}`);
+    return res;
+  }, [selectedId, currentWorkspace, user]);
+
   return {
     portfolios,
     selectedPortfolio,
@@ -166,6 +235,14 @@ export function usePortfolioWorkspace(): UsePortfolioWorkspaceReturn {
     addNewHolding,
     updateExistingHolding,
     removeExistingHolding,
+    activeHoldings,
+    closedHoldings,
+    buyHolding,
+    addToHolding,
+    trimHolding,
+    sellHolding,
+    closeHolding,
+    adjustCashBalance,
     effectiveWeights,
   };
 }

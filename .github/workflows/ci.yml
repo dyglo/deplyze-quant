@@ -107,7 +107,8 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          # Node 21+ required: `node --test` glob expansion is unsupported on 20.
+          node-version: '22'
           cache: 'npm'
 
       - name: Install dependencies

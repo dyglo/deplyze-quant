@@ -1,19 +1,29 @@
 /**
- * cache.ts — Firestore-backed TTL cache for provider responses.
+ * cache.ts — TTL cache for provider responses.
  *
  * Free-tier provider limits are tight (Alpha Vantage 25 req/day, Finnhub
  * 60 req/min). The gateway caches every provider call by a deterministic key.
  *
- * Cache entries live in the `providerCache` collection, never read or written
- * by clients (locked down in firestore.rules).
+ * Three layers, in order:
+ *   1. In-process Map (L1)      — hot keys within a single Cloud Run instance.
+ *   2. Redis (L2, shared)       — cross-instance source of truth when REDIS_HOST
+ *                                 is configured (Memorystore via VPC).
+ *   3. Firestore `providerCache` — fallback ONLY when Redis is unavailable
+ *                                 (local dev, or a Redis outage), so the
+ *                                 cross-instance quota shield survives a Redis
+ *                                 blip. Locked to server-only in firestore.rules.
  *
- * Two-layer lookup: an in-process Map fronts Firestore to avoid round-trips
- * for hot keys within a single Cloud Run instance. Firestore is the source of
- * truth across instances.
+ * When Redis is healthy, Firestore is not touched — this is the deliberate
+ * reduction of Firestore-as-cache. Every layer is fail-open: a backend error
+ * degrades to the next layer (and ultimately the loader), never an exception.
  */
 
 import { createHash } from 'crypto';
 import { db } from './firestoreAdmin';
+import { isRedisEnabled, redisGetJSON, redisSetJSON } from './redis';
+
+// Namespacing keeps cache keys from colliding with rate-limiter keys in Redis.
+const REDIS_PREFIX = 'cache:';
 
 interface CacheEntry<T = unknown> {
   value: T;
@@ -42,6 +52,18 @@ export async function cacheGet<T>(key: string): Promise<T | null> {
   const hot = memory.get(key);
   if (hot && hot.expiresAt > now) return hot.value as T;
 
+  // L2: Redis (primary cross-instance layer when configured). The full entry
+  // (value + expiresAt) is stored so the L1 mirror keeps the real expiry.
+  if (isRedisEnabled()) {
+    const entry = (await redisGetJSON(REDIS_PREFIX + key)) as CacheEntry<T> | null;
+    if (entry && entry.expiresAt > now) {
+      memorySet(key, entry);
+      return entry.value;
+    }
+    return null; // Redis healthy + miss → don't fall back to Firestore.
+  }
+
+  // L3: Firestore fallback (Redis not configured or hard-failed).
   try {
     const docId = hashKey(key);
     const snap = await db.collection('providerCache').doc(docId).get();
@@ -59,6 +81,13 @@ export async function cacheGet<T>(key: string): Promise<T | null> {
 export async function cacheSet<T>(key: string, value: T, ttlMs: number): Promise<void> {
   const entry: CacheEntry<T> = { value, expiresAt: Date.now() + ttlMs };
   memorySet(key, entry);
+
+  if (isRedisEnabled()) {
+    const ok = await redisSetJSON(REDIS_PREFIX + key, entry, Math.ceil(ttlMs / 1000));
+    if (ok) return; // wrote to the shared layer; skip Firestore.
+  }
+
+  // Firestore fallback (Redis not configured, or the Redis write failed).
   try {
     const docId = hashKey(key);
     await db.collection('providerCache').doc(docId).set(entry);

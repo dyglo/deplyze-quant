@@ -13,6 +13,7 @@
  *   - Freshness metadata via gatewayGetMeta()
  */
 
+import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../lib/firebase';
 
 const PREFIX = '/api/v1';
@@ -24,7 +25,15 @@ export class GatewayError extends Error {
   }
 }
 
+// Resolves once Firebase has restored persisted auth state (or confirmed signed-out).
+// On browser refresh, auth.currentUser is null for ~100–400ms while Firebase checks
+// IndexedDB. Without this gate every gateway call on mount throws 401 and never retries.
+const authReady: Promise<void> = new Promise((resolve) => {
+  const unsub = onAuthStateChanged(auth, () => { unsub(); resolve(); });
+});
+
 async function authHeader(): Promise<HeadersInit> {
+  await authReady;
   const user = auth.currentUser;
   if (!user) throw new GatewayError(401, 'Not signed in');
   const token = await user.getIdToken();

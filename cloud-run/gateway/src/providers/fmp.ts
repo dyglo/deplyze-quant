@@ -67,6 +67,7 @@ export interface FmpCompanyProfile {
   sector?: string;
   country?: string;
   fullTimeEmployees?: string;
+  sharesOutstanding?: number;
   phone?: string;
   address?: string;
   city?: string;
@@ -320,5 +321,48 @@ export async function getPriceTargets(
 ): Promise<FmpPriceTargetItem[]> {
   const url = `${BASE}/v4/price-target?symbol=${encodeURIComponent(symbol)}&apikey=${key()}`;
   const r = await getJson<FmpPriceTargetItem[]>('fmp', url);
+  return Array.isArray(r) ? r.slice(0, limit) : [];
+}
+
+// ─── Analyst Upgrades / Downgrades ───────────────────────────────────────────
+
+export interface FmpUpgradeDowngrade {
+  symbol: string;
+  publishedDate: string;
+  newsURL: string;
+  newsTitle?: string;
+  newsPublisher?: string;
+  newGrade: string;
+  previousGrade: string;
+  gradingCompany: string;
+  action: string; // 'upgrade' | 'downgrade' | 'initiated' | 'maintained' | 'reiterated'
+  priceWhenPosted?: number;
+}
+
+export async function getUpgradesDowngrades(
+  symbol: string,
+  limit = 20,
+): Promise<FmpUpgradeDowngrade[]> {
+  const url = `${BASE}/v4/upgrades-downgrades?symbol=${encodeURIComponent(symbol)}&apikey=${key()}`;
+  const r = await getJson<FmpUpgradeDowngrade[]>('fmp', url);
+  return Array.isArray(r) ? r.slice(0, limit) : [];
+}
+
+// ─── Institutional Holders ────────────────────────────────────────────────────
+
+export interface FmpInstitutionalHolder {
+  holder: string;
+  shares: number;
+  dateReported: string;
+  change: number;
+  weightPercent?: number;
+}
+
+export async function getInstitutionalHolders(
+  symbol: string,
+  limit = 10,
+): Promise<FmpInstitutionalHolder[]> {
+  const url = `${BASE}/v3/institutional-holder/${encodeURIComponent(symbol)}?apikey=${key()}`;
+  const r = await getJson<FmpInstitutionalHolder[]>('fmp', url);
   return Array.isArray(r) ? r.slice(0, limit) : [];
 }

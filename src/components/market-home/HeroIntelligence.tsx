@@ -105,8 +105,8 @@ const FeaturedIntelligence: React.FC = () => {
       className="ds-transition-fast"
       style={{
         textAlign: 'left', width: '100%', cursor: 'pointer',
-        background: 'color-mix(in srgb, var(--primary) 7%, transparent)',
-        border: '1px solid color-mix(in srgb, var(--primary) 18%, var(--border))',
+        background: 'transparent',
+        border: '1px solid var(--border)',
         borderRadius: 8,
         padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 9,
       }}

@@ -18,6 +18,8 @@ type EarningsSurpriseRow = {
   epsEstimate?: number;
   surpriseAbs?: number;
   surprisePct?: number | null;
+  revenue?: number | null;
+  revenueEstimate?: number | null;
 };
 
 // ─── /earnings/:symbol/surprises ──────────────────────────────────────────
@@ -30,8 +32,13 @@ router.get('/:symbol/surprises', async (req, res, next) => {
         providers: [
           {
             id: 'fmp', fn: async () => {
-              const surprises = await fmp.getEarningsSurprises(symbol, limit);
-              return surprises.map((e): EarningsSurpriseRow => ({
+              // Fetch EPS surprises and quarterly income statements in parallel.
+              // Both return newest-first, so index-matched entries are the same fiscal quarter.
+              const [surprises, income] = await Promise.all([
+                fmp.getEarningsSurprises(symbol, limit),
+                fmp.getIncomeStatement(symbol, 'quarter', limit).catch(() => []),
+              ]);
+              return surprises.map((e, idx): EarningsSurpriseRow => ({
                 date: e.date,
                 epsActual: e.actualEarningResult,
                 epsEstimate: e.estimatedEarning,
@@ -39,6 +46,8 @@ router.get('/:symbol/surprises', async (req, res, next) => {
                 surprisePct: e.estimatedEarning
                   ? ((e.actualEarningResult - e.estimatedEarning) / Math.abs(e.estimatedEarning)) * 100
                   : null,
+                revenue: income[idx]?.revenue ?? null,
+                revenueEstimate: null,
               }));
             },
           },
@@ -54,6 +63,8 @@ router.get('/:symbol/surprises', async (req, res, next) => {
                   epsEstimate: e.epsEstimate,
                   surpriseAbs: e.epsDifference,
                   surprisePct: e.surprisePercent ?? null,
+                  revenue: null,
+                  revenueEstimate: null,
                 }));
             },
           },

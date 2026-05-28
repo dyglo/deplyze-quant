@@ -15,6 +15,7 @@ export interface InstrumentProfile {
   website?: string;
   logo?: string;
   ipoDate?: string;
+  sharesOutstanding?: number;
   // legacy Finnhub names kept for backward-compat
   finnhubIndustry?: string;
   marketCapitalization?: number;
@@ -39,6 +40,7 @@ export interface InstrumentFundamentals {
   week52Low?: number;
   ma50?: number;
   ma200?: number;
+  bookValuePerShare?: number;
 }
 
 export interface EarningsRecord {
@@ -109,7 +111,15 @@ export interface AnalystRatings {
     low?: number;
     avg?: number;
     count: number;
-    recent: Array<{ date: string; target: number; analyst: string; company: string }>;
+    recent: Array<{
+      date: string;
+      target: number;
+      analyst: string;
+      company: string;
+      action?: string;
+      rating?: string;
+      previousRating?: string;
+    }>;
   };
 }
 
@@ -132,5 +142,23 @@ export interface PeerQuote {
 export async function fetchPeers(symbol: string): Promise<{ peers: PeerQuote[] }> {
   return gatewayGet<{ peers: PeerQuote[] }>(
     `/fundamentals/${encodeURIComponent(symbol)}/peers`,
+  );
+}
+
+export interface OwnershipHolder {
+  name: string;
+  shares: number;
+  dateReported: string;
+  change: number;
+  weightPercent?: number;
+}
+
+export interface OwnershipData {
+  holders: OwnershipHolder[];
+}
+
+export async function fetchOwnership(symbol: string): Promise<OwnershipData> {
+  return gatewayGet<OwnershipData>(
+    `/fundamentals/${encodeURIComponent(symbol)}/ownership`,
   );
 }

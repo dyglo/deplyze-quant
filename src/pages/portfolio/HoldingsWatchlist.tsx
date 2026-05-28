@@ -16,9 +16,13 @@ import { PortfolioVulnerabilityPanel } from '../../components/portfolio/Portfoli
 import { DEFAULT_BENCHMARK_ID, BENCHMARK_REGISTRY } from '../../lib/portfolio/benchmarks';
 import type { Holding } from '../../lib/portfolio/schemas';
 import { PortfolioIntelligencePanel } from '../../components/portfolio/PortfolioIntelligencePanel';
-import { fetchOHLCV, symbolSearch } from '../../services/marketService';
-import type { OHLCVBar } from '../../types';
+import { fetchOHLCV, symbolSearch, fetchQuote } from '../../services/marketService';
+import type { OHLCVBar, Quote } from '../../types';
 import { marketValue, unrealizedPnl, unrealizedPnlPct } from '../../lib/portfolio/holdingMath';
+import {
+  estimatedCost, remainingCash, pctOfBuyingPower, maxAffordableShares,
+  estimatedProceeds, estimatedRealizedPnl, resultingWeight,
+} from '../../lib/portfolio/tradeTicket';
 import {
   logReturns, cumulativeLogReturns, rebase100,
 } from '../../lib/quant/returns';
@@ -87,12 +91,44 @@ interface AddHoldingModalProps {
     thesis?: string; note?: string;
   }) => Promise<unknown>;
   currency?: string;
+  /** Simulated buying power for the active portfolio. */
+  availableCash?: number;
+  /** Portfolio NAV (cash + invested) for resulting-weight estimates. */
+  nav?: number;
 }
 
 const labelStyle: React.CSSProperties = { fontSize: 10, fontWeight: 700, color: 'var(--muted-foreground)', display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.05em' };
 const fieldStyle: React.CSSProperties = { width: '100%', boxSizing: 'border-box', padding: '7px 9px', borderRadius: 5, fontSize: 12, border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--foreground)', outline: 'none', fontVariantNumeric: 'tabular-nums' };
 
-const AddHoldingModal: React.FC<AddHoldingModalProps> = ({ onClose, onAdd, onBuy, currency = 'USD' }) => {
+/** Live-quote header: current price, day change, day range, as-of. */
+const QuoteHeader: React.FC<{ quote: Quote | null; loading: boolean; currency: string }> = ({ quote, loading, currency }) => {
+  if (loading && !quote) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px', fontSize: 11, color: 'var(--muted-foreground)' }}>
+        <Loader2 size={12} style={{ animation: 'spin 1s linear infinite', color: 'var(--primary)' }} /> Fetching live quote…
+      </div>
+    );
+  }
+  if (!quote) return null;
+  const up = quote.change >= 0;
+  const col = up ? 'var(--chart-2)' : 'var(--destructive)';
+  return (
+    <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, padding: '8px 10px', borderRadius: 6, background: 'var(--muted)', border: '1px solid var(--border)' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+        <span style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>{fmtUSD(quote.price, currency)}</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: col, fontVariantNumeric: 'tabular-nums' }}>
+          {up ? '+' : ''}{fmtUSD(quote.change, currency)} ({up ? '+' : ''}{quote.changePercent.toFixed(2)}%)
+        </span>
+      </div>
+      <div style={{ textAlign: 'right', fontSize: 10, color: 'var(--muted-foreground)', fontVariantNumeric: 'tabular-nums' }}>
+        <div>Day {fmtUSD(quote.low, currency)}–{fmtUSD(quote.high, currency)}</div>
+        <div>as of {new Date(quote.ts).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })} · {quote.source}</div>
+      </div>
+    </div>
+  );
+};
+
+const AddHoldingModal: React.FC<AddHoldingModalProps> = ({ onClose, onAdd, onBuy, currency = 'USD', availableCash, nav }) => {
   const [inputValue, setInputValue] = useState('');
   const [results, setResults] = useState<Array<{ symbol: string; name: string; type: string }>>([]);
   const [searching, setSearching] = useState(false);
@@ -101,6 +137,7 @@ const AddHoldingModal: React.FC<AddHoldingModalProps> = ({ onClose, onAdd, onBuy
   const [assetClass, setAssetClass] = useState<Holding['assetClass']>('equity');
   const [notes, setNotes] = useState('');
   const [adding, setAdding] = useState(false);
+  const [quote, setQuote] = useState<Quote | null>(null);
   const reqId = useRef(0);
 
   // Position-entry state.
@@ -149,14 +186,21 @@ const AddHoldingModal: React.FC<AddHoldingModalProps> = ({ onClose, onAdd, onBuy
     setInputValue(`${r.symbol} — ${r.name}`);
     setResults([]);
     setSearching(false);
-    // Pre-fill entry price with the latest close.
+    setQuote(null);
+    // Fetch a live quote: prefill entry price and show the quote header.
     setPriceLoading(true);
     try {
-      const { bars } = await fetchOHLCV(r.symbol, '1day', 5);
-      const px = lastClose(bars);
-      if (px != null) setPriceStr(String(Number(px.toFixed(4))));
-    } catch { /* leave price blank — user can enter manually */ }
-    finally { setPriceLoading(false); }
+      const q = await fetchQuote(r.symbol);
+      setQuote(q);
+      if (q.price > 0) setPriceStr(String(Number(q.price.toFixed(4))));
+    } catch {
+      // Fall back to the latest daily close if the quote endpoint fails.
+      try {
+        const { bars } = await fetchOHLCV(r.symbol, '1day', 5);
+        const px = lastClose(bars);
+        if (px != null) setPriceStr(String(Number(px.toFixed(4))));
+      } catch { /* leave price blank — user can enter manually */ }
+    } finally { setPriceLoading(false); }
   };
 
   const handleInputChange = (val: string) => {
@@ -174,6 +218,15 @@ const AddHoldingModal: React.FC<AddHoldingModalProps> = ({ onClose, onAdd, onBuy
   const sharesValid = Number.isFinite(shares) && shares > 0;
   const positionReady = mode === 'watchlist' || (priceValid && sharesValid);
   const canSubmit = !!selected && positionReady && !adding;
+
+  // Buy-ticket preview (simulated). Over-cash warns but does not block.
+  const cost = priceValid && sharesValid ? estimatedCost(shares, price) : 0;
+  const hasCash = availableCash != null;
+  const remCash = hasCash ? remainingCash(availableCash!, cost) : null;
+  const bpUsed = hasCash ? pctOfBuyingPower(cost, availableCash!) : null;
+  const estWeight = nav != null && nav > 0 ? resultingWeight(cost, nav) : null;
+  const maxShares = hasCash && priceValid ? maxAffordableShares(availableCash!, price) : null;
+  const overCash = hasCash && cost > availableCash! + 1e-9;
 
   const handleSubmit = async () => {
     if (!selected || !canSubmit) return;
@@ -284,9 +337,26 @@ const AddHoldingModal: React.FC<AddHoldingModalProps> = ({ onClose, onAdd, onBuy
           </div>
         </div>
 
+        {/* Live quote header (position mode) */}
+        {mode === 'position' && selected && (
+          <div style={{ marginBottom: 12 }}>
+            <QuoteHeader quote={quote} loading={priceLoading} currency={currency} />
+          </div>
+        )}
+
         {/* Position details — only in position mode */}
         {mode === 'position' && (
           <div style={{ marginBottom: 14, padding: 12, borderRadius: 8, background: 'var(--muted)', border: '1px solid var(--border)' }}>
+            {/* Buying power */}
+            {hasCash && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, fontSize: 11 }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: 'var(--muted-foreground)' }}>
+                  <Wallet size={12} /> Available cash
+                </span>
+                <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{fmtUSD(availableCash!, currency)}</span>
+              </div>
+            )}
+
             {/* Entry price + date */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
               <div>
@@ -326,11 +396,43 @@ const AddHoldingModal: React.FC<AddHoldingModalProps> = ({ onClose, onAdd, onBuy
               <input value={sharesStr} onChange={e => setSharesStr(e.target.value.replace(/[^0-9.]/g, ''))} inputMode="decimal" placeholder="Number of shares" style={fieldStyle} />
             )}
 
-            {/* Computed summary */}
+            {/* Max affordable hint */}
+            {maxShares != null && priceValid && (
+              <p style={{ margin: '5px 0 0', fontSize: 10, color: 'var(--muted-foreground)' }}>
+                Max ≈ {fmtQty(maxShares)} shares with available cash
+              </p>
+            )}
+
+            {/* Order preview */}
             {priceValid && sharesValid && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, fontSize: 11, color: 'var(--muted-foreground)' }}>
-                <span>{amountMode === 'dollars' ? `≈ ${fmtQty(shares)} shares` : `≈ ${fmtUSD(dollarValue, currency)}`}</span>
-                <span>Cost basis {fmtUSD(dollarValue, currency)}</span>
+              <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 5, fontSize: 11 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'var(--muted-foreground)' }}>{amountMode === 'dollars' ? `≈ ${fmtQty(shares)} shares` : `≈ ${fmtUSD(dollarValue, currency)}`}</span>
+                  <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>Cost {fmtUSD(cost, currency)}</span>
+                </div>
+                {bpUsed != null && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--muted-foreground)', fontVariantNumeric: 'tabular-nums' }}>
+                    <span>Buying power used</span>
+                    <span>{isFinite(bpUsed) ? `${(bpUsed * 100).toFixed(1)}%` : '—'}</span>
+                  </div>
+                )}
+                {remCash != null && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontVariantNumeric: 'tabular-nums' }}>
+                    <span style={{ color: 'var(--muted-foreground)' }}>Cash after</span>
+                    <span style={{ color: remCash < 0 ? 'var(--destructive)' : 'var(--foreground)' }}>{fmtUSD(remCash, currency)}</span>
+                  </div>
+                )}
+                {estWeight != null && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--muted-foreground)', fontVariantNumeric: 'tabular-nums' }}>
+                    <span>Est. portfolio weight</span>
+                    <span>{(estWeight * 100).toFixed(1)}%</span>
+                  </div>
+                )}
+                {overCash && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, padding: '5px 8px', borderRadius: 5, background: 'color-mix(in srgb, var(--destructive) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--destructive) 25%, transparent)', color: 'var(--destructive)', fontSize: 10.5 }}>
+                    <AlertCircle size={12} /> Exceeds available cash — simulated cash will go negative.
+                  </div>
+                )}
               </div>
             )}
 
@@ -376,29 +478,44 @@ type ManageAction = 'add' | 'trim' | 'sell' | 'close';
 
 const TransactionActionModal: React.FC<TransactionActionModalProps> = ({ holding, currency = 'USD', onClose, onAddTo, onTrim, onSell, onClosePosition }) => {
   const heldQty = holding.quantity ?? 0;
+  const avgCost = holding.costBasis ?? 0;
   const [action, setAction] = useState<ManageAction>('add');
   const [qtyStr, setQtyStr] = useState('');
   const [priceStr, setPriceStr] = useState('');
   const [priceLoading, setPriceLoading] = useState(true);
+  const [quote, setQuote] = useState<Quote | null>(null);
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     setPriceLoading(true);
-    fetchOHLCV(holding.symbol, '1day', 5)
-      .then(({ bars }) => { const px = lastClose(bars); if (px != null) setPriceStr(String(Number(px.toFixed(4)))); })
-      .catch(() => {})
+    fetchQuote(holding.symbol)
+      .then(q => { setQuote(q); if (q.price > 0) setPriceStr(String(Number(q.price.toFixed(4)))); })
+      .catch(async () => {
+        try {
+          const { bars } = await fetchOHLCV(holding.symbol, '1day', 5);
+          const px = lastClose(bars);
+          if (px != null) setPriceStr(String(Number(px.toFixed(4))));
+        } catch { /* manual entry */ }
+      })
       .finally(() => setPriceLoading(false));
   }, [holding.symbol]);
 
   const price = Number(priceStr);
   const priceValid = Number.isFinite(price) && price > 0;
   const isReducing = action === 'trim' || action === 'sell';
+  const isExit = isReducing || action === 'close';
   const qty = action === 'close' ? heldQty : Number(qtyStr);
   const qtyValid = action === 'close'
     ? heldQty > 0
     : Number.isFinite(qty) && qty > 0 && (!isReducing || qty <= heldQty + 1e-9);
   const canSubmit = priceValid && qtyValid && !busy;
+
+  // Ticket preview.
+  const proceeds = priceValid && qtyValid && isExit ? estimatedProceeds(qty, price) : 0;
+  const realized = priceValid && qtyValid && isExit && avgCost > 0 ? estimatedRealizedPnl(qty, price, avgCost) : null;
+  const addCost = priceValid && qtyValid && action === 'add' ? estimatedCost(qty, price) : 0;
+  const remainingQty = isReducing && qtyValid ? Math.max(0, heldQty - qty) : (action === 'close' ? 0 : heldQty + (action === 'add' ? (qtyValid ? qty : 0) : 0));
 
   const ACTIONS: { key: ManageAction; label: string; color: string }[] = [
     { key: 'add', label: 'Add', color: 'var(--chart-2)' },
@@ -427,9 +544,14 @@ const TransactionActionModal: React.FC<TransactionActionModalProps> = ({ holding
           <p style={{ margin: 0, fontSize: 14, fontWeight: 700, letterSpacing: '-0.02em' }}>Manage {holding.symbol}</p>
           <button onClick={onClose} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--muted-foreground)', display: 'flex' }}><X size={16} /></button>
         </div>
-        <p style={{ margin: '0 0 16px', fontSize: 11, color: 'var(--muted-foreground)' }}>
+        <p style={{ margin: '0 0 12px', fontSize: 11, color: 'var(--muted-foreground)' }}>
           Holding {fmtQty(heldQty)} units · avg cost {holding.costBasis != null ? fmtUSD(holding.costBasis, currency) : '—'}
         </p>
+
+        {/* Live quote */}
+        <div style={{ marginBottom: 14 }}>
+          <QuoteHeader quote={quote} loading={priceLoading} currency={currency} />
+        </div>
 
         {/* Action picker */}
         <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
@@ -473,6 +595,35 @@ const TransactionActionModal: React.FC<TransactionActionModalProps> = ({ holding
 
         {isReducing && qty > heldQty && (
           <p style={{ margin: '0 0 12px', fontSize: 11, color: 'var(--destructive)' }}>Cannot reduce more than the {fmtQty(heldQty)} units held.</p>
+        )}
+
+        {/* Ticket preview */}
+        {priceValid && qtyValid && (
+          <div style={{ marginBottom: 14, padding: '10px 12px', borderRadius: 7, background: 'var(--muted)', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 5, fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>
+            {action === 'add' ? (
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--muted-foreground)' }}>Estimated cost</span>
+                <span style={{ fontWeight: 700 }}>{fmtUSD(addCost, currency)}</span>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--muted-foreground)' }}>Estimated proceeds</span>
+                <span style={{ fontWeight: 700 }}>{fmtUSD(proceeds, currency)}</span>
+              </div>
+            )}
+            {realized != null && (
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--muted-foreground)' }}>Realized P&L at this price</span>
+                <span style={{ fontWeight: 700, color: realized >= 0 ? 'var(--chart-2)' : 'var(--destructive)' }}>
+                  {realized >= 0 ? '+' : ''}{fmtUSD(realized, currency)}
+                </span>
+              </div>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--muted-foreground)' }}>
+              <span>Remaining position</span>
+              <span>{fmtQty(remainingQty)} units{remainingQty === 0 && isExit ? ' · closed' : ''}</span>
+            </div>
+          </div>
         )}
 
         <div style={{ marginBottom: 16 }}>
@@ -838,6 +989,10 @@ export const HoldingsWatchlist: React.FC = () => {
   const [sortDir, setSortDir] = useState<1 | -1>(-1);
 
   const currency = selectedPortfolio?.currency ?? 'USD';
+  const availableCash = selectedPortfolio?.cashBalance;
+  // NAV estimate (cash + invested at cost) for resulting-weight previews.
+  const investedAtCost = activeHoldings.reduce((s, h) => s + (h.quantity ?? 0) * (h.costBasis ?? 0), 0);
+  const nav = availableCash != null ? availableCash + investedAtCost : (investedAtCost > 0 ? investedAtCost : undefined);
 
   const handleSort = useCallback((col: typeof sortCol) => {
     setSortCol(prev => {
@@ -1078,6 +1233,8 @@ export const HoldingsWatchlist: React.FC = () => {
           onAdd={(p) => addNewHolding(p).then(() => undefined)}
           onBuy={(p) => buyHolding(p)}
           currency={currency}
+          availableCash={availableCash}
+          nav={nav}
         />
       )}
 

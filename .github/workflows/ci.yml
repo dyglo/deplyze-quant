@@ -98,7 +98,7 @@ jobs:
         run: npm run lint
 
   unit-test-frontend:
-    name: Unit tests · Frontend (Vitest)
+    name: Unit tests · Frontend (node:test)
     runs-on: ubuntu-latest
     needs: detect-changes
     if: needs.detect-changes.outputs.frontend == 'true'

@@ -13,6 +13,7 @@ import type { OHLCVBar } from '../../types';
 import { PortfolioIntelligencePanel } from '../../components/portfolio/PortfolioIntelligencePanel';
 
 import { fmtPct, fmtBoth, fmtUSD } from '../../lib/portfolio/fmt';
+import { diagnosePosition } from '../../lib/portfolio/positionDiagnosis';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -340,18 +341,34 @@ export const PerformanceAttribution: React.FC = () => {
           <SectionCard title="Laggards" subtitle="Detractors — 120D total return" icon={<TrendingDown size={13} />}>
             {laggards.length > 0 ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {laggards.map((d, i) => (
-                  <div key={d.symbol} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: i === 0 ? 'color-mix(in srgb, var(--destructive) 8%, transparent)' : 'var(--muted)', borderRadius: 7, border: `1px solid ${i === 0 ? 'color-mix(in srgb, var(--destructive) 20%, transparent)' : 'var(--border)'}` }}>
-                    <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--foreground)', minWidth: 40 }}>{d.symbol}</span>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ height: 3, background: 'var(--border)', borderRadius: 2, overflow: 'hidden' }}>
-                        <div style={{ width: `${Math.min(100, Math.abs(d.totalReturn) / 0.3 * 100)}%`, height: '100%', background: RED }} />
+                {laggards.map((d, i) => {
+                  // Top diagnosed driver — the "why" behind the lag.
+                  const why = diagnosePosition({
+                    symbol: d.symbol,
+                    holdingReturn: d.totalReturn,
+                    benchmarkReturn: bmReturn,
+                    weight: d.weight,
+                  }).drivers[0];
+                  return (
+                    <div key={d.symbol} style={{ padding: '8px 10px', background: i === 0 ? 'color-mix(in srgb, var(--destructive) 8%, transparent)' : 'var(--muted)', borderRadius: 7, border: `1px solid ${i === 0 ? 'color-mix(in srgb, var(--destructive) 20%, transparent)' : 'var(--border)'}` }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--foreground)', minWidth: 40 }}>{d.symbol}</span>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ height: 3, background: 'var(--border)', borderRadius: 2, overflow: 'hidden' }}>
+                            <div style={{ width: `${Math.min(100, Math.abs(d.totalReturn) / 0.3 * 100)}%`, height: '100%', background: RED }} />
+                          </div>
+                        </div>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: RED, fontVariantNumeric: 'tabular-nums', minWidth: 52, textAlign: 'right' }}>{fmtPct(d.totalReturn)}</span>
+                        <span style={{ fontSize: 10, color: 'var(--muted-foreground)', minWidth: 40, textAlign: 'right' }}>{fmtPct(d.contribution)} ctb</span>
                       </div>
+                      {why && (
+                        <p style={{ margin: '5px 0 0', fontSize: 10, color: 'var(--muted-foreground)', paddingLeft: 50 }}>
+                          Why: {why.label}
+                        </p>
+                      )}
                     </div>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: RED, fontVariantNumeric: 'tabular-nums', minWidth: 52, textAlign: 'right' }}>{fmtPct(d.totalReturn)}</span>
-                    <span style={{ fontSize: 10, color: 'var(--muted-foreground)', minWidth: 40, textAlign: 'right' }}>{fmtPct(d.contribution)} ctb</span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : <p style={{ fontSize: 12, color: 'var(--muted-foreground)', margin: 0 }}>No laggards.</p>}
           </SectionCard>

@@ -207,6 +207,8 @@ type RiskProfile = 'conservative' | 'balanced' | 'growth' | 'aggressive';
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'CHF', 'CAD', 'AUD'] as const;
 const RISK_PROFILES: RiskProfile[] = ['conservative', 'balanced', 'growth', 'aggressive'];
 
+type SeedSymbol = { symbol: string; name: string; assetClass: Holding['assetClass'] };
+
 export interface CreatePortfolioParams {
   name: string;
   benchmarkId: string;
@@ -214,6 +216,18 @@ export interface CreatePortfolioParams {
   startingCapital?: number;
   cashBalance?: number;
   riskProfile?: RiskProfile;
+  seedSymbols?: SeedSymbol[];
+}
+
+/** Best-effort map from a search-result type to our AssetClass union. */
+function toAssetClass(type?: string): Holding['assetClass'] {
+  const t = (type ?? '').toLowerCase();
+  if (t.includes('crypto')) return 'crypto';
+  if (t.includes('fx') || t.includes('forex') || t.includes('currency')) return 'fx';
+  if (t.includes('index') || t.includes('etf')) return 'index';
+  if (t.includes('bond') || t.includes('treasur')) return 'bond';
+  if (t.includes('commodit') || t.includes('future')) return 'commodity';
+  return 'equity';
 }
 
 const CreatePortfolioModal: React.FC<{ onClose: () => void; onCreate: (params: CreatePortfolioParams) => void }> = ({ onClose, onCreate }) => {
@@ -230,6 +244,59 @@ const CreatePortfolioModal: React.FC<{ onClose: () => void; onCreate: (params: C
   const [customSearching, setCustomSearching] = useState(false);
   const [customPicked, setCustomPicked] = useState(false);
   const customReqId = useRef(0);
+
+  // Initial holdings to seed the portfolio with (multi-symbol; quantities set later).
+  const [seeds, setSeeds] = useState<SeedSymbol[]>([]);
+  const [seedInput, setSeedInput] = useState('');
+  const [seedResults, setSeedResults] = useState<Array<{ symbol: string; name: string; type?: string }>>([]);
+  const [seedSearching, setSeedSearching] = useState(false);
+  const seedReqId = useRef(0);
+
+  const addSeed = (s: SeedSymbol) => {
+    setSeeds(prev => prev.some(p => p.symbol === s.symbol) ? prev : [...prev, s]);
+    setSeedInput('');
+    setSeedResults([]);
+  };
+  const removeSeed = (symbol: string) => setSeeds(prev => prev.filter(p => p.symbol !== symbol));
+
+  // Commit comma-/enter-delimited free-typed tickers as seeds.
+  const commitTypedSeeds = (raw: string) => {
+    const tokens = raw.split(',').map(t => t.trim()).filter(Boolean);
+    const valid = tokens.map(t => t.toUpperCase()).filter(t => MARKET_SYMBOL_RE.test(t));
+    if (valid.length === 0) return;
+    setSeeds(prev => {
+      const next = [...prev];
+      for (const sym of valid) if (!next.some(p => p.symbol === sym)) next.push({ symbol: sym, name: sym, assetClass: 'equity' });
+      return next;
+    });
+    setSeedInput('');
+    setSeedResults([]);
+  };
+
+  useEffect(() => {
+    const raw = seedInput.trim();
+    // While typing the current token (after the last comma) — search it.
+    const token = raw.includes(',') ? raw.slice(raw.lastIndexOf(',') + 1).trim() : raw;
+    if (token.length < 2) { setSeedResults([]); setSeedSearching(false); return; }
+    setSeedSearching(true);
+    const current = ++seedReqId.current;
+    const tid = setTimeout(async () => {
+      try {
+        const hits = await symbolSearch(token);
+        if (seedReqId.current !== current) return;
+        const seen = new Set<string>();
+        setSeedResults(hits
+          .filter(h => { if (seen.has(h.symbol)) return false; seen.add(h.symbol); return true; })
+          .slice(0, 8)
+          .map(h => ({ symbol: h.symbol, name: h.name ?? h.symbol, type: h.type })));
+      } catch {
+        if (seedReqId.current === current) setSeedResults([]);
+      } finally {
+        if (seedReqId.current === current) setSeedSearching(false);
+      }
+    }, 300);
+    return () => clearTimeout(tid);
+  }, [seedInput]);
 
   useEffect(() => {
     if (!customMode) { setCustomResults([]); setCustomSearching(false); return; }
@@ -265,6 +332,16 @@ const CreatePortfolioModal: React.FC<{ onClose: () => void; onCreate: (params: C
 
   const submit = () => {
     if (!canCreate) return;
+    // Fold any unsubmitted typed text into seeds before creating.
+    const pending = seedInput.trim();
+    const finalSeeds = [...seeds];
+    if (pending) {
+      for (const t of pending.split(',').map(x => x.trim().toUpperCase()).filter(Boolean)) {
+        if (MARKET_SYMBOL_RE.test(t) && !finalSeeds.some(p => p.symbol === t)) {
+          finalSeeds.push({ symbol: t, name: t, assetClass: 'equity' });
+        }
+      }
+    }
     onCreate({
       name: name.trim(),
       benchmarkId: effectiveBm,
@@ -272,6 +349,7 @@ const CreatePortfolioModal: React.FC<{ onClose: () => void; onCreate: (params: C
       startingCapital,
       cashBalance: startingCapital,
       riskProfile,
+      seedSymbols: finalSeeds,
     });
   };
 
@@ -457,6 +535,67 @@ const CreatePortfolioModal: React.FC<{ onClose: () => void; onCreate: (params: C
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Initial holdings (optional, multi-symbol) */}
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted-foreground)', display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              Initial Holdings (optional)
+            </label>
+
+            {/* Selected chips */}
+            {seeds.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                {seeds.map(s => (
+                  <span key={s.symbol} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 6px 3px 8px', borderRadius: 5, fontSize: 11, fontWeight: 600, background: 'color-mix(in srgb, var(--primary) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--primary) 25%, transparent)', color: 'var(--primary)' }}>
+                    {s.symbol}
+                    <button onClick={() => removeSeed(s.symbol)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--primary)', display: 'flex', padding: 0 }} title="Remove">
+                      <X size={11} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            <div style={{ position: 'relative' }}>
+              <Search size={12} style={{ position: 'absolute', left: 10, top: 17, transform: 'translateY(-50%)', color: 'var(--muted-foreground)' }} />
+              <input
+                value={seedInput}
+                onChange={e => setSeedInput(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') { e.preventDefault(); commitTypedSeeds(seedInput); }
+                  else if (e.key === ',') { e.preventDefault(); commitTypedSeeds(seedInput); }
+                }}
+                placeholder="Search and add symbols — AAPL, MSFT, NVDA…"
+                style={{
+                  width: '100%', boxSizing: 'border-box',
+                  padding: '8px 10px 8px 30px', borderRadius: 6, fontSize: 13,
+                  border: '1px solid var(--border)', background: 'var(--background)',
+                  color: 'var(--foreground)', outline: 'none', textTransform: 'uppercase',
+                }}
+              />
+              {seedSearching && <Loader2 size={12} style={{ position: 'absolute', right: 10, top: 17, transform: 'translateY(-50%)', animation: 'spin 1s linear infinite', color: 'var(--primary)' }} />}
+
+              {seedResults.length > 0 && (
+                <div style={{ border: '1px solid var(--border)', borderRadius: 6, marginTop: 4, overflow: 'hidden', background: 'var(--popover)', maxHeight: 200, overflowY: 'auto', position: 'absolute', left: 0, right: 0, zIndex: 10 }}>
+                  {seedResults.map(r => (
+                    <button
+                      key={r.symbol}
+                      onClick={() => addSeed({ symbol: r.symbol, name: r.name, assetClass: toAssetClass(r.type) })}
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '7px 12px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 12, color: 'var(--foreground)', textAlign: 'left' }}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'var(--accent)')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                    >
+                      <span style={{ fontWeight: 600 }}>{r.symbol}</span>
+                      <span style={{ color: 'var(--muted-foreground)', fontSize: 11, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <p style={{ margin: '4px 0 0', fontSize: 10, color: 'var(--muted-foreground)' }}>
+              Add as many as you like — pick from results, or type tickers separated by commas. Set quantities later via Manage / Buy.
+            </p>
           </div>
 
           <button
@@ -1092,7 +1231,7 @@ export const PortfolioOverview: React.FC = () => {
   const {
     portfolios, selectedPortfolio, holdings,
     loading, holdingsLoading,
-    selectPortfolio, createNew, updateSelected,
+    selectPortfolio, createNew, createNewWithSeeds, updateSelected,
     effectiveWeights,
   } = usePortfolioWorkspace();
 
@@ -1124,16 +1263,19 @@ export const PortfolioOverview: React.FC = () => {
 
   const handleCreate = useCallback(async (params: CreatePortfolioParams) => {
     setShowCreate(false);
-    await createNew({
+    const createParams = {
       name: params.name,
       benchmarkId: params.benchmarkId,
-      type: 'long-only',
+      type: 'long-only' as const,
       currency: params.currency,
       startingCapital: params.startingCapital,
       cashBalance: params.cashBalance,
       riskProfile: params.riskProfile,
-    });
-  }, [createNew]);
+    };
+    const seeds = params.seedSymbols ?? [];
+    if (seeds.length > 0) await createNewWithSeeds(createParams, seeds);
+    else await createNew(createParams);
+  }, [createNew, createNewWithSeeds]);
 
   const handleSetValue = useCallback((v: number | undefined) => {
     updateSelected({ totalValue: v });

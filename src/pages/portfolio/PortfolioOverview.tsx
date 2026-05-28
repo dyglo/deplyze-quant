@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import {
   LineChart, Line, AreaChart, Area,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Legend,
@@ -7,9 +7,10 @@ import {
 import {
   Briefcase, Plus, ChevronDown, TrendingUp,
   Activity, BarChart3, ShieldAlert, PieChart, AlertCircle, X, Check,
-  Loader2, LayoutDashboard, Brain, RefreshCw, Sparkles,
+  Loader2, LayoutDashboard, Brain, RefreshCw, Sparkles, Search,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { symbolSearch } from '../../services/marketService';
 import { usePortfolioWorkspace } from '../../hooks/usePortfolioWorkspace';
 import { isAwarenessWorkspaceEnabled } from '../../lib/portfolio/awarenessFlag';
 import { logOpen } from '../../lib/telemetry';
@@ -224,6 +225,38 @@ const CreatePortfolioModal: React.FC<{ onClose: () => void; onCreate: (params: C
   const [capitalStr, setCapitalStr] = useState('');
   const [riskProfile, setRiskProfile] = useState<RiskProfile>('balanced');
 
+  // Custom-benchmark symbol search (so any ticker can be picked, not just the registry).
+  const [customResults, setCustomResults] = useState<Array<{ symbol: string; name: string }>>([]);
+  const [customSearching, setCustomSearching] = useState(false);
+  const [customPicked, setCustomPicked] = useState(false);
+  const customReqId = useRef(0);
+
+  useEffect(() => {
+    if (!customMode) { setCustomResults([]); setCustomSearching(false); return; }
+    const raw = customBm.trim();
+    if (raw.length < 2 || customPicked) { setCustomResults([]); setCustomSearching(false); return; }
+    setCustomSearching(true);
+    const current = ++customReqId.current;
+    const tid = setTimeout(async () => {
+      try {
+        const hits = await symbolSearch(raw);
+        if (customReqId.current !== current) return;
+        const seen = new Set<string>();
+        setCustomResults(hits
+          .filter(h => { if (seen.has(h.symbol)) return false; seen.add(h.symbol); return true; })
+          .slice(0, 8)
+          .map(h => ({ symbol: h.symbol, name: h.name ?? h.symbol })));
+      } catch {
+        if (customReqId.current === current) setCustomResults([]);
+      } finally {
+        if (customReqId.current === current) setCustomSearching(false);
+      }
+    }, 300);
+    return () => clearTimeout(tid);
+  }, [customBm, customMode, customPicked]);
+
+  // A typed ticker is accepted as long as it matches the symbol pattern — search
+  // is a convenience, not a requirement, so any provider symbol can be used.
   const effectiveBm = customMode ? customBm.trim().toUpperCase() : bm;
   const customBenchmarkValid = !customMode || MARKET_SYMBOL_RE.test(effectiveBm);
   const startingCapital = capitalStr.trim() === '' ? undefined : Number(capitalStr);
@@ -286,7 +319,7 @@ const CreatePortfolioModal: React.FC<{ onClose: () => void; onCreate: (params: C
                 Benchmark
               </label>
               <button
-                onClick={() => { setCustomMode(m => !m); setCustomBm(''); }}
+                onClick={() => { setCustomMode(m => !m); setCustomBm(''); setCustomPicked(false); setCustomResults([]); }}
                 style={{
                   fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 4,
                   border: '1px solid var(--border)',
@@ -300,26 +333,52 @@ const CreatePortfolioModal: React.FC<{ onClose: () => void; onCreate: (params: C
             </div>
 
             {customMode ? (
-              <div>
+              <div style={{ position: 'relative' }}>
+                <Search size={12} style={{ position: 'absolute', left: 10, top: 17, transform: 'translateY(-50%)', color: 'var(--muted-foreground)' }} />
                 <input
                   autoFocus
                   value={customBm}
-                  onChange={e => setCustomBm(e.target.value)}
-                  placeholder="Enter any ticker, e.g. MSFT, ^GSPC, BTC-USD…"
+                  onChange={e => { setCustomBm(e.target.value); setCustomPicked(false); }}
+                  placeholder="Search or type any ticker — MSFT, ^GSPC, BTC-USD…"
                   style={{
                     width: '100%', boxSizing: 'border-box',
-                    padding: '8px 10px', borderRadius: 6, fontSize: 13,
-                    border: '1px solid var(--border)', background: 'var(--background)',
+                    padding: '8px 10px 8px 30px', borderRadius: 6, fontSize: 13,
+                    border: `1px solid ${customBenchmarkValid || !customBm.trim() ? 'var(--border)' : 'var(--destructive)'}`,
+                    background: 'var(--background)',
                     color: 'var(--foreground)', outline: 'none',
                     textTransform: 'uppercase',
                   }}
                 />
-                <p style={{ margin: '4px 0 0', fontSize: 10, color: 'var(--muted-foreground)' }}>
-                  Enter one provider symbol only. Comma-separated holdings lists are not valid benchmarks.
-                </p>
-                {!customBenchmarkValid && customBm.trim() && (
+                {customSearching && <Loader2 size={12} style={{ position: 'absolute', right: 10, top: 17, transform: 'translateY(-50%)', animation: 'spin 1s linear infinite', color: 'var(--primary)' }} />}
+
+                {customResults.length > 0 && !customPicked && (
+                  <div style={{ border: '1px solid var(--border)', borderRadius: 6, marginTop: 4, overflow: 'hidden', background: 'var(--popover)', maxHeight: 200, overflowY: 'auto' }}>
+                    {customResults.map(r => (
+                      <button
+                        key={r.symbol}
+                        onClick={() => { setCustomBm(r.symbol); setCustomPicked(true); setCustomResults([]); }}
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '7px 12px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 12, color: 'var(--foreground)', textAlign: 'left' }}
+                        onMouseEnter={e => (e.currentTarget.style.background = 'var(--accent)')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                      >
+                        <span style={{ fontWeight: 600 }}>{r.symbol}</span>
+                        <span style={{ color: 'var(--muted-foreground)', fontSize: 11, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {customBenchmarkValid && customBm.trim() ? (
+                  <p style={{ margin: '4px 0 0', fontSize: 10, color: 'var(--muted-foreground)' }}>
+                    Using <strong style={{ color: 'var(--foreground)' }}>{effectiveBm}</strong> as benchmark. Pick a result or just type a ticker.
+                  </p>
+                ) : customBm.trim() ? (
                   <p style={{ margin: '4px 0 0', fontSize: 10, color: 'var(--destructive)' }}>
-                    Use a single symbol such as SPY, QQQ, ^GSPC, or BTC-USD.
+                    Use a single symbol such as SPY, QQQ, ^GSPC, or BTC-USD (no spaces).
+                  </p>
+                ) : (
+                  <p style={{ margin: '4px 0 0', fontSize: 10, color: 'var(--muted-foreground)' }}>
+                    Enter one provider symbol. Comma-separated lists are not valid benchmarks.
                   </p>
                 )}
               </div>

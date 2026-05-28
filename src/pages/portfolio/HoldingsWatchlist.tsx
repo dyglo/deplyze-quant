@@ -23,6 +23,7 @@ import {
   estimatedCost, remainingCash, pctOfBuyingPower, maxAffordableShares,
   estimatedProceeds, estimatedRealizedPnl, resultingWeight,
 } from '../../lib/portfolio/tradeTicket';
+import { diagnosePosition } from '../../lib/portfolio/positionDiagnosis';
 import {
   logReturns, cumulativeLogReturns, rebase100,
 } from '../../lib/quant/returns';
@@ -648,11 +649,24 @@ const TransactionActionModal: React.FC<TransactionActionModalProps> = ({ holding
 interface HoldingDrawerProps {
   holding: Holding;
   benchmarkId: string;
+  /** Effective portfolio weight 0–1 (for concentration diagnosis). */
+  weight?: number;
+  /** Portfolio Herfindahl index 0–1 (concentration context). */
+  hhi?: number;
   onClose: () => void;
   onRemove: () => void;
 }
 
-const HoldingDrawer: React.FC<HoldingDrawerProps> = ({ holding, benchmarkId, onClose, onRemove }) => {
+const STANCE_STYLE: Record<string, { bg: string; fg: string; label: string }> = {
+  review: { bg: 'color-mix(in srgb, var(--destructive) 12%, transparent)', fg: 'var(--destructive)', label: 'Review' },
+  monitor: { bg: 'color-mix(in srgb, var(--chart-4) 14%, transparent)', fg: 'var(--chart-4)', label: 'Monitor' },
+  stable: { bg: 'color-mix(in srgb, var(--chart-2) 12%, transparent)', fg: 'var(--chart-2)', label: 'Stable' },
+};
+const DRIVER_SEV_COLOR: Record<string, string> = {
+  high: 'var(--destructive)', medium: 'var(--chart-4)', low: 'var(--muted-foreground)', info: 'var(--chart-2)',
+};
+
+const HoldingDrawer: React.FC<HoldingDrawerProps> = ({ holding, benchmarkId, weight, hhi, onClose, onRemove }) => {
   const [bars, setBars] = useState<OHLCVBar[]>([]);
   const [benchBars, setBenchBars] = useState<OHLCVBar[]>([]);
   const [loading, setLoading] = useState(true);
@@ -696,6 +710,21 @@ const HoldingDrawer: React.FC<HoldingDrawerProps> = ({ holding, benchmarkId, onC
 
   const totalReturn = curve.length > 1 ? (curve[curve.length - 1].v / 100 - 1) : 0;
   const bmReturn = bmCurve.length > 1 ? (bmCurve[bmCurve.length - 1].v / 100 - 1) : 0;
+
+  // Position-level "why" diagnosis from the metrics already computed above.
+  const diagnosis = useMemo(() => {
+    if (bars.length < 10) return null;
+    return diagnosePosition({
+      symbol: holding.symbol,
+      holdingReturn: totalReturn,
+      benchmarkReturn: bmReturn,
+      annVol: volPct / 100, // volPct is in percent units
+      maxDrawdown: mdd,
+      trend: String(trend),
+      weight,
+      hhi,
+    });
+  }, [bars.length, holding.symbol, totalReturn, bmReturn, volPct, mdd, trend, weight, hhi]);
 
   const TREND_COLOR: Record<string, string> = { bull: 'var(--chart-2)', bear: 'var(--destructive)', neutral: 'var(--muted-foreground)' };
   const trendKey = (trend === 'strong-up' || trend === 'up') ? 'bull' : (trend === 'down' || trend === 'strong-down') ? 'bear' : 'neutral';
@@ -756,6 +785,41 @@ const HoldingDrawer: React.FC<HoldingDrawerProps> = ({ holding, benchmarkId, onC
               </div>
             ))}
           </div>
+
+          {/* Position Intelligence — what changed, why, evidence */}
+          {diagnosis && (
+            <div style={{ border: '1px solid var(--border)', borderRadius: 9, overflow: 'hidden' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '9px 12px', borderBottom: '1px solid var(--border)', background: 'var(--muted)' }}>
+                <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--muted-foreground)' }}>Position Intelligence</span>
+                <span style={{ padding: '2px 8px', borderRadius: 5, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', background: STANCE_STYLE[diagnosis.stance].bg, color: STANCE_STYLE[diagnosis.stance].fg }}>
+                  {STANCE_STYLE[diagnosis.stance].label}
+                </span>
+              </div>
+              <p style={{ margin: 0, padding: '10px 12px', fontSize: 12, lineHeight: 1.5, color: 'var(--foreground)', borderBottom: diagnosis.drivers.length ? '1px solid var(--border)' : 'none' }}>
+                {diagnosis.headline}
+              </p>
+              {diagnosis.drivers.map((d, i) => (
+                <div key={d.kind} style={{ padding: '10px 12px', borderTop: i === 0 ? 'none' : '1px solid var(--border)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4 }}>
+                    <span style={{ width: 7, height: 7, borderRadius: 2, background: DRIVER_SEV_COLOR[d.severity], flexShrink: 0 }} />
+                    <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--foreground)' }}>{d.label}</span>
+                  </div>
+                  <p style={{ margin: '0 0 6px', fontSize: 11, lineHeight: 1.5, color: 'var(--muted-foreground)' }}>{d.narrative}</p>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                    {d.evidence.map(e => (
+                      <span key={e.label} style={{ display: 'inline-flex', gap: 4, padding: '2px 7px', borderRadius: 4, fontSize: 10, background: 'var(--muted)', border: '1px solid var(--border)', fontVariantNumeric: 'tabular-nums' }}>
+                        <span style={{ color: 'var(--muted-foreground)' }}>{e.label}</span>
+                        <span style={{ fontWeight: 700, color: 'var(--foreground)' }}>{e.value}</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              <p style={{ margin: 0, padding: '7px 12px', fontSize: 9.5, color: 'var(--muted-foreground)', borderTop: '1px solid var(--border)', lineHeight: 1.4 }}>
+                Context for review only — not investment advice. You own the decision.
+              </p>
+            </div>
+          )}
 
           {/* Benchmark comparison chart */}
           <div>
@@ -1254,6 +1318,8 @@ export const HoldingsWatchlist: React.FC = () => {
         <HoldingDrawer
           holding={drawerHolding}
           benchmarkId={benchmarkId}
+          weight={effectiveWeights[drawerHolding.symbol]}
+          hhi={hhi}
           onClose={() => setDrawerHolding(null)}
           onRemove={() => handleRemove(drawerHolding)}
         />

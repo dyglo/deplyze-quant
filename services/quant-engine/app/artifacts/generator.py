@@ -51,7 +51,8 @@ def _load_latest_features(client, symbol: str, feature_table: str) -> dict:
     """
     bq = __import__("google.cloud.bigquery", fromlist=["QueryJobConfig", "ScalarQueryParameter"])
     job_config = bq.QueryJobConfig(
-        query_parameters=[bq.ScalarQueryParameter("symbol", "STRING", symbol)]
+        query_parameters=[bq.ScalarQueryParameter("symbol", "STRING", symbol)],
+        maximum_bytes_billed=settings.BQ_MAX_BYTES_BILLED,
     )
     rows = list(client.query(query, job_config=job_config))
     if not rows:

@@ -195,7 +195,6 @@ def _load_macro_wide(
     """Pivot cleaned.macro_cleaned long → wide (date index, series columns)."""
     bq = get_bigquery_client()
     cleaned = fully_qualified(settings.BQ_DATASET_CLEANED, "macro_cleaned")
-    in_list = ", ".join(f"'{s}'" for s in series_ids)
     date_filter = _date_predicate() if start_date and end_date else _lookback_predicate()
     sql = f"""
         SELECT
@@ -203,13 +202,15 @@ def _load_macro_wide(
           DATE(observation_time) AS d,
           value
         FROM `{cleaned}`
-        WHERE series_id IN ({in_list})
+        WHERE series_id IN UNNEST(@series_ids)
           AND value IS NOT NULL
           AND observation_time IS NOT NULL
           {date_filter}
         ORDER BY d ASC
     """
-    job_config = _query_params(lookback=lookback_days, start_date=start_date, end_date=end_date)
+    job_config = _query_params(
+        lookback=lookback_days, start_date=start_date, end_date=end_date, series_ids=series_ids
+    )
     rows = list(bq.query(sql, job_config=job_config).result())
     if not rows:
         return pd.DataFrame()
@@ -232,7 +233,14 @@ def _query_params(**kwargs):
         params.append(bigquery.ScalarQueryParameter("start_date", "STRING", kwargs["start_date"]))
     if kwargs.get("end_date"):
         params.append(bigquery.ScalarQueryParameter("end_date", "STRING", kwargs["end_date"]))
-    return bigquery.QueryJobConfig(query_parameters=params)
+    if kwargs.get("series_ids") is not None:
+        params.append(bigquery.ArrayQueryParameter("series_ids", "STRING", list(kwargs["series_ids"])))
+    # Inherit the project-wide cost ceiling — an explicit job_config otherwise
+    # silently drops the client's default maximum_bytes_billed cap.
+    return bigquery.QueryJobConfig(
+        query_parameters=params,
+        maximum_bytes_billed=settings.BQ_MAX_BYTES_BILLED,
+    )
 
 
 def build_wide_frame(symbol: str, series_ids: list[str], lookback_days: int) -> pd.DataFrame:

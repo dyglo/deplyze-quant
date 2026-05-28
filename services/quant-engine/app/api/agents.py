@@ -21,6 +21,7 @@ from typing import Optional, List
 import structlog
 from fastapi import APIRouter, BackgroundTasks, Query, Path, Body
 from pydantic import BaseModel
+from google.cloud import bigquery
 
 from app.agents.orchestrator import run_all, run_one, ensure_agent_outputs_table
 from app.agents.registry import AGENT_REGISTRY, REGISTRY_BY_ID
@@ -29,7 +30,7 @@ from app.agents import historical_analog as analog_engine
 from app.agents import vulnerability as vulnerability_engine
 from app.agents import narrative_exposure as narrative_engine
 from app.agents.orchestrator import _persist
-from app.bigquery.client import get_bigquery_client, fully_qualified
+from app.bigquery.client import fully_qualified, run_query
 from app.core.config import settings
 
 log = structlog.get_logger("quant_engine.api.agents")
@@ -138,18 +139,25 @@ async def get_outputs(
     days: int = Query(default=2, ge=1, le=30),
     limit: int = Query(default=50, ge=1, le=200),
 ):
-    bq = get_bigquery_client()
     table = fully_qualified(settings.BQ_DATASET_ARTIFACTS, "agent_outputs")
 
-    wheres = [f"DATE(observation_date) >= DATE_SUB(CURRENT_DATE(), INTERVAL {days} DAY)"]
+    wheres = ["DATE(observation_date) >= DATE_SUB(CURRENT_DATE(), INTERVAL @days DAY)"]
+    params = [
+        bigquery.ScalarQueryParameter("days", "INT64", days),
+        bigquery.ScalarQueryParameter("lim", "INT64", limit),
+    ]
     if domain:
-        wheres.append(f"domain = '{domain}'")
+        wheres.append("domain = @domain")
+        params.append(bigquery.ScalarQueryParameter("domain", "STRING", domain))
     if severity:
-        wheres.append(f"severity = '{severity}'")
+        wheres.append("severity = @severity")
+        params.append(bigquery.ScalarQueryParameter("severity", "STRING", severity))
     if artifact_type:
-        wheres.append(f"artifact_type = '{artifact_type}'")
+        wheres.append("artifact_type = @artifact_type")
+        params.append(bigquery.ScalarQueryParameter("artifact_type", "STRING", artifact_type))
     if symbol:
-        wheres.append(f"'{symbol}' IN UNNEST(symbols)")
+        wheres.append("@symbol IN UNNEST(symbols)")
+        params.append(bigquery.ScalarQueryParameter("symbol", "STRING", symbol))
     wheres.append("is_test = FALSE")
 
     where_clause = " AND ".join(wheres)
@@ -161,10 +169,10 @@ async def get_outputs(
         FROM `{table}`
         WHERE {where_clause}
         ORDER BY generated_at DESC
-        LIMIT {limit}
+        LIMIT @lim
     """
     try:
-        rows = list(bq.query(sql).result())
+        rows = run_query(sql, params)
         return {"outputs": [dict(r) for r in rows], "count": len(rows)}
     except Exception as e:
         log.error("agents.outputs_query_failed", error=str(e))
@@ -179,7 +187,6 @@ async def get_portfolio_outputs(
     days: int = Query(default=3, ge=1, le=14),
     limit: int = Query(default=30, ge=1, le=100),
 ):
-    bq = get_bigquery_client()
     table = fully_qualified(settings.BQ_DATASET_ARTIFACTS, "agent_outputs")
     sql = f"""
         SELECT artifact_id, agent_id, domain, artifact_type, title, summary,
@@ -188,16 +195,21 @@ async def get_portfolio_outputs(
                recommended_placements, tags
         FROM `{table}`
         WHERE (
-          portfolio_id = '{portfolio_id}'
+          portfolio_id = @portfolio_id
           OR domain IN ('macro', 'regime', 'risk', 'liquidity')
         )
-          AND DATE(observation_date) >= DATE_SUB(CURRENT_DATE(), INTERVAL {days} DAY)
+          AND DATE(observation_date) >= DATE_SUB(CURRENT_DATE(), INTERVAL @days DAY)
           AND is_test = FALSE
         ORDER BY generated_at DESC
-        LIMIT {limit}
+        LIMIT @lim
     """
+    params = [
+        bigquery.ScalarQueryParameter("portfolio_id", "STRING", portfolio_id),
+        bigquery.ScalarQueryParameter("days", "INT64", days),
+        bigquery.ScalarQueryParameter("lim", "INT64", limit),
+    ]
     try:
-        rows = list(bq.query(sql).result())
+        rows = run_query(sql, params)
         return {"outputs": [dict(r) for r in rows], "portfolio_id": portfolio_id, "count": len(rows)}
     except Exception as e:
         log.error("agents.portfolio_query_failed", error=str(e))
@@ -208,7 +220,6 @@ async def get_portfolio_outputs(
 
 @router.get("/status")
 async def get_status():
-    bq = get_bigquery_client()
     table = fully_qualified(settings.BQ_DATASET_ARTIFACTS, "agent_outputs")
     today = datetime.now(timezone.utc).date().isoformat()
     sql = f"""
@@ -216,13 +227,13 @@ async def get_status():
                MAX(generated_at) AS last_generated,
                COUNTIF(severity = 'high') AS high_severity_count
         FROM `{table}`
-        WHERE DATE(observation_date) = '{today}'
+        WHERE DATE(observation_date) = @today
           AND is_test = FALSE
         GROUP BY agent_id, domain
         ORDER BY agent_id
     """
     try:
-        rows = list(bq.query(sql).result())
+        rows = run_query(sql, [bigquery.ScalarQueryParameter("today", "DATE", today)])
         status = [dict(r) for r in rows]
         all_ids = {e.agent_id for e in AGENT_REGISTRY if e.trigger_type == "scheduled"}
         ran_ids = {r["agent_id"] for r in status}
@@ -250,7 +261,6 @@ async def get_reasoning(
     Return multi-system synthesised reasoning from today's agent outputs.
     If no reasoning outputs exist for today, run the engine on-demand.
     """
-    bq = get_bigquery_client()
     table = fully_qualified(settings.BQ_DATASET_ARTIFACTS, "agent_outputs")
     today = datetime.now(timezone.utc).date().isoformat()
 
@@ -260,13 +270,13 @@ async def get_reasoning(
                confidence, severity, evidence, generated_at, tags
         FROM `{table}`
         WHERE artifact_type = 'multi_system_reasoning'
-          AND DATE(observation_date) = '{today}'
+          AND DATE(observation_date) = @today
           AND is_test = FALSE
         ORDER BY generated_at DESC
         LIMIT 5
     """
     try:
-        cached = [dict(r) for r in bq.query(sql).result()]
+        cached = [dict(r) for r in run_query(sql, [bigquery.ScalarQueryParameter("today", "DATE", today)])]
     except Exception:
         cached = []
 

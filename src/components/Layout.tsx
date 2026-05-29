@@ -17,6 +17,8 @@ import {
   History,
   Sparkles,
   Compass,
+  Home,
+  Radar,
   ChevronLeft,
   ChevronDown,
   ChevronRight,
@@ -73,6 +75,10 @@ interface LayoutProps {
  * routes are unchanged. `menuItems` is derived below to preserve the existing
  * active-tab / breadcrumb lookups.
  */
+// Top-level Home entry (Market Home). Rendered standalone above the sections;
+// included in `menuItems` below so active-tab / breadcrumb lookups resolve "/".
+const HOME_ITEM = { id: 'home', label: 'Home', icon: Home, path: '/' };
+
 const DISCOVER_ITEMS = [
   { id: 'terminal',    label: 'Intelligence Terminal',  icon: Activity,        path: '/terminal' },
   { id: 'macro',       label: 'Macro Regime Desk',      icon: TrendingUp,      path: '/macro' },
@@ -95,7 +101,7 @@ const DATA_ITEMS = [
   { id: 'warehouse',   label: 'Data Warehouse',         icon: Database,        path: '/warehouse' },
 ];
 
-const menuItems = [...DISCOVER_ITEMS, ...RESEARCH_ITEMS, ...LIBRARY_ITEMS, ...DATA_ITEMS];
+const menuItems = [HOME_ITEM, ...DISCOVER_ITEMS, ...RESEARCH_ITEMS, ...LIBRARY_ITEMS, ...DATA_ITEMS];
 
 const bottomItems = [
   { id: 'settings',   label: 'Settings & Account', icon: Settings,        path: '/settings' },
@@ -117,6 +123,9 @@ const PORTFOLIO_INTELLIGENCE_ITEMS = [
   { id: 'portfolio-attribution',label: 'Performance Attribution',   icon: TrendingUp,      path: '/portfolio/attribution' },
   { id: 'portfolio-risk',       label: 'Risk & Regime Fit',         icon: ShieldAlert,     path: '/portfolio/risk' },
   { id: 'portfolio-scenario',   label: 'Scenario & Stress View',    icon: Zap,             path: '/portfolio/scenario' },
+  // Awareness is portfolio-scoped (/portfolio/:id/awareness). The `path` here is
+  // a sentinel; the real link is resolved at render from the active portfolio id.
+  { id: 'portfolio-awareness',  label: 'Awareness',                 icon: Radar,           path: '/portfolio/awareness' },
 ];
 
 /* ─── Section label for grouped main nav (presentation-only) ───── */
@@ -210,6 +219,12 @@ const SidebarInner: React.FC<{ signOut: () => void; user: any; profile: any }> =
   )?.id || (location.pathname.startsWith('/settings') ? 'settings' : 'dashboard');
 
   const initials = (profile?.displayName?.charAt(0) || user?.email?.charAt(0) || 'U').toUpperCase();
+
+  // Active portfolio (persisted by usePortfolioWorkspace). Read synchronously so
+  // the sidebar can deep-link Awareness without opening its own Firestore
+  // subscriptions; falls back to the Portfolio overview when none is selected.
+  const activePortfolioId = typeof window !== 'undefined' ? localStorage.getItem('deplyze_active_portfolio_id') : null;
+  const awarenessPath = activePortfolioId ? `/portfolio/${activePortfolioId}/awareness` : '/portfolio/overview';
 
   // Shared renderer for a flat (non-collapsible) main-nav item.
   const renderNavItem = (item: typeof menuItems[number]) => {
@@ -489,8 +504,13 @@ const SidebarInner: React.FC<{ signOut: () => void; user: any; profile: any }> =
 
       {/* Main nav */}
       <SidebarContent className="px-2 py-3 flex-1">
+        {/* ── Home (top-level) ─────────────────────────────── */}
+        <SidebarMenu className="gap-0.5">
+          {renderNavItem(HOME_ITEM)}
+        </SidebarMenu>
+
         {/* ── Discover ─────────────────────────────────────── */}
-        <NavSectionLabel collapsed={collapsed} first>Discover</NavSectionLabel>
+        <NavSectionLabel collapsed={collapsed}>Discover</NavSectionLabel>
         <SidebarMenu className="gap-0.5">
           {DISCOVER_ITEMS.map(renderNavItem)}
         </SidebarMenu>
@@ -743,11 +763,15 @@ const SidebarInner: React.FC<{ signOut: () => void; user: any; profile: any }> =
               {piOpen && (
                 <div style={{ marginTop: 2, paddingLeft: 8 }}>
                   {PORTFOLIO_INTELLIGENCE_ITEMS.map((item) => {
-                    const active = location.pathname === item.path || location.pathname.startsWith(item.path + '/');
+                    const isAwareness = item.id === 'portfolio-awareness';
+                    const to = isAwareness ? awarenessPath : item.path;
+                    const active = isAwareness
+                      ? location.pathname.endsWith('/awareness')
+                      : location.pathname === item.path || location.pathname.startsWith(item.path + '/');
                     return (
                       <SidebarMenuItem key={item.id}>
                         <SidebarMenuButton
-                          render={(props) => <Link {...props} to={item.path} />}
+                          render={(props) => <Link {...props} to={to} />}
                           isActive={active}
                           tooltip={undefined}
                           className="ds-transition-fast"

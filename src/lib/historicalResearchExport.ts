@@ -59,7 +59,7 @@ function buildMarkdown(r: ResearchResult): string {
   const lines: string[] = [];
   const date = new Date(r.completedAt).toISOString().slice(0, 10);
 
-  lines.push(`# Historical Research — ${r.query}`);
+  lines.push(`# Deep Research — ${r.query}`);
   lines.push('');
   lines.push(`_Generated ${date} via Deplyze Quant._`);
   lines.push('');
@@ -192,7 +192,7 @@ export function exportPdf(result: ResearchResult): void {
   };
 
   // ── Title ────────────────────────────────────────────────────────────
-  drawHeading('Historical Research', 1);
+  drawHeading('Deep Research', 1);
   drawParagraph(`"${result.query}"`, { fontSize: 11, color: [40, 40, 40] });
   drawParagraph(
     `Generated ${new Date(result.completedAt).toISOString().slice(0, 10)} via Deplyze Quant.`,

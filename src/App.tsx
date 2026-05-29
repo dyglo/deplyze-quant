@@ -19,7 +19,6 @@ import { Backtesting } from './pages/Backtesting';
 import { QuantLab } from './pages/QuantLab';
 import { ResearchCopilot } from './pages/ResearchCopilot';
 import { HistoricalIntelligenceTerminal } from './pages/HistoricalIntelligenceTerminal';
-import { WarehouseExplorer } from './pages/WarehouseExplorer';
 import { Briefings } from './pages/Briefings';
 import { BriefingDetail } from './pages/BriefingDetail';
 import { ResearchLibrary } from './pages/ResearchLibrary';
@@ -93,7 +92,6 @@ export default function App() {
             <Route path="/lab"                  element={<ProtectedRoute><QuantLab /></ProtectedRoute>} />
             <Route path="/copilot"              element={<ProtectedRoute><ResearchCopilot /></ProtectedRoute>} />
             <Route path="/historical-intelligence" element={<ProtectedRoute><HistoricalIntelligenceTerminal /></ProtectedRoute>} />
-            <Route path="/warehouse"            element={<ProtectedRoute><WarehouseExplorer /></ProtectedRoute>} />
             <Route path="/briefings"            element={<ProtectedRoute><Briefings /></ProtectedRoute>} />
             <Route path="/briefings/:id"        element={<ProtectedRoute><BriefingDetail /></ProtectedRoute>} />
             <Route path="/library"              element={<ProtectedRoute><ResearchLibrary /></ProtectedRoute>} />

@@ -9,7 +9,6 @@ import {
   TrendingUp,
   BarChart3,
   Network,
-  Database,
   Beaker,
   FileText,
   FlaskConical,
@@ -87,7 +86,7 @@ const DISCOVER_ITEMS = [
 
 const RESEARCH_ITEMS = [
   { id: 'history',     label: 'Historical Intelligence', icon: History, path: '/historical-intelligence' },
-  { id: 'research',    label: 'Historical Research',     icon: Compass,        path: '/research' },
+  { id: 'research',    label: 'Deep Research',           icon: Compass,        path: '/research' },
   { id: 'lab',         label: 'Quant Lab',              icon: Beaker,          path: '/lab' },
   { id: 'backtesting', label: 'Backtesting',            icon: FlaskConical,    path: '/backtesting' },
 ];
@@ -97,11 +96,7 @@ const LIBRARY_ITEMS = [
   { id: 'briefings',   label: 'Briefings',              icon: FileText,        path: '/briefings' },
 ];
 
-const DATA_ITEMS = [
-  { id: 'warehouse',   label: 'Warehouse',              icon: Database,        path: '/warehouse' },
-];
-
-const menuItems = [HOME_ITEM, ...DISCOVER_ITEMS, ...RESEARCH_ITEMS, ...LIBRARY_ITEMS, ...DATA_ITEMS];
+const menuItems = [HOME_ITEM, ...DISCOVER_ITEMS, ...RESEARCH_ITEMS, ...LIBRARY_ITEMS];
 
 const bottomItems = [
   { id: 'settings',   label: 'Settings & Account', icon: Settings,        path: '/settings' },
@@ -828,12 +823,6 @@ const SidebarInner: React.FC<{ signOut: () => void; user: any; profile: any }> =
         <NavSectionLabel collapsed={collapsed}>Library</NavSectionLabel>
         <SidebarMenu className="gap-0.5">
           {LIBRARY_ITEMS.map(renderNavItem)}
-        </SidebarMenu>
-
-        {/* ── Data ─────────────────────────────────────────── */}
-        <NavSectionLabel collapsed={collapsed}>Data</NavSectionLabel>
-        <SidebarMenu className="gap-0.5">
-          {DATA_ITEMS.map(renderNavItem)}
         </SidebarMenu>
       </SidebarContent>
 

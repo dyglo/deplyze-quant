@@ -345,7 +345,7 @@ export const HistoricalResearch: React.FC = () => {
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 24px 64px' }}>
       <PageHeader
-        title={landing ? 'Historical Research' : 'Investigation'}
+        title={landing ? 'Deep Research' : 'Investigation'}
         subtitle={landing
           ? 'Ask a historical question or build one structurally — the workspace retrieves price history, computes a full performance picture, and generates grounded commentary.'
           : (result?.query ? `“${result.query}”` : 'Loading investigation…')}

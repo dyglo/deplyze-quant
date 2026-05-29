@@ -10,6 +10,7 @@ import {
 import { usePortfolioWorkspace } from '../../hooks/usePortfolioWorkspace';
 import { usePortfolioIntelligence } from '../../hooks/usePortfolioIntelligence';
 import { AgentIntelligenceFeed } from '../../components/quant/AgentIntelligenceFeed';
+import { Surface } from '../../components/ui/surface';
 import { useAgentOutputs } from '../../hooks/useAgentIntelligence';
 import { usePortfolioVulnerability } from '../../hooks/useAgentReasoning';
 import { PortfolioVulnerabilityPanel } from '../../components/portfolio/PortfolioVulnerabilityPanel';
@@ -983,7 +984,7 @@ const HoldingRow: React.FC<{
 // ─── Closed positions table ────────────────────────────────────────────────────
 
 const ClosedPositions: React.FC<{ holdings: Holding[]; currency: string }> = ({ holdings, currency }) => (
-  <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
+  <Surface style={{ overflow: 'hidden' }}>
     <div style={{ padding: '10px 12px 8px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 7 }}>
       <Archive size={13} style={{ color: 'var(--muted-foreground)' }} />
       <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: 'var(--foreground)' }}>Closed Positions ({holdings.length})</p>
@@ -1013,7 +1014,7 @@ const ClosedPositions: React.FC<{ holdings: Holding[]; currency: string }> = ({ 
         </tbody>
       </table>
     </div>
-  </div>
+  </Surface>
 );
 
 // ─── Empty state ──────────────────────────────────────────────────────────────
@@ -1187,7 +1188,7 @@ export const HoldingsWatchlist: React.FC = () => {
         ) : filtered.length === 0 && activeHoldings.length === 0 && closedHoldings.length === 0 ? (
           <EmptyHoldings onAdd={() => setShowAdd(true)} portfolioName={selectedPortfolio?.name ?? 'Portfolio'} />
         ) : (
-          <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
+          <div className="ds-surface" style={{ overflow: 'hidden' }}>
             <div style={{ padding: '10px 12px 8px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: 'var(--foreground)' }}>
                 {filtered.length} Holding{filtered.length !== 1 ? 's' : ''}

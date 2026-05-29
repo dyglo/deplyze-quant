@@ -97,7 +97,7 @@ const UNIVERSE: Record<SnapshotAssetClass, UniverseEntry[]> = {
 
 export const SNAPSHOT_ASSET_CLASSES: AssetClassMeta[] = [
   { id: 'indices',     label: 'Indices',     viewMore: '/market/world-equity' },
-  { id: 'stocks',      label: 'Stocks',      viewMore: '/instruments/movers' },
+  { id: 'stocks',      label: 'Stocks' },
   { id: 'commodities', label: 'Commodities', viewMore: '/market/commodities' },
   { id: 'currencies',  label: 'Currencies',  viewMore: '/market/fx-liquidity' },
   { id: 'etfs',        label: 'ETFs' },

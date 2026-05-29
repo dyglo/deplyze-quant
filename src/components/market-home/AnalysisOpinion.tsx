@@ -54,7 +54,6 @@ const BriefingsBlock: React.FC = () => {
 };
 
 const NarrativesBlock: React.FC = () => {
-  const navigate = useNavigate();
   const { data, loading, error } = useSWR(() => fetchEmergingNarratives({ limit: 6 }), [], { cacheKey: 'marketHome:narratives' });
   const items = (data ?? []).slice(0, 5);
 
@@ -69,21 +68,16 @@ const NarrativesBlock: React.FC = () => {
         : (
           <div style={{ display: 'grid', gap: 2 }}>
             {items.map((n) => (
-              <button
+              <div
                 key={n.artifact_id}
-                type="button"
-                onClick={() => navigate('/instruments/narratives')}
-                className="ds-transition-fast"
-                style={{ display: 'block', width: '100%', textAlign: 'left', padding: '9px 2px', background: 'transparent', border: 'none', borderBottom: '1px solid var(--border)', cursor: 'pointer' }}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'var(--muted)'; }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+                style={{ display: 'block', width: '100%', textAlign: 'left', padding: '9px 2px', borderBottom: '1px solid var(--border)' }}
               >
                 <span style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                   <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--foreground)', minWidth: 0, display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{stripMarkdown(n.title)}</span>
                   <span style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--primary)', flexShrink: 0 }}>{Math.round(n.confidence * 100)}%</span>
                 </span>
                 <span style={{ fontSize: 11, color: 'var(--muted-foreground)', lineHeight: 1.4, marginTop: 3, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{stripMarkdown(n.summary)}</span>
-              </button>
+              </div>
             ))}
           </div>
         )}

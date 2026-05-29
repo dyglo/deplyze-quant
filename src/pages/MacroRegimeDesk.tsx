@@ -24,6 +24,7 @@ import { MacroAnalogPanel } from '../components/quant/MacroAnalogPanel';
 import { useAgentOutputs } from '../hooks/useAgentIntelligence';
 import { useHistoricalAnalog } from '../hooks/useAgentReasoning';
 import { GlobalMacroIndicatorsPanel } from '../components/quant/GlobalMacroIndicatorsPanel';
+import { MacroRegimePortfolioPanel } from '../components/quant/MacroRegimePortfolioPanel';
 
 interface SeriesMeta {
   id: string;
@@ -423,6 +424,9 @@ export const MacroRegimeDesk: React.FC = () => {
 
       {/* ── V3 Phase 2: warehouse-backed regime classifier ──────────────────── */}
       <V3P2MacroRegimePanel />
+
+      {/* Regime → portfolio read-through: what the current regime means for holdings. */}
+      <MacroRegimePortfolioPanel />
 
       <GlobalMacroIndicatorsPanel />
 

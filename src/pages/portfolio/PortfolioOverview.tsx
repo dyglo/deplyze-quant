@@ -10,6 +10,7 @@ import {
   Loader2, LayoutDashboard, Brain, RefreshCw, Sparkles,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { Panel } from '../../components/ui/surface';
 import { usePortfolioWorkspace } from '../../hooks/usePortfolioWorkspace';
 import { isAwarenessWorkspaceEnabled } from '../../lib/portfolio/awarenessFlag';
 import { logOpen } from '../../lib/telemetry';
@@ -786,25 +787,9 @@ const SectionCard: React.FC<{
   children: React.ReactNode;
   style?: React.CSSProperties;
 }> = ({ title, subtitle, icon, actions, children, style }) => (
-  <div style={{
-    background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 10,
-    overflow: 'hidden', ...style,
-  }}>
-    <div style={{
-      display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
-      padding: '12px 16px 10px', borderBottom: '1px solid var(--border)',
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-        {icon && <div style={{ flexShrink: 0, color: 'var(--primary)' }}>{icon}</div>}
-        <div>
-          <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: 'var(--foreground)', letterSpacing: '-0.01em' }}>{title}</p>
-          {subtitle && <p style={{ margin: '2px 0 0', fontSize: 10, color: 'var(--muted-foreground)' }}>{subtitle}</p>}
-        </div>
-      </div>
-      {actions && <div style={{ flexShrink: 0 }}>{actions}</div>}
-    </div>
-    <div style={{ padding: '14px 16px' }}>{children}</div>
-  </div>
+  <Panel title={title} subtitle={subtitle} icon={icon} actions={actions} style={style}>
+    {children}
+  </Panel>
 );
 
 // ─── Empty portfolio state ────────────────────────────────────────────────────

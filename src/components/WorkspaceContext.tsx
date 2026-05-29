@@ -30,7 +30,10 @@ export interface WorkspaceContextType {
   members: UserProfile[];
   invites: any[];
   loading: boolean;
-  
+  /** True when an org/workspace sync was rejected (e.g. Firestore permissions).
+   *  The app stays usable; consumers can surface a non-blocking notice. */
+  syncDegraded: boolean;
+
   // Actions
   selectWorkspace: (orgId: string) => Promise<void>;
   selectProject: (siteId: string | null) => void;
@@ -51,6 +54,7 @@ const WorkspaceContext = createContext<WorkspaceContextType>({
   members: [],
   invites: [],
   loading: true,
+  syncDegraded: false,
   selectWorkspace: async () => {},
   selectProject: () => {},
   createNewWorkspace: async () => '',
@@ -72,13 +76,18 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [memberOrgIds, setMemberOrgIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSyncingMemberships, setIsSyncingMemberships] = useState(true);
-  
+  const [syncDegraded, setSyncDegraded] = useState(false);
+
   // Track specific load states to prevent race conditions
   const [ownedLoaded, setOwnedLoaded] = useState(false);
   const [membersLoaded, setMembersLoaded] = useState(false);
-  
+
   const isCreatingRef = useRef(false);
   const didInitialSyncRef = useRef(false);
+  // Set when ANY org sync this session was rejected (permissions / outage). We
+  // must NOT treat a failed sync as "user has zero workspaces" — auto-creating
+  // a default in that state would spawn duplicate orgs behind a transient error.
+  const syncErrorRef = useRef(false);
 
   // 1a. Realtime sync of memberships for this user
   useEffect(() => {
@@ -102,6 +111,8 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       setIsSyncingMemberships(false);
     }, (err) => {
       console.error('[Memberships Sync Error]', err);
+      syncErrorRef.current = true;
+      setSyncDegraded(true);
       setIsSyncingMemberships(false);
     });
 
@@ -169,12 +180,20 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     let latestMember: Organization[] = [];
 
     unsubOwned = onSnapshot(ownedQ, (snap) => {
+      // A successful read clears any earlier degraded state for this session.
+      syncErrorRef.current = false;
+      setSyncDegraded(false);
       latestOwned = snap.docs.map(d => ({ id: d.id, ...d.data() } as Organization));
       setOwnedLoaded(true);
       syncOrgs(latestOwned, latestMember);
     }, (err) => {
       console.error('[Owned Orgs Sync Error]', err);
-      setOwnedLoaded(true); // Still mark loaded to not block UI forever
+      // Fail safe: mark loaded + resolve loading so the app never hangs, flag
+      // the session as degraded, and record the error so auto-create is skipped.
+      syncErrorRef.current = true;
+      setSyncDegraded(true);
+      setOwnedLoaded(true);
+      setLoading(false);
     });
 
     // 1b. Sync Organizations where user is a member
@@ -216,7 +235,10 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           syncOrgs(latestOwned, latestMember);
         }, (err) => {
           console.error(`[Member Orgs Sync Error - Chunk ${index}]`, err);
+          syncErrorRef.current = true;
+          setSyncDegraded(true);
           setMembersLoaded(true);
+          setLoading(false);
         });
         unsubs.push(unsub);
       });
@@ -234,8 +256,10 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   // 1c. Auto-create default workspace if none exist
   useEffect(() => {
-    // Only proceed if we HAVE finished the initial sync of owned AND member organizations
-    if (!user || !profile || !didInitialSyncRef.current || workspaces.length > 0) return;
+    // Only proceed if we HAVE finished the initial sync of owned AND member organizations.
+    // Never auto-create while a sync errored — the user may already own orgs that a
+    // transient permission error is hiding; creating a default would duplicate them.
+    if (!user || !profile || !didInitialSyncRef.current || workspaces.length > 0 || syncErrorRef.current) return;
 
     const createDefault = async () => {
       if (isCreatingRef.current) return;
@@ -593,6 +617,7 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         members,
         invites,
         loading,
+        syncDegraded,
         selectWorkspace,
         selectProject,
         createNewWorkspace,

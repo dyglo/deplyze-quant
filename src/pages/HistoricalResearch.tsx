@@ -11,7 +11,7 @@
  * structured QuickBuild form, toggled by InputModeSwitch.
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Info, Copy, EyeOff } from 'lucide-react';
 import { PageHeader } from '../components/quant/PageHeader';
@@ -101,6 +101,16 @@ export const HistoricalResearch: React.FC = () => {
   const [missing, setMissing] = useState(false);
   const [recentTick, setRecentTick] = useState(0);
 
+  // Ids created by a local run() in THIS session. The URL→state sync effect must
+  // never treat such an id as a "missing" saved investigation — it has no
+  // Firestore doc yet (and won't until the user saves), but the pipeline is
+  // running or has produced an in-memory result. Without this guard the async
+  // Firestore lookup races the in-flight run and flashes "Investigation not found".
+  const localRunIdsRef = useRef<Set<string>>(new Set());
+  // Live mirror of `busy` for use inside async callbacks (avoids stale closures).
+  const busyRef = useRef(busy);
+  busyRef.current = busy;
+
   // Toolbar state
   const [refineOpen, setRefineOpen] = useState(false);
   const [hidden, setHidden] = useState<Set<WidgetId>>(new Set());
@@ -115,6 +125,8 @@ export const HistoricalResearch: React.FC = () => {
   useEffect(() => {
     if (!routeId) { setMissing(false); return; }
     if (result) return;
+    // A freshly-created investigation from this session's run() — never "missing".
+    if (localRunIdsRef.current.has(routeId)) { setMissing(false); return; }
     const stored = readInvestigation(routeId);
     if (stored) {
       hydrate(stored);
@@ -134,16 +146,16 @@ export const HistoricalResearch: React.FC = () => {
             writeInvestigation(routeId, r); // warm sessionStorage cache
             setSavedState('saved');
             setMissing(false);
-          } else if (!busy) {
+          } else if (!busyRef.current && !localRunIdsRef.current.has(routeId)) {
             const stillIdle = steps.every((s) => s.state === 'pending');
             if (stillIdle) setMissing(true);
           }
         })
         .catch(() => {
-          if (!cancelled && !busy) setMissing(true);
+          if (!cancelled && !busyRef.current && !localRunIdsRef.current.has(routeId)) setMissing(true);
         });
       return () => { cancelled = true; };
-    } else if (!busy) {
+    } else if (!busyRef.current) {
       const stillIdle = steps.every((s) => s.state === 'pending');
       if (stillIdle) setMissing(true);
     }
@@ -179,6 +191,7 @@ export const HistoricalResearch: React.FC = () => {
   // ── Actions ────────────────────────────────────────────────────────────
   const submit = useCallback((q: string) => {
     const id = newInvestigationId();
+    localRunIdsRef.current.add(id);
     setMissing(false);
     navigate(`/research/i/${id}`, { replace: false });
     run(q);
@@ -186,6 +199,7 @@ export const HistoricalResearch: React.FC = () => {
 
   const submitQuickBuild = useCallback((plan: ResearchPlan, query: string) => {
     const id = newInvestigationId();
+    localRunIdsRef.current.add(id);
     setMissing(false);
     navigate(`/research/i/${id}`, { replace: false });
     run(query, { plan });
@@ -206,6 +220,7 @@ export const HistoricalResearch: React.FC = () => {
   const applyRefinedPlan = useCallback((nextPlan: ResearchPlan) => {
     if (!result) return;
     const id = newInvestigationId();
+    localRunIdsRef.current.add(id);
     setMissing(false);
     navigate(`/research/i/${id}`, { replace: false });
     run(result.query, { plan: nextPlan });

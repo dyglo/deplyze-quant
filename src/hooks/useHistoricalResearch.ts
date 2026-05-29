@@ -174,7 +174,7 @@ export function useHistoricalResearch() {
       } else {
         start('plan');
         appendLog('plan', { type: 'narrative', text: 'Parsing your query to identify assets and intent…' });
-        const rawPlan = await planResearch(query);
+        const { plan: rawPlan, degraded: planDegraded } = await planResearch(query);
         if (my !== seq.current) return;
         if (rawPlan.assets.length === 0) {
           fail('plan', 'no assets resolved');
@@ -186,7 +186,12 @@ export function useHistoricalResearch() {
           ...rawPlan,
           comparisons: ensureComparisons(rawPlan.comparisons, rawPlan.assets.length),
         };
-        finish('plan', { detail: planSummary(plan) });
+        finish('plan', { detail: planDegraded ? `${planSummary(plan)} · degraded` : planSummary(plan) });
+        if (planDegraded) {
+          // Institutional transparency: the LLM planner was unavailable, so we
+          // derived the plan locally. The investigation still proceeds.
+          appendLog('plan', { type: 'action', prefix: '✓', text: 'planner offline — derived plan locally from your query' });
+        }
         appendLog('plan', { type: 'narrative', text: `Resolved ${plan.assets.join(', ')} — ${prettyIntent(plan.intent)} over ${planWindow(plan)}.` });
       }
 

@@ -129,6 +129,9 @@ export interface EarningsCalendar {
   events: EarningsEvent[];
   source: ProviderId;
   fetchedAt: number;
+  /** True when every provider failed and the gateway returned an empty,
+   *  freshness-tagged payload instead of erroring. */
+  degraded?: boolean;
 }
 
 // ─── News contracts ────────────────────────────────────────────────────────

@@ -146,6 +146,42 @@ test('owner fallback: owner without membership doc still has access', async () =
   await assertFails(getDoc(doc(carol(), 'organizations', 'org2')));
 });
 
+// REGRESSION (prod incident 2026-05-29): the WorkspaceContext owned-orgs sync
+// runs a LIST query `where('ownerId','==',uid)`, not a single getDoc. A list
+// rule cannot be authorised by a cross-document get(), so the prior
+// canAccessOrg()/isOrgOwner() rule rejected this query for owners that lacked a
+// membership doc — surfacing as "[Owned Orgs Sync Error] Missing or
+// insufficient permissions". These assert the field-based list query works.
+test('owned-orgs LIST query: owner WITH membership (alice) succeeds', async () => {
+  const q = query(collection(alice(), 'organizations'), where('ownerId', '==', 'alice'));
+  await assertSucceeds(getDocs(q));
+});
+
+test('owned-orgs LIST query: owner WITHOUT membership doc (dave) succeeds', async () => {
+  // This is the exact case that 500'd in prod — owner-fallback via a list query.
+  const q = query(collection(dave(), 'organizations'), where('ownerId', '==', 'dave'));
+  await assertSucceeds(getDocs(q));
+});
+
+test('owned-orgs LIST query: cannot list another user\'s orgs', async () => {
+  // carol may run a query scoped to her own uid (returns empty) ...
+  const own = query(collection(carol(), 'organizations'), where('ownerId', '==', 'carol'));
+  await assertSucceeds(getDocs(own));
+  // ... but must not be able to list orgs owned by someone else.
+  const foreign = query(collection(carol(), 'organizations'), where('ownerId', '==', 'alice'));
+  await assertFails(getDocs(foreign));
+});
+
+test('member-orgs LIST query: by document id (in) works for a member', async () => {
+  // bob is a member (not owner) of org1; WorkspaceContext fetches member orgs
+  // with where('__name__','in',[…]).
+  const q = query(collection(bob(), 'organizations'), where('__name__', 'in', ['org1']));
+  await assertSucceeds(getDocs(q));
+  // carol is in no org → the same shape must be denied.
+  const qc = query(collection(carol(), 'organizations'), where('__name__', 'in', ['org1']));
+  await assertFails(getDocs(qc));
+});
+
 test('memberships: own + org-scoped access, outsiders denied', async () => {
   await assertSucceeds(getDoc(doc(alice(), 'memberships', 'alice_org1')));
   // bob is a member of org1, so may read org1 memberships

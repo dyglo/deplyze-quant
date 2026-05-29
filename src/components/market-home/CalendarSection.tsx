@@ -32,7 +32,7 @@ const EarningsCalendarBlock: React.FC = () => {
         Upcoming Earnings
       </div>
       {loading && events.length === 0 ? <Skeleton n={5} />
-        : error && events.length === 0 ? <Empty msg="Earnings calendar unavailable." />
+        : (error || data?.degraded) && events.length === 0 ? <Empty msg="Earnings calendar temporarily unavailable — data will refresh automatically." />
         : events.length === 0 ? <Empty msg="No scheduled earnings in the next 30 days." />
         : (
           <div>

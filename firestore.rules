@@ -73,11 +73,25 @@ service cloud.firestore {
     }
 
     // ─── Organizations ────────────────────────────────────────────────────
+    // CRITICAL — list-query safety. WorkspaceContext runs two client queries:
+    //   • owned   → query(organizations, where('ownerId','==',uid))
+    //   • member  → query(organizations, where('__name__','in',[orgIds]))
+    // A `list` rule can ONLY be proven safe from the candidate doc itself
+    // (`resource.data` / the path wildcard) — a cross-document `get()` cannot
+    // authorize a field-based list query. The previous rule authorised owners
+    // via `isOrgOwner(orgId)` which `get()`s the org doc; that works for a
+    // single `getDoc` but makes the owned-orgs LIST query fail with
+    // "Missing or insufficient permissions" whenever the owner has no
+    // membership doc (the exact owner-fallback case). We therefore authorise
+    // the owner branch directly from `resource.data.ownerId`, which matches the
+    // query filter and is provably safe for both get and list.
     match /organizations/{orgId} {
-      allow read:   if canAccessOrg(orgId);
+      allow read:   if isSignedIn()
+        && (resource.data.ownerId == request.auth.uid || isOrgMember(orgId));
       allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
-      allow update: if canAccessOrg(orgId);
-      allow delete: if isOrgOwner(orgId);
+      allow update: if isSignedIn()
+        && (resource.data.ownerId == request.auth.uid || isOrgMember(orgId));
+      allow delete: if isSignedIn() && resource.data.ownerId == request.auth.uid;
     }
 
     // ─── Workspaces — server-written subtree, org-scoped client reads ──────

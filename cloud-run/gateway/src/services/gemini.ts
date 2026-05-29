@@ -17,6 +17,13 @@ RESPONSE CONSTRAINTS — NON-NEGOTIABLE:
 - Cite each claim against the evidence provided. Do not fabricate sources.
 `.trim();
 
+/**
+ * Default model. Overridable via the GEMINI_MODEL env var so a model rotation
+ * (e.g. a flash-preview bump) needs only a config change, not a redeploy of
+ * source. Keep this in sync with the model used by the quant-engine.
+ */
+const DEFAULT_GEMINI_MODEL = process.env.GEMINI_MODEL ?? 'gemini-3-flash-preview';
+
 let client: GoogleGenAI | null = null;
 function getClient(): GoogleGenAI {
   if (client) return client;
@@ -36,7 +43,7 @@ export interface GeminiCall {
 export async function geminiGenerate({
   systemInstruction,
   prompt,
-  model = 'gemini-2.5-flash',
+  model = DEFAULT_GEMINI_MODEL,
   temperature = 0.3,
 }: GeminiCall): Promise<string> {
   const ai = getClient();
@@ -90,7 +97,7 @@ export async function geminiGenerateContent({
   systemInstruction,
   contents,
   tools,
-  model = 'gemini-2.5-flash',
+  model = DEFAULT_GEMINI_MODEL,
   temperature = 0.3,
   maxOutputTokens = 1024,
 }: GeminiContentCall): Promise<GeminiToolTurn> {

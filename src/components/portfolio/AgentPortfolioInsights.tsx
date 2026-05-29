@@ -167,7 +167,7 @@ export const AgentPortfolioInsights: React.FC<{
       {/* Empty state */}
       {!isAnyLoading && outputs.length === 0 && !regimeOutput && !riskOutput && (
         <p style={{ fontSize: 10, color: 'var(--muted-foreground)', margin: 0 }}>
-          Intelligence agents run on scheduled cadences. Observations will appear after the next run.
+          Observations will appear here as they’re generated.
         </p>
       )}
     </div>

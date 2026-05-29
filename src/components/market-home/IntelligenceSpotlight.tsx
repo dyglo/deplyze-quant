@@ -5,18 +5,12 @@ import { useAgentOutputs } from '../../hooks/useAgentIntelligence';
 import { SectionCard } from './SectionCard';
 import { relTime, stripMarkdown } from './format';
 import { AGENT_DOMAIN_LABELS } from '../../types/agents';
-import type { AgentOutput, AgentSeverity } from '../../types/agents';
-
-const sevColor: Record<AgentSeverity, string> = {
-  high: 'var(--primary)',
-  medium: '#B8860B',
-  low: '#4E6040',
-  info: 'var(--muted-foreground)',
-};
+import type { AgentOutput } from '../../types/agents';
+import { severityConfig } from '../../lib/semanticPalette';
 
 const Card: React.FC<{ o: AgentOutput }> = ({ o }) => {
   const navigate = useNavigate();
-  const sev = o.severity ?? 'info';
+  const sevC = severityConfig(o.severity).color;
   return (
     <button
       type="button"
@@ -31,24 +25,24 @@ const Card: React.FC<{ o: AgentOutput }> = ({ o }) => {
       onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: sevColor[sev] }}>
-          <span style={{ width: 6, height: 6, borderRadius: '50%', background: sevColor[sev], flexShrink: 0 }} />
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: sevC }}>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: sevC, flexShrink: 0 }} />
           {AGENT_DOMAIN_LABELS[o.domain] ?? o.domain}
         </span>
-        <span style={{ fontSize: 9.5, color: 'var(--muted-foreground)' }}>{relTime(o.generated_at)}</span>
+        <span style={{ fontSize: 10, color: 'var(--muted-foreground)' }}>{relTime(o.generated_at)}</span>
       </div>
-      <p style={{ margin: 0, fontSize: 12.5, fontWeight: 700, lineHeight: 1.3, color: 'var(--foreground)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+      <p style={{ margin: 0, fontSize: 12, fontWeight: 700, lineHeight: 1.3, color: 'var(--foreground)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
         {stripMarkdown(o.title) || 'Intelligence observation'}
       </p>
       {o.summary && (
-        <p style={{ margin: 0, fontSize: 11.5, lineHeight: 1.45, color: 'var(--muted-foreground)', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+        <p style={{ margin: 0, fontSize: 11, lineHeight: 1.45, color: 'var(--muted-foreground)', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
           {stripMarkdown(o.summary)}
         </p>
       )}
       {o.symbols.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
           {o.symbols.slice(0, 4).map((s) => (
-            <span key={s} style={{ fontSize: 9, fontWeight: 600, padding: '1px 6px', borderRadius: 4, background: 'var(--muted)', color: 'var(--muted-foreground)' }}>{s}</span>
+            <span key={s} style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--primary)' }}>{s}</span>
           ))}
         </div>
       )}
@@ -73,7 +67,7 @@ export const IntelligenceSpotlight: React.FC = () => {
       ) : error && items.length === 0 ? (
         <p className="ds-caption" style={{ color: 'var(--muted-foreground)', padding: '14px 2px' }}>Intelligence signals are temporarily unavailable.</p>
       ) : items.length === 0 ? (
-        <p className="ds-caption" style={{ color: 'var(--muted-foreground)', padding: '14px 2px' }}>No recent agent observations published.</p>
+        <p className="ds-caption" style={{ color: 'var(--muted-foreground)', padding: '14px 2px' }}>No recent observations.</p>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 10 }}>
           {items.map((o) => <Card key={o.artifact_id} o={o} />)}

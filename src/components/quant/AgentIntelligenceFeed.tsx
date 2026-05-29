@@ -166,7 +166,7 @@ export const AgentIntelligenceFeed: React.FC<{
           color: 'var(--muted-foreground)', fontSize: 11,
         }}>
           {outputs.length === 0
-            ? 'No intelligence observations yet. Agents run on scheduled cadences.'
+            ? 'No intelligence observations yet.'
             : 'No observations match the selected filters.'
           }
         </div>

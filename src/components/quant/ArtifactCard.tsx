@@ -2,6 +2,7 @@ import React from 'react';
 import type { IntelligenceArtifact } from '../../types';
 import { ConfidenceBadge } from './ConfidenceBadge';
 import { SignificanceMeter } from './SignificanceMeter';
+import { providerLabel } from '../../lib/providerLabels';
 
 const CATEGORY_LABEL: Record<IntelligenceArtifact['category'], string> = {
   regime: 'Regime',
@@ -48,7 +49,7 @@ export const ArtifactCard: React.FC<{
           <li key={i} className="ds-caption" style={{ fontVariantNumeric: 'tabular-nums' }}>
             <span style={{ color: 'var(--muted-foreground)' }}>{e.label}:</span> {String(e.value)}
             {e.source && e.source !== 'derived' ? (
-              <span style={{ color: 'var(--muted-foreground)' }}> · {String(e.source)}</span>
+              <span style={{ color: 'var(--muted-foreground)' }}> · {providerLabel(String(e.source))}</span>
             ) : null}
           </li>
         ))}

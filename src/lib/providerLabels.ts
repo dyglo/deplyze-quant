@@ -8,22 +8,32 @@ export const PROVIDER_DISPLAY: Record<string, string> = {
   polygon:       'Real-time Quotes',
   finnhub:       'Market Data',
   twelve_data:   'Price & OHLCV',
+  twelvedata:    'Price & OHLCV',
   fmp:           'Fundamentals',
   eodhd:         'Historical Data',
   // Macro & research
   alpha_vantage: 'Macro Series',
+  alphavantage:  'Macro Series',
   tavily:        'Web Research',
   serper:        'News Search',
   // Intelligence & storage
   gemini:        'AI Synthesis',
   edgar:         'Public Filings',
+  sec_edgar:     'Public Filings',
   firestore:     'Research Store',
   derived:       'Derived',
 };
 
-/** Returns the neutral display label for a provider ID. */
+/**
+ * Returns the neutral display label for a provider ID. The lookup is
+ * case/space-insensitive so backend variants ("Finnhub", "Twelve Data")
+ * resolve the same as the canonical id. Unknown values (real publisher
+ * names) pass through unchanged.
+ */
 export function providerLabel(id: string): string {
-  return PROVIDER_DISPLAY[id] ?? id.replace(/_/g, ' ');
+  if (!id) return '';
+  const key = id.toLowerCase().replace(/[\s-]+/g, '_');
+  return PROVIDER_DISPLAY[key] ?? id.replace(/_/g, ' ');
 }
 
 /**

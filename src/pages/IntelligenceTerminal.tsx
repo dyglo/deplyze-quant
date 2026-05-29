@@ -15,6 +15,7 @@ import { Disclaimer } from '../components/quant/Disclaimer';
 import { FreshnessBadge } from '../components/quant/FreshnessBadge';
 import { InstrumentDrawerBody } from '../components/quant/InstrumentDrawerBody';
 import { HeadlineDrawerBody } from '../components/quant/HeadlineDrawerBody';
+import { providerLabel } from '../lib/providerLabels';
 import { RegimeStatusChip, RiskLevelChip } from '../components/quant/SystemAnalyzingState';
 import { RefreshCw, Plus, X, GripVertical } from 'lucide-react';
 import { usePins } from '../hooks/usePins';
@@ -520,7 +521,7 @@ export const IntelligenceTerminal: React.FC = () => {
                   <button
                     onClick={() => drawer.open({
                       title: h.title,
-                      subtitle: h.source,
+                      subtitle: providerLabel(h.source),
                       body: <HeadlineDrawerBody item={{
                         title: h.title,
                         summary: h.snippet,
@@ -549,7 +550,7 @@ export const IntelligenceTerminal: React.FC = () => {
                         color: 'var(--primary)',
                         border: '1px solid color-mix(in srgb, var(--primary) 20%, transparent)',
                         flexShrink: 0,
-                      }}>{h.source}</span>
+                      }}>{providerLabel(h.source)}</span>
                       {ago && (
                         <span className="ds-caption" style={{ color: 'var(--muted-foreground)', marginLeft: 'auto', flexShrink: 0 }}>
                           {ago}

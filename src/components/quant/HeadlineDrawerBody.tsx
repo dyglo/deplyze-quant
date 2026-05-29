@@ -1,5 +1,6 @@
 import React from 'react';
 import { ExternalLink } from 'lucide-react';
+import { providerLabel } from '../../lib/providerLabels';
 
 export interface HeadlinePayload {
   title: string;
@@ -31,7 +32,7 @@ export const HeadlineDrawerBody: React.FC<{ item: HeadlinePayload }> = ({ item }
         fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
         color: 'var(--primary)', padding: '2px 6px', borderRadius: 999,
         background: 'rgba(193,95,60,0.10)', border: '1px solid color-mix(in srgb, var(--primary) 25%, transparent)',
-      }}>{item.source}</span>
+      }}>{providerLabel(item.source)}</span>
       {item.publishedAt && (
         <span className="ds-caption" style={{ color: 'var(--muted-foreground)' }}>{fmtDate(item.publishedAt)}</span>
       )}

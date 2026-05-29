@@ -1,5 +1,6 @@
 import React from 'react';
 import { ExternalLink } from 'lucide-react';
+import { providerLabel } from '../../lib/providerLabels';
 
 export interface NewsListItem {
   id: string;
@@ -27,7 +28,7 @@ export const NewsList: React.FC<{ items: NewsListItem[]; max?: number }> = ({ it
           display: 'block', textDecoration: 'none', color: 'inherit',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-            <span className="ds-label" style={{ color: 'var(--muted-foreground)' }}>{n.source}</span>
+            <span className="ds-label" style={{ color: 'var(--muted-foreground)' }}>{providerLabel(n.source)}</span>
             <span className="ds-caption" style={{ color: 'var(--muted-foreground)' }}>{timeAgo(n.publishedAt)}</span>
           </div>
           <div className="ds-heading" style={{ marginTop: 4, display: 'flex', alignItems: 'baseline', gap: 6 }}>

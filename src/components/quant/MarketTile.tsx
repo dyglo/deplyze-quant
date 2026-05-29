@@ -61,11 +61,6 @@ export const MarketTile: React.FC<{
             <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.02em', color: 'var(--foreground)' }}>
               {symbol}
             </div>
-            {quote?.source && (
-              <div style={{ fontSize: 8, color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: 1 }}>
-                {quote.source.replace('_', ' ')}
-              </div>
-            )}
           </div>
         </div>
         {spark && spark.length > 1 && (

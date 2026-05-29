@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
+import { providerLabel } from '../../lib/providerLabels';
 import {
   Map, ArrowUpDown, ArrowUp, ArrowDown, RefreshCw, Search, X,
   TrendingUp, TrendingDown, Globe, ChevronDown,
@@ -291,7 +292,7 @@ const CountryDetailPanel: React.FC<{
                     {item.headline}
                   </p>
                   <p style={{ margin: '4px 0 0', fontSize: 9, color: 'var(--muted-foreground)' }}>
-                    {item.source} · {new Date(item.publishedAt).toLocaleDateString()}
+                    {providerLabel(item.source)} · {new Date(item.publishedAt).toLocaleDateString()}
                   </p>
                 </a>
               ))}

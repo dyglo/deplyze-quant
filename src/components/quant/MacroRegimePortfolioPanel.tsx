@@ -5,13 +5,17 @@
  * current macro regime, how is the user's *active portfolio* exposed? It pulls
  * the selected portfolio's holdings, runs them through the regime-vulnerability
  * engine (`POST /v1/agents/vulnerability`), and reuses the institutional
- * PortfolioVulnerabilityPanel — so the macro context the page already shows is
- * connected to what the user actually holds.
+ * PortfolioVulnerabilityPanel.
+ *
+ * The vulnerability computation is produced by the quant-engine from recent
+ * regime/risk/liquidity/volatility agent signals; when those are stale or the
+ * engine is unreachable it returns nothing, so we surface an explicit reason +
+ * retry rather than an opaque empty state.
  */
 
 import React, { useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { Briefcase } from 'lucide-react';
+import { Briefcase, RefreshCw } from 'lucide-react';
 import { usePortfolioWorkspace } from '../../hooks/usePortfolioWorkspace';
 import { usePortfolioVulnerability } from '../../hooks/useAgentReasoning';
 import { PortfolioVulnerabilityPanel } from '../portfolio/PortfolioVulnerabilityPanel';
@@ -32,6 +36,13 @@ export const MacroRegimePortfolioPanel: React.FC = () => {
   const vuln = usePortfolioVulnerability(holdings, selectedPortfolio?.id);
 
   const hasPortfolio = !!selectedPortfolio && activeHoldings.length > 0;
+
+  // A usable result must actually carry dimension scores. The engine can return
+  // a 200 with an `error` field (e.g. stale regime signals) and no dimensions.
+  const usable = vuln.data && vuln.data.dimensions && Object.keys(vuln.data.dimensions).length > 0
+    ? vuln.data
+    : null;
+  const unavailableReason = vuln.error ?? vuln.data?.error ?? null;
 
   return (
     <section style={{ marginBottom: 28 }}>
@@ -64,12 +75,30 @@ export const MacroRegimePortfolioPanel: React.FC = () => {
             Go to Portfolio
           </Link>
         </div>
+      ) : vuln.loading ? (
+        <PortfolioVulnerabilityPanel result={null} loading holdingsCount={activeHoldings.length} />
+      ) : usable ? (
+        <PortfolioVulnerabilityPanel result={usable} holdingsCount={activeHoldings.length} />
       ) : (
-        <PortfolioVulnerabilityPanel
-          result={vuln.data}
-          loading={vuln.loading}
-          holdingsCount={activeHoldings.length}
-        />
+        <div className="ds-surface" style={{ padding: 16, borderRadius: 10 }}>
+          <p className="ds-body" style={{ margin: '0 0 8px', color: 'var(--foreground)' }}>
+            Regime vulnerability is temporarily unavailable for these holdings.
+          </p>
+          <p className="ds-caption" style={{ margin: '0 0 12px', color: 'var(--muted-foreground)' }}>
+            It is computed by the macro-intelligence engine from recent regime, risk, liquidity and
+            volatility signals. This usually means those signals are still refreshing or the engine
+            is briefly unreachable — the rest of this page is unaffected.
+            {unavailableReason ? ` (${unavailableReason})` : ''}
+          </p>
+          <button
+            type="button"
+            onClick={() => vuln.refetch()}
+            className="ds-btn-secondary"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13 }}
+          >
+            <RefreshCw size={12} /> Retry
+          </button>
+        </div>
       )}
     </section>
   );

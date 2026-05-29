@@ -9,28 +9,7 @@ import { ChevronDown, ChevronRight, ExternalLink } from 'lucide-react';
 import type { AgentOutput, AgentDomain, AgentSeverity } from '../../types/agents';
 import { AGENT_DOMAIN_LABELS } from '../../types/agents';
 import { ConfidenceBadge } from './ConfidenceBadge';
-
-// ─── Severity styling ─────────────────────────────────────────────────────────
-
-const SEVERITY_CONFIG: Record<AgentSeverity, { color: string; bg: string; label: string }> = {
-  high:   { color: '#ef4444', bg: 'rgba(239,68,68,0.08)',   label: 'HIGH' },
-  medium: { color: '#f59e0b', bg: 'rgba(245,158,11,0.08)',  label: 'MED' },
-  low:    { color: '#6b7280', bg: 'rgba(107,114,128,0.08)', label: 'LOW' },
-  info:   { color: '#6366f1', bg: 'rgba(99,102,241,0.06)',  label: 'INFO' },
-};
-
-const DOMAIN_ACCENT: Record<AgentDomain, string> = {
-  macro:       'var(--primary)',
-  sentiment:   '#8b5cf6',
-  volatility:  '#f59e0b',
-  cross_asset: '#06b6d4',
-  liquidity:   '#10b981',
-  regime:      '#6366f1',
-  opportunity: '#ec4899',
-  earnings:    '#f97316',
-  risk:        '#ef4444',
-  research:    'var(--muted-foreground)',
-};
+import { severityConfig, domainAccent } from '../../lib/semanticPalette';
 
 function fmtDate(iso: string): string {
   try {
@@ -52,8 +31,8 @@ export const IntelligenceObservationCard: React.FC<{
 
   const domain = output.domain as AgentDomain;
   const severity = (output.severity ?? 'info') as AgentSeverity;
-  const sevCfg = SEVERITY_CONFIG[severity] ?? SEVERITY_CONFIG.info;
-  const accentColor = DOMAIN_ACCENT[domain] ?? 'var(--muted-foreground)';
+  const sevCfg = severityConfig(severity);
+  const accentColor = domainAccent(domain);
   const domainLabel = AGENT_DOMAIN_LABELS[domain] ?? domain;
 
   return (
@@ -61,7 +40,6 @@ export const IntelligenceObservationCard: React.FC<{
       style={{
         background: 'var(--card)',
         border: '1px solid var(--border)',
-        borderLeft: `3px solid ${sevCfg.color}`,
         borderRadius: 8,
         overflow: 'hidden',
       }}
@@ -153,8 +131,8 @@ export const IntelligenceObservationCard: React.FC<{
                   onClick={e => { e.stopPropagation(); onSymbolClick?.(sym); }}
                   style={{
                     fontSize: 9, fontWeight: 700, letterSpacing: '0.04em',
-                    color: 'var(--primary)', background: 'rgba(99,102,241,0.08)',
-                    border: '1px solid rgba(99,102,241,0.2)', borderRadius: 3,
+                    color: 'var(--primary)', background: 'rgba(193,95,60,0.08)',
+                    border: '1px solid rgba(193,95,60,0.18)', borderRadius: 3,
                     padding: '1px 6px', cursor: onSymbolClick ? 'pointer' : 'default',
                   }}
                 >

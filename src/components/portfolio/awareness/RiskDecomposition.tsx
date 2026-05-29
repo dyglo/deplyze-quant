@@ -54,17 +54,17 @@ const DIM_LABEL: Record<string, string> = {
 };
 
 const LABEL_TONE: Record<VulnerabilityDimension['label'], { color: string; icon: React.ReactNode }> = {
-  high_risk:     { color: '#ef4444', icon: <AlertTriangle size={10} /> },
-  moderate_risk: { color: '#f59e0b', icon: <ShieldAlert size={10} /> },
-  neutral:       { color: '#6b7280', icon: <Activity size={10} /> },
-  resilient:     { color: '#10b981', icon: <ShieldCheck size={10} /> },
+  high_risk:     { color: 'var(--ds-loss)', icon: <AlertTriangle size={10} /> },
+  moderate_risk: { color: '#C9A227', icon: <ShieldAlert size={10} /> },
+  neutral:       { color: 'var(--muted-foreground)', icon: <Activity size={10} /> },
+  resilient:     { color: 'var(--ds-gain)', icon: <ShieldCheck size={10} /> },
 };
 
 const COUNT_COLOR = (count: number): string => {
-  if (count >= 4) return '#ef4444';
-  if (count === 3) return '#f97316';
-  if (count === 2) return '#f59e0b';
-  if (count === 1) return '#6366f1';
+  if (count >= 4) return 'var(--ds-loss)';
+  if (count === 3) return '#B85C2A';
+  if (count === 2) return '#C9A227';
+  if (count === 1) return 'var(--chart-3)';
   return '#9ca3af';
 };
 

@@ -13,13 +13,7 @@ import ReactMarkdown from 'react-markdown';
 import { Layers, ChevronDown, ChevronRight } from 'lucide-react';
 import type { AgentOutput, AgentSeverity } from '../../types/agents';
 import { ConfidenceBadge } from './ConfidenceBadge';
-
-const SEVERITY_BORDER: Record<AgentSeverity, string> = {
-  high:   '#ef4444',
-  medium: '#f59e0b',
-  low:    '#6b7280',
-  info:   '#6366f1',
-};
+import { severityConfig } from '../../lib/semanticPalette';
 
 function fmtDate(iso: string): string {
   try {
@@ -33,7 +27,7 @@ export const ContextualReasoningCard: React.FC<{
 }> = ({ output, defaultExpanded = false }) => {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const severity = (output.severity ?? 'info') as AgentSeverity;
-  const borderColor = SEVERITY_BORDER[severity];
+  const borderColor = severityConfig(severity).color;
 
   const ev = output.evidence as Record<string, unknown> | null;
   const matchedSignals = (ev?.matched_signals ?? ev?.all_signals ?? {}) as Record<string, string>;
@@ -43,7 +37,6 @@ export const ContextualReasoningCard: React.FC<{
     <div style={{
       background: 'var(--card)',
       border: `1px solid var(--border)`,
-      borderLeft: `3px solid ${borderColor}`,
       borderRadius: 8,
       overflow: 'hidden',
     }}>

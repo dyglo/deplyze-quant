@@ -60,7 +60,7 @@ export const RegimeStatusChip: React.FC<{
 
   const isRiskOff = regime.includes('risk-off') || regime === 'stagflation';
   const isTransition = regime === 'transition';
-  const color = isRiskOff ? '#ef4444' : isTransition ? '#f59e0b' : '#10b981';
+  const color = isRiskOff ? 'var(--ds-loss)' : isTransition ? '#C9A227' : 'var(--ds-gain)';
 
   return (
     <span style={{
@@ -95,12 +95,12 @@ export const RiskLevelChip: React.FC<{
   if (!riskLevel) return null;
 
   const colorMap: Record<string, string> = {
-    elevated:   '#ef4444',
-    cautionary: '#f59e0b',
-    moderate:   '#6366f1',
-    benign:     '#10b981',
+    elevated:   'var(--ds-loss)',
+    cautionary: '#C9A227',
+    moderate:   'var(--chart-3)',
+    benign:     'var(--ds-gain)',
   };
-  const color = colorMap[riskLevel] ?? '#6b7280';
+  const color = colorMap[riskLevel] ?? 'var(--muted-foreground)';
 
   return (
     <span style={{

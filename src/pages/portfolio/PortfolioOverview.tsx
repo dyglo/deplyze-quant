@@ -751,8 +751,7 @@ const IntelligenceFeed: React.FC<{
             padding: '10px 14px',
             background: 'var(--muted)',
             border: `1px solid var(--border)`,
-            borderLeft: `3px solid ${SEVERITY_COLOR[obs.severity] ?? 'var(--border)'}`,
-            borderRadius: '0 8px 8px 0',
+            borderRadius: 8,
           }}
         >
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>

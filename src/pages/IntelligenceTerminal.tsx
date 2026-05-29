@@ -113,14 +113,14 @@ const AddSymbolInput: React.FC<{
             placeholder="Add symbol…"
             style={{
               padding: '5px 10px', fontSize: 11, borderRadius: 6, width: 130,
-              border: `1px solid ${error ? '#ef4444' : 'var(--border)'}`,
+              border: `1px solid ${error ? 'var(--ds-loss)' : 'var(--border)'}`,
               background: 'var(--card)', color: 'var(--foreground)', outline: 'none',
             }}
           />
           {error && (
             <span style={{
               position: 'absolute', top: '100%', left: 0, marginTop: 2,
-              fontSize: 9, color: '#ef4444', whiteSpace: 'nowrap',
+              fontSize: 9, color: 'var(--ds-loss)', whiteSpace: 'nowrap',
             }}>
               {error}
             </span>

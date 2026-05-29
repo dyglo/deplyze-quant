@@ -36,9 +36,9 @@ function fmt(v: number): string {
 function corrColor(c: number): string {
   if (!isFinite(c)) return 'transparent';
   const a = Math.min(1, Math.abs(c));
-  if (c > 0.05) return `rgba(16, 185, 129, ${0.10 + a * 0.45})`; // emerald
-  if (c < -0.05) return `rgba(239, 68, 68, ${0.10 + a * 0.45})`; // red
-  return 'rgba(148, 163, 184, 0.10)';
+  if (c > 0.05) return `rgba(90, 112, 82, ${0.10 + a * 0.45})`;  // gain (olive green)
+  if (c < -0.05) return `rgba(176, 58, 46, ${0.10 + a * 0.45})`; // loss (brick red)
+  return 'rgba(138, 134, 128, 0.10)';                            // neutral (muted)
 }
 
 const Row: React.FC<{ symbol: string; weight: number; corr: number; beta: number; maxAbs: number }> = ({ symbol, weight, corr, beta, maxAbs }) => {

@@ -7,6 +7,7 @@
  */
 
 import React, { useMemo } from 'react';
+import { CATEGORICAL } from '../../../lib/semanticPalette';
 
 export interface SectorSlice {
   label: string;
@@ -19,20 +20,7 @@ interface Props {
   size?: number;
 }
 
-const PALETTE = [
-  'var(--chart-1)',
-  'var(--chart-2)',
-  'var(--chart-3)',
-  'var(--chart-4)',
-  'var(--chart-5)',
-  '#6366f1',
-  '#14b8a6',
-  '#ec4899',
-  '#f59e0b',
-  '#84cc16',
-  '#0ea5e9',
-  '#a855f7',
-];
+const PALETTE = CATEGORICAL;
 
 function polar(cx: number, cy: number, r: number, angle: number): [number, number] {
   return [cx + r * Math.cos(angle - Math.PI / 2), cy + r * Math.sin(angle - Math.PI / 2)];

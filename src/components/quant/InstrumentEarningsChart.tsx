@@ -143,7 +143,7 @@ export const InstrumentEarningsChart: React.FC<{ symbol: string }> = ({ symbol }
                   <Line
                     dataKey={view === 'eps' ? 'epsEst' : 'revenueEst'}
                     name="Forecast"
-                    dot={{ r: 3, fill: '#f97316', strokeWidth: 0 }}
+                    dot={{ r: 3, fill: '#B85C2A', strokeWidth: 0 }}
                     activeDot={{ r: 4 }}
                     stroke="transparent"
                     strokeWidth={0}
@@ -157,7 +157,7 @@ export const InstrumentEarningsChart: React.FC<{ symbol: string }> = ({ symbol }
               {[
                 { color: 'var(--primary)', label: view === 'eps' ? 'EPS Actual' : 'Revenue Actual' },
                 { color: 'var(--border)', label: 'Estimate' },
-                { color: '#f97316', label: 'Forecast', dot: true },
+                { color: '#B85C2A', label: 'Forecast', dot: true },
               ].map(({ color, label, dot }) => (
                 <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                   {dot
@@ -188,7 +188,7 @@ export const InstrumentEarningsChart: React.FC<{ symbol: string }> = ({ symbol }
                   EPS / Forecast
                 </div>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                  <span style={{ fontSize: 18, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: latest.beat ? '#22c55e' : '#ef4444' }}>
+                  <span style={{ fontSize: 18, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: latest.beat ? 'var(--ds-gain)' : 'var(--ds-loss)' }}>
                     ${latest.epsActual.toFixed(2)}
                   </span>
                   {latest.epsEst != null && (
@@ -198,7 +198,7 @@ export const InstrumentEarningsChart: React.FC<{ symbol: string }> = ({ symbol }
                   )}
                 </div>
                 {latest.raw.surprisePct != null && (
-                  <div style={{ fontSize: 11, fontWeight: 600, color: latest.beat ? '#22c55e' : '#ef4444', marginTop: 2 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: latest.beat ? 'var(--ds-gain)' : 'var(--ds-loss)', marginTop: 2 }}>
                     {latest.raw.surprisePct >= 0 ? '+' : ''}{latest.raw.surprisePct.toFixed(1)}% surprise
                   </div>
                 )}

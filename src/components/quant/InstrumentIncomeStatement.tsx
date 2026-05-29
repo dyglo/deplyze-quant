@@ -108,7 +108,7 @@ export const InstrumentIncomeStatement: React.FC<{ symbol: string }> = ({ symbol
                   formatter={(value) => <span style={{ color: 'var(--muted-foreground)' }}>{value}</span>}
                 />
                 <Bar dataKey="revenue"  name="Total Revenue" fill="var(--primary)"   radius={[2,2,0,0]} />
-                <Bar dataKey="netIncome" name="Net Income"    fill="#f97316"          radius={[2,2,0,0]} />
+                <Bar dataKey="netIncome" name="Net Income"    fill="#B85C2A"          radius={[2,2,0,0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -120,7 +120,7 @@ export const InstrumentIncomeStatement: React.FC<{ symbol: string }> = ({ symbol
               <div style={{ display: 'flex', gap: 32, marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--border)', flexWrap: 'wrap' }}>
                 {[
                   { label: 'Revenue',       value: last.revenue,       color: 'var(--primary)' },
-                  { label: 'Net Income',    value: last.netIncome,     color: '#f97316' },
+                  { label: 'Net Income',    value: last.netIncome,     color: '#B85C2A' },
                   { label: 'Gross Profit',  value: last.grossProfit,   color: 'var(--foreground)' },
                   { label: 'EBITDA',        value: last.ebitda,        color: 'var(--foreground)' },
                 ].filter(s => s.value != null).map(({ label, value, color }) => (

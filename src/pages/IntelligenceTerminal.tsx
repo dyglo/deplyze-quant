@@ -476,7 +476,7 @@ export const IntelligenceTerminal: React.FC = () => {
               items={agentArtifacts}
               loading={artifacts.loading}
               emptyTitle="No intelligence artifacts yet"
-              emptyHint="Agents run on scheduled cadences. The Research Copilot is available for on-demand analysis."
+              emptyHint="Observations appear here as they’re generated. The Research Copilot is available for on-demand analysis."
               onOpen={handleOpenArtifact}
             />
           ) : (

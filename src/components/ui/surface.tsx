@@ -33,7 +33,7 @@ export const Surface = React.forwardRef<HTMLDivElement, SurfaceProps>(
 )
 Surface.displayName = "Surface"
 
-export interface PanelProps extends React.HTMLAttributes<HTMLDivElement> {
+export interface PanelProps extends Omit<React.HTMLAttributes<HTMLDivElement>, "title"> {
   title?: React.ReactNode
   subtitle?: React.ReactNode
   icon?: React.ReactNode

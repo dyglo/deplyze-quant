@@ -66,18 +66,36 @@ interface LayoutProps {
   children: React.ReactNode;
 }
 
-const menuItems = [
+/*
+ * Main navigation, grouped into cognitive sections (Discover / Research /
+ * Library / Data). Portfolio and Market Dashboards remain their own
+ * collapsible groups rendered inline. Section grouping is presentation-only —
+ * routes are unchanged. `menuItems` is derived below to preserve the existing
+ * active-tab / breadcrumb lookups.
+ */
+const DISCOVER_ITEMS = [
   { id: 'terminal',    label: 'Intelligence Terminal',  icon: Activity,        path: '/terminal' },
   { id: 'macro',       label: 'Macro Regime Desk',      icon: TrendingUp,      path: '/macro' },
-  { id: 'relations-map', label: 'Relations Map',         icon: Network,         path: '/relations-map' },
-  { id: 'research',    label: 'Historical Research',     icon: Compass,        path: '/research' },
-  { id: 'backtesting', label: 'Backtesting',            icon: FlaskConical,    path: '/backtesting' },
-  { id: 'lab',         label: 'Quant Lab',              icon: Beaker,          path: '/lab' },
-  { id: 'history',     label: 'Historical Intelligence Terminal', icon: History, path: '/historical-intelligence' },
-  { id: 'warehouse',   label: 'Data Warehouse',         icon: Database,        path: '/warehouse' },
-  { id: 'briefings',   label: 'Briefings',              icon: FileText,        path: '/briefings' },
-  { id: 'library',    label: 'Research Library',       icon: Library,         path: '/library' },
+  { id: 'relations-map', label: 'Relations Map',        icon: Network,         path: '/relations-map' },
 ];
+
+const RESEARCH_ITEMS = [
+  { id: 'history',     label: 'Historical Intelligence Terminal', icon: History, path: '/historical-intelligence' },
+  { id: 'research',    label: 'Historical Research',     icon: Compass,        path: '/research' },
+  { id: 'lab',         label: 'Quant Lab',              icon: Beaker,          path: '/lab' },
+  { id: 'backtesting', label: 'Backtesting',            icon: FlaskConical,    path: '/backtesting' },
+];
+
+const LIBRARY_ITEMS = [
+  { id: 'library',     label: 'Research Library',       icon: Library,         path: '/library' },
+  { id: 'briefings',   label: 'Briefings',              icon: FileText,        path: '/briefings' },
+];
+
+const DATA_ITEMS = [
+  { id: 'warehouse',   label: 'Data Warehouse',         icon: Database,        path: '/warehouse' },
+];
+
+const menuItems = [...DISCOVER_ITEMS, ...RESEARCH_ITEMS, ...LIBRARY_ITEMS, ...DATA_ITEMS];
 
 const bottomItems = [
   { id: 'settings',   label: 'Settings & Account', icon: Settings,        path: '/settings' },
@@ -100,6 +118,28 @@ const PORTFOLIO_INTELLIGENCE_ITEMS = [
   { id: 'portfolio-risk',       label: 'Risk & Regime Fit',         icon: ShieldAlert,     path: '/portfolio/risk' },
   { id: 'portfolio-scenario',   label: 'Scenario & Stress View',    icon: Zap,             path: '/portfolio/scenario' },
 ];
+
+/* ─── Section label for grouped main nav (presentation-only) ───── */
+const NavSectionLabel: React.FC<{ children: React.ReactNode; collapsed: boolean; first?: boolean }> = ({ children, collapsed, first }) => {
+  if (collapsed) {
+    // No text label in icon-only mode; a thin divider separates sections.
+    return first ? null : <div style={{ height: 1, background: 'var(--sidebar-border)', margin: '6px 4px' }} />;
+  }
+  return (
+    <p style={{
+      fontSize: '0.5625rem',
+      fontWeight: 700,
+      color: 'var(--muted-foreground)',
+      letterSpacing: '0.07em',
+      textTransform: 'uppercase',
+      padding: '0 0.625rem',
+      margin: first ? '0 0 0.3rem' : '0.7rem 0 0.3rem',
+      userSelect: 'none',
+    }}>
+      {children}
+    </p>
+  );
+};
 
 /* ─── Inner nav content extracted so it can call useSidebar ────── */
 const SidebarInner: React.FC<{ signOut: () => void; user: any; profile: any }> = ({ signOut, user, profile }) => {
@@ -170,6 +210,54 @@ const SidebarInner: React.FC<{ signOut: () => void; user: any; profile: any }> =
   )?.id || (location.pathname.startsWith('/settings') ? 'settings' : 'dashboard');
 
   const initials = (profile?.displayName?.charAt(0) || user?.email?.charAt(0) || 'U').toUpperCase();
+
+  // Shared renderer for a flat (non-collapsible) main-nav item.
+  const renderNavItem = (item: typeof menuItems[number]) => {
+    const active = currentTab === item.id;
+    return (
+      <SidebarMenuItem key={item.id}>
+        <SidebarMenuButton
+          render={(props) => <Link {...props} to={item.path} />}
+          isActive={active}
+          tooltip={collapsed ? item.label : undefined}
+          className="ds-transition-fast"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.625rem',
+            padding: '0.4375rem 0.625rem',
+            borderRadius: '0.375rem',
+            fontSize: '0.8125rem',
+            fontWeight: active ? 500 : 400,
+            color: active ? 'var(--sidebar-accent-foreground)' : 'var(--sidebar-foreground)',
+            opacity: active ? 1 : 0.8,
+            background: active ? 'var(--sidebar-accent)' : 'transparent',
+            border: active ? '1px solid var(--sidebar-border)' : '1px solid transparent',
+            width: '100%',
+            textDecoration: 'none',
+          }}
+          onMouseEnter={(e) => {
+            if (!active) {
+              (e.currentTarget as HTMLElement).style.background = 'var(--sidebar-accent)';
+              (e.currentTarget as HTMLElement).style.color = 'var(--sidebar-accent-foreground)';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (!active) {
+              (e.currentTarget as HTMLElement).style.background = 'transparent';
+              (e.currentTarget as HTMLElement).style.color = 'var(--sidebar-foreground)';
+            }
+          }}
+        >
+          <item.icon
+            size={15}
+            style={{ color: active ? 'var(--sidebar-primary)' : 'var(--sidebar-foreground)', opacity: active ? 1 : 0.6, flexShrink: 0 }}
+          />
+          {!collapsed && <span>{item.label}</span>}
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    );
+  };
 
   return (
     <Sidebar collapsible="icon" className="border-r-0 select-none" style={{ background: 'var(--sidebar)', borderRight: '1px solid var(--sidebar-border)' }}>
@@ -401,56 +489,13 @@ const SidebarInner: React.FC<{ signOut: () => void; user: any; profile: any }> =
 
       {/* Main nav */}
       <SidebarContent className="px-2 py-3 flex-1">
+        {/* ── Discover ─────────────────────────────────────── */}
+        <NavSectionLabel collapsed={collapsed} first>Discover</NavSectionLabel>
         <SidebarMenu className="gap-0.5">
-          {menuItems.map((item) => {
-            const active = currentTab === item.id;
-            return (
-              <SidebarMenuItem key={item.id}>
-                <SidebarMenuButton
-                  render={(props) => <Link {...props} to={item.path} />}
-                  isActive={active}
-                  tooltip={collapsed ? item.label : undefined}
-                  className="ds-transition-fast"
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.625rem',
-                    padding: '0.4375rem 0.625rem',
-                    borderRadius: '0.375rem',
-                    fontSize: '0.8125rem',
-                    fontWeight: active ? 500 : 400,
-                    color: active ? 'var(--sidebar-accent-foreground)' : 'var(--sidebar-foreground)',
-                    opacity: active ? 1 : 0.8,
-                    background: active ? 'var(--sidebar-accent)' : 'transparent',
-                    border: active ? '1px solid var(--sidebar-border)' : '1px solid transparent',
-                    width: '100%',
-                    textDecoration: 'none',
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!active) {
-                      (e.currentTarget as HTMLElement).style.background = 'var(--sidebar-accent)';
-                      (e.currentTarget as HTMLElement).style.color = 'var(--sidebar-accent-foreground)';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!active) {
-                      (e.currentTarget as HTMLElement).style.background = 'transparent';
-                      (e.currentTarget as HTMLElement).style.color = 'var(--sidebar-foreground)';
-                    }
-                  }}
-                >
-                  <item.icon
-                    size={15}
-                    style={{ color: active ? 'var(--sidebar-primary)' : 'var(--sidebar-foreground)', opacity: active ? 1 : 0.6, flexShrink: 0 }}
-                  />
-                  {!collapsed && <span>{item.label}</span>}
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            );
-          })}
+          {DISCOVER_ITEMS.map(renderNavItem)}
         </SidebarMenu>
 
-        {/* ── Market Dashboards expandable group ────────────── */}
+        {/* ── Market Dashboards expandable group (Discover) ──── */}
         <div style={{ marginTop: 4 }}>
           {/* Divider */}
           <div style={{ height: 1, background: 'var(--sidebar-border)', margin: '4px 4px 6px' }} />
@@ -602,6 +647,12 @@ const SidebarInner: React.FC<{ signOut: () => void; user: any; profile: any }> =
           )}
         </div>
 
+        {/* ── Research ─────────────────────────────────────── */}
+        <NavSectionLabel collapsed={collapsed}>Research</NavSectionLabel>
+        <SidebarMenu className="gap-0.5">
+          {RESEARCH_ITEMS.map(renderNavItem)}
+        </SidebarMenu>
+
         {/* ── Portfolio Intelligence expandable group ────────────── */}
         <div style={{ marginTop: 4 }}>
           <div style={{ height: 1, background: 'var(--sidebar-border)', margin: '4px 4px 6px' }} />
@@ -748,6 +799,18 @@ const SidebarInner: React.FC<{ signOut: () => void; user: any; profile: any }> =
             </>
           )}
         </div>
+
+        {/* ── Library ──────────────────────────────────────── */}
+        <NavSectionLabel collapsed={collapsed}>Library</NavSectionLabel>
+        <SidebarMenu className="gap-0.5">
+          {LIBRARY_ITEMS.map(renderNavItem)}
+        </SidebarMenu>
+
+        {/* ── Data ─────────────────────────────────────────── */}
+        <NavSectionLabel collapsed={collapsed}>Data</NavSectionLabel>
+        <SidebarMenu className="gap-0.5">
+          {DATA_ITEMS.map(renderNavItem)}
+        </SidebarMenu>
       </SidebarContent>
 
       {/* Footer: User Profile & Settings Navigation */}

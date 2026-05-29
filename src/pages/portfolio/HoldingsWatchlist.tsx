@@ -11,6 +11,7 @@ import { usePortfolioWorkspace } from '../../hooks/usePortfolioWorkspace';
 import { usePortfolioIntelligence } from '../../hooks/usePortfolioIntelligence';
 import { AgentIntelligenceFeed } from '../../components/quant/AgentIntelligenceFeed';
 import { Surface } from '../../components/ui/surface';
+import { providerLabel } from '../../lib/providerLabels';
 import { useAgentOutputs } from '../../hooks/useAgentIntelligence';
 import { usePortfolioVulnerability } from '../../hooks/useAgentReasoning';
 import { PortfolioVulnerabilityPanel } from '../../components/portfolio/PortfolioVulnerabilityPanel';
@@ -124,7 +125,7 @@ const QuoteHeader: React.FC<{ quote: Quote | null; loading: boolean; currency: s
       </div>
       <div style={{ textAlign: 'right', fontSize: 10, color: 'var(--muted-foreground)', fontVariantNumeric: 'tabular-nums' }}>
         <div>Day {fmtUSD(quote.low, currency)}–{fmtUSD(quote.high, currency)}</div>
-        <div>as of {new Date(quote.ts).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })} · {quote.source}</div>
+        <div>as of {new Date(quote.ts).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })} · {providerLabel(quote.source)}</div>
       </div>
     </div>
   );

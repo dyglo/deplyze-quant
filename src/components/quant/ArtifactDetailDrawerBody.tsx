@@ -7,6 +7,7 @@ import { useWorkspace } from '../WorkspaceContext';
 import { usePins } from '../../hooks/usePins';
 import { ConfidenceBadge } from './ConfidenceBadge';
 import { SignificanceMeter } from './SignificanceMeter';
+import { providerLabel } from '../../lib/providerLabels';
 import { Progress, ProgressTrack, ProgressIndicator, ProgressLabel, ProgressValue } from '../ui/progress';
 import { saveArtifact, unsaveArtifact } from '../../services/artifactService';
 import type { IntelligenceArtifact } from '../../types';
@@ -109,7 +110,7 @@ export const ArtifactDetailDrawerBody: React.FC<Props> = ({
   const handleExport = useCallback(() => {
     const rows = [
       ['Label', 'Value', 'Source'],
-      ...(artifact.evidence ?? []).map((e) => [String(e.label), String(e.value), String(e.source ?? '')]),
+      ...(artifact.evidence ?? []).map((e) => [String(e.label), String(e.value), providerLabel(String(e.source ?? ''))]),
     ];
     const csv = rows.map((r) => r.map((c) => `"${c.replace(/"/g, '""')}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
@@ -276,7 +277,7 @@ export const ArtifactDetailDrawerBody: React.FC<Props> = ({
                 <span>
                   {String(e.value)}
                   {e.source && e.source !== 'derived' ? (
-                    <span style={{ color: 'var(--muted-foreground)', marginLeft: 4 }}>· {String(e.source)}</span>
+                    <span style={{ color: 'var(--muted-foreground)', marginLeft: 4 }}>· {providerLabel(String(e.source))}</span>
                   ) : null}
                 </span>
               </li>

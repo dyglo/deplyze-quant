@@ -36,6 +36,9 @@ const FRED_SERIES: Record<string, FredSeriesSpec> = {
   DGS10:       { fredId: 'DGS10',     name: '10Y Treasury Yield',         unit: '%',      frequency: 'daily'   },
   DGS20:       { fredId: 'DGS20',     name: '20Y Treasury Yield',         unit: '%',      frequency: 'daily'   },
   DGS30:       { fredId: 'DGS30',     name: '30Y Treasury Yield',         unit: '%',      frequency: 'daily'   },
+  // 10Y TIPS yield — the market real rate, published directly (no need to
+  // approximate via nominal − breakeven, which double-counts liquidity premia).
+  DFII10:      { fredId: 'DFII10',    name: '10Y TIPS Real Yield',        unit: '%',      frequency: 'daily'   },
   T5YIE:       { fredId: 'T5YIE',     name: '5Y Breakeven Inflation',     unit: '%',      frequency: 'daily'   },
   UNRATE:      { fredId: 'UNRATE',    name: 'Unemployment Rate',          unit: '%',      frequency: 'monthly' },
   UNEMP:       { fredId: 'UNRATE',    name: 'Unemployment Rate',          unit: '%',      frequency: 'monthly' },

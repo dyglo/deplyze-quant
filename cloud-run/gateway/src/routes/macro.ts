@@ -18,7 +18,10 @@ import { withCache, TTL } from '../services/cache';
 
 const router = Router();
 
-const ALL_SERIES_IDS = [...av.MACRO_SERIES_IDS, 'T10Y2Y'] as unknown as [string, ...string[]];
+// DFII10 (10Y TIPS real yield) is FRED-only — not in the AV series map — so it
+// is added explicitly here; fetchSeriesWithFallback resolves it via the FRED
+// fallback. (DGS3M is already in av.MACRO_SERIES_IDS.)
+const ALL_SERIES_IDS = [...av.MACRO_SERIES_IDS, 'T10Y2Y', 'DFII10'] as unknown as [string, ...string[]];
 const SeriesParam = z.object({ id: z.enum(ALL_SERIES_IDS) });
 
 /** Fetch a macro series from AV, falling back to FRED on any error. */

@@ -3,7 +3,7 @@ import { useMacroSeries } from '../hooks/useMacro';
 import { useWebResearch } from '../hooks/useResearch';
 import { useDrawer } from '../components/quant/DataDrawer';
 import { PageHeader } from '../components/quant/PageHeader';
-import { MacroMultiChart, type MacroRange, type MacroScale, type MacroSeriesEntry } from '../components/quant/MacroMultiChart';
+import { MacroMultiChart, type MacroRange, type MacroTransform, type MacroSeriesEntry } from '../components/quant/MacroMultiChart';
 import { FreshnessBadge, SourceBadge } from '../components/quant/FreshnessBadge';
 import { Disclaimer } from '../components/quant/Disclaimer';
 import { Sparkline } from '../components/quant/Sparkline';
@@ -37,12 +37,14 @@ interface SeriesMeta {
 const SERIES_META: SeriesMeta[] = [
   { id: 'FEDFUNDS', name: 'Fed Funds Rate',        unit: '%', color: '#c15f3c', description: 'Effective federal funds rate set by the Federal Reserve. Directly anchors short-term borrowing costs.' },
   { id: 'CPI',      name: 'Consumer Price Index',  unit: '',  color: '#4e6eaf', description: 'All-items urban CPI; the headline inflation gauge.' },
+  { id: 'DGS3M',    name: '3M Treasury Yield',     unit: '%', color: '#b08968', description: '3-month T-bill yield — the front of the curve; the 10Y–3M spread is the NY Fed’s preferred recession signal.' },
   { id: 'DGS10',    name: '10Y Treasury Yield',    unit: '%', color: '#4E6040', description: 'Constant-maturity 10-year nominal Treasury yield — the long-end risk-free anchor.' },
   { id: 'DGS2',     name: '2Y Treasury Yield',     unit: '%', color: '#9e7e3a', description: '2Y Treasury yield — closely tracks expected near-term Fed policy.' },
   { id: 'DGS5',     name: '5Y Treasury Yield',     unit: '%', color: '#7c9c6e', description: '5Y constant-maturity Treasury yield — mid-curve anchor.' },
   { id: 'DGS20',    name: '20Y Treasury Yield',    unit: '%', color: '#5a7a8a', description: '20Y Treasury yield — ultra-long anchor used in pension/insurance duration matching.' },
   { id: 'DGS30',    name: '30Y Treasury Yield',    unit: '%', color: '#3a6070', description: '30Y Treasury yield — the long bond; key for mortgage rates and long-duration assets.' },
   { id: 'T10Y2Y',   name: '10Y–2Y Spread',         unit: '%', color: '#a0522d', description: 'Yield curve slope: 10Y minus 2Y. Negative = inverted curve, historically a recession predictor.' },
+  { id: 'DFII10',   name: '10Y Real Yield (TIPS)', unit: '%', color: '#7a5c99', description: 'Market 10Y real yield from TIPS (FRED DFII10) — the cleanest real-rate gauge; negative = financial repression.' },
   { id: 'T5YIE',    name: '5Y Breakeven Inflation', unit: '%', color: '#8b7355', description: 'Market-implied 5Y inflation expectation from TIPS. Nominal − Breakeven = Real Rate.' },
   { id: 'UNRATE',   name: 'Unemployment Rate',     unit: '%', color: '#6a4e7c', description: 'U-3 unemployment rate — primary labour-market slack indicator.' },
   { id: 'GDP',      name: 'Real GDP',              unit: 'B', color: '#3a8085', description: 'Real (chain-weighted) GDP in billions of dollars.' },
@@ -74,7 +76,7 @@ export const MacroRegimeDesk: React.FC = () => {
   const briefings = useBriefings(currentWorkspace?.id ?? null, currentProject?.id ?? null);
   const [active, setActive] = useState<string[]>(['FEDFUNDS', 'DGS10', 'CPI']);
   const [range, setRange] = useState<MacroRange>('5Y');
-  const [scale, setScale] = useState<MacroScale>('indexed');
+  const [scale, setScale] = useState<MacroTransform>('zscore');
   const [loaded, setLoaded] = useState<Record<string, LoadedSeries>>({});
   const [savingMacro, setSavingMacro] = useState(false);
 
@@ -324,23 +326,27 @@ export const MacroRegimeDesk: React.FC = () => {
               ))}
             </div>
             <div style={{ display: 'inline-flex', borderRadius: 6, border: '1px solid var(--border)', overflow: 'hidden' }}>
-              {(['indexed', 'raw'] as MacroScale[]).map((s) => (
+              {([
+                ['zscore', 'Z-score', 'Standardize each series (σ from its full-history mean). The only unit-free way to overlay rates, indices and levels without distortion.'],
+                ['yoy', 'YoY %', 'Year-over-year % change — the right framing for inflation (CPI) and growth (GDP).'],
+                ['indexed', 'Index', 'Rebase to 100 at the start of the visible range. Use for price-like series only — NOT rate levels.'],
+                ['raw', 'Raw', 'Actual values on a shared axis. Use only when the selected series share units.'],
+              ] as Array<[MacroTransform, string, string]>).map(([val, label, tip]) => (
                 <button
-                  key={s}
-                  onClick={() => setScale(s)}
+                  key={val}
+                  onClick={() => setScale(val)}
                   style={{
                     padding: '4px 8px',
                     fontSize: 11,
                     fontWeight: 600,
-                    background: scale === s ? 'var(--secondary)' : 'transparent',
+                    background: scale === val ? 'var(--secondary)' : 'transparent',
                     color: 'var(--foreground)',
                     border: 'none',
                     cursor: 'pointer',
-                    textTransform: 'capitalize',
                   }}
-                  title={s === 'indexed' ? 'Rebase each series to 100 at start of range (compares relative moves)' : 'Show raw values on a single axis (use only when units match)'}
+                  title={tip}
                 >
-                  {s}
+                  {label}
                 </button>
               ))}
             </div>
@@ -370,10 +376,11 @@ export const MacroRegimeDesk: React.FC = () => {
           height={360}
         />
         <p className="ds-caption" style={{ marginTop: 8, color: 'var(--muted-foreground)', fontSize: 10 }}>
-          {scale === 'indexed'
-            ? 'Each series rebased to 100 at start of visible range. Hover to see raw values + units.'
-            : 'Raw values on a shared axis. Switch to "Indexed" to compare relative moves across series with different units.'}
-          {' '}Drag the brush handles below the chart to zoom; click a tile to toggle a series, double-click to inspect.
+          {scale === 'zscore' ? 'Each series standardized to σ from its full-history mean — comparable across rates, indices and levels.'
+            : scale === 'yoy' ? 'Year-over-year % change. Best for inflation (CPI) and growth (GDP).'
+            : scale === 'indexed' ? 'Each series rebased to 100 at start of visible range — for price-like series only, not rate levels.'
+            : 'Raw values on a shared axis. Use only when the selected series share units.'}
+          {' '}Shaded bands = NBER recessions. Hover for raw values; drag the brush to zoom; click a tile to toggle, double-click to inspect.
         </p>
       </section>
 
@@ -381,6 +388,7 @@ export const MacroRegimeDesk: React.FC = () => {
       <section style={{ marginBottom: 28 }}>
         <h2 className="ds-heading" style={{ margin: '0 0 12px' }}>Yield Curve Analysis</h2>
         <MacroYieldCurvePanel loaded={{
+          DGS3M:  loaded.DGS3M?.data,
           DGS2:   loaded.DGS2?.data,
           DGS5:   loaded.DGS5?.data,
           DGS10:  loaded.DGS10?.data,
@@ -389,7 +397,7 @@ export const MacroRegimeDesk: React.FC = () => {
           T10Y2Y: loaded.T10Y2Y?.data,
         }} />
         <p className="ds-caption" style={{ margin: '8px 0 0', color: 'var(--muted-foreground)', fontSize: 10 }}>
-          Enable DGS2, DGS5, DGS10, DGS20, DGS30, T10Y2Y above to populate these charts.
+          Enable DGS3M, DGS2, DGS5, DGS10, DGS20, DGS30, T10Y2Y above to populate these charts.
         </p>
       </section>
 
@@ -404,11 +412,12 @@ export const MacroRegimeDesk: React.FC = () => {
           <MacroRealRatesPanel
             dgs10={loaded.DGS10?.data}
             t5yie={loaded.T5YIE?.data}
+            dfii10={loaded.DFII10?.data}
             unrate={loaded.UNRATE?.data}
           />
         </div>
         <p className="ds-caption" style={{ color: 'var(--muted-foreground)', fontSize: 10 }}>
-          Regime quadrant requires CPI + GDP. Real rates panel requires 10Y Treasury + 5Y Breakeven. Enable UNRATE for labour-market overlay.
+          Regime quadrant requires CPI + GDP. Real rates use the 10Y TIPS yield (DFII10) when enabled, else 10Y nominal − 5Y breakeven. Enable UNRATE for labour-market overlay.
         </p>
       </section>
 

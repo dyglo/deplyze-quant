@@ -21,7 +21,7 @@ const BADGE_STYLES: Record<WorkspaceCardBadge['variant'], { bg: string; color: s
   low:      { bg: 'rgba(78,96,64,0.12)',    color: '#4E6040' },
   neutral:  { bg: 'rgba(138,134,128,0.12)', color: '#8A8680' },
   critical: { bg: 'rgba(193,95,60,0.12)',   color: 'var(--primary)' },
-  blue:     { bg: 'rgba(99,102,241,0.1)',   color: '#6366f1' },
+  blue:     { bg: 'rgba(106,155,204,0.1)',   color: 'var(--chart-3)' },
 };
 
 export const WorkspaceCard: React.FC<Props> = ({

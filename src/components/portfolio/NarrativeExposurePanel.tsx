@@ -16,9 +16,9 @@ import { SystemAnalyzingState } from '../quant/SystemAnalyzingState';
 // ─── Polarity config ─────────────────────────────────────────────────────────
 
 const POLARITY_CONFIG = {
-  positive: { color: '#10b981', icon: <TrendingUp size={10} />,  label: '+' },
-  negative: { color: '#ef4444', icon: <TrendingDown size={10} />, label: '−' },
-  neutral:  { color: '#6b7280', icon: <Minus size={10} />,        label: '~' },
+  positive: { color: 'var(--ds-gain)', icon: <TrendingUp size={10} />,  label: '+' },
+  negative: { color: 'var(--ds-loss)', icon: <TrendingDown size={10} />, label: '−' },
+  neutral:  { color: 'var(--muted-foreground)', icon: <Minus size={10} />,        label: '~' },
 };
 
 // ─── Intensity bar ────────────────────────────────────────────────────────────

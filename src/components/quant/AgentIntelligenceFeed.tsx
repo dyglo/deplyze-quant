@@ -91,7 +91,7 @@ export const AgentIntelligenceFeed: React.FC<{
           {highCount > 0 && (
             <span style={{
               fontSize: 8, fontWeight: 800, letterSpacing: '0.06em',
-              color: '#ef4444', background: 'rgba(239,68,68,0.10)',
+              color: 'var(--ds-loss)', background: 'rgba(176,58,46,0.10)',
               borderRadius: 3, padding: '1px 5px',
             }}>
               {highCount} HIGH

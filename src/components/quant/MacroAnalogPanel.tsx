@@ -22,15 +22,15 @@ const FEATURE_LABELS: Record<string, string> = {
 };
 
 const REGIME_COLORS: Record<string, string> = {
-  expansion:   '#10b981',
-  transition:  '#f59e0b',
-  tightening:  '#f59e0b',
-  contraction: '#ef4444',
-  stagflation: '#ef4444',
+  expansion:   'var(--ds-gain)',
+  transition:  '#C9A227',
+  tightening:  '#C9A227',
+  contraction: 'var(--ds-loss)',
+  stagflation: 'var(--ds-loss)',
 };
 
 const AnalogCard: React.FC<{ analog: AnalogPeriod; rank: number }> = ({ analog, rank }) => {
-  const regimeColor = REGIME_COLORS[analog.regime_label] ?? '#6b7280';
+  const regimeColor = REGIME_COLORS[analog.regime_label] ?? 'var(--muted-foreground)';
   return (
     <div style={{
       background: 'var(--muted)', border: '1px solid var(--border)',
@@ -52,8 +52,8 @@ const AnalogCard: React.FC<{ analog: AnalogPeriod; rank: number }> = ({ analog, 
           return (
             <span key={k} style={{
               fontSize: 8.5, padding: '1px 5px', borderRadius: 3,
-              background: isNeg ? 'rgba(239,68,68,0.09)' : isPos ? 'rgba(16,185,129,0.09)' : 'var(--card)',
-              color: isNeg ? '#ef4444' : isPos ? '#10b981' : 'var(--muted-foreground)',
+              background: isNeg ? 'rgba(176,58,46,0.09)' : isPos ? 'rgba(90,112,82,0.09)' : 'var(--card)',
+              color: isNeg ? 'var(--ds-loss)' : isPos ? 'var(--ds-gain)' : 'var(--muted-foreground)',
               fontVariantNumeric: 'tabular-nums',
             }}>
               {FEATURE_LABELS[k] ?? k}: {k === 'vol_percentile' ? `${(v * 100).toFixed(0)}%` : `${v > 0 ? '+' : ''}${v.toFixed(2)}σ`}

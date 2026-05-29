@@ -346,8 +346,8 @@ const dpColor = dp == null ? 'var(--foreground)' : dp > 0 ? 'var(--ds-gain)' : d
               )}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
-              <div style={{ width: 12, height: 12, borderRadius: '50%', border: '2px solid #22c55e', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#22c55e' }} />
+              <div style={{ width: 12, height: 12, borderRadius: '50%', border: '2px solid var(--ds-gain)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--ds-gain)' }} />
               </div>
               <span style={{ fontSize: 11.5, color: 'var(--muted-foreground)' }}>
                 Real-time Data · {clock}
@@ -364,7 +364,7 @@ const dpColor = dp == null ? 'var(--foreground)' : dp > 0 ? 'var(--ds-gain)' : d
                 <Info size={11} style={{ color: 'var(--muted-foreground)' }} />
                 <span style={{ marginLeft: 'auto', fontSize: 10.5, color: 'var(--primary)', fontWeight: 600, cursor: 'pointer' }}>Unlock Value</span>
               </div>
-              <div style={{ position: 'relative', height: 5, borderRadius: 3, background: 'linear-gradient(to right, #ef4444, #f97316, #eab308, #22c55e)', overflow: 'hidden' }}>
+              <div style={{ position: 'relative', height: 5, borderRadius: 3, background: 'linear-gradient(to right, var(--ds-loss), #B85C2A, #C9A227, var(--ds-gain))', overflow: 'hidden' }}>
                 <div style={{ position: 'absolute', left: `${rangePct}%`, top: 0, bottom: 0, width: 2, background: 'var(--foreground)', transform: 'translateX(-50%)' }} />
               </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 2 }}>
@@ -409,12 +409,12 @@ const dpColor = dp == null ? 'var(--foreground)' : dp > 0 ? 'var(--ds-gain)' : d
         <div style={{
           display: 'flex', alignItems: 'center', gap: 10,
           padding: '9px 14px', marginBottom: 0,
-          border: '1px solid #f97316', borderRadius: 6, background: 'rgba(249,115,22,0.04)',
+          border: '1px solid #B85C2A', borderRadius: 6, background: 'rgba(184,92,42,0.04)',
         }}>
-          <TriangleAlert size={15} style={{ color: '#f97316', flexShrink: 0 }} />
+          <TriangleAlert size={15} style={{ color: '#B85C2A', flexShrink: 0 }} />
           <span style={{ fontSize: 12, color: 'var(--foreground)' }}>
             <strong>{sym}</strong> is not included in our{' '}
-            <span style={{ color: '#f97316', fontWeight: 600, cursor: 'pointer' }}>AI-picked strategies</span>.
+            <span style={{ color: '#B85C2A', fontWeight: 600, cursor: 'pointer' }}>AI-picked strategies</span>.
             {' '}See which stocks are.
           </span>
           <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--primary)', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>

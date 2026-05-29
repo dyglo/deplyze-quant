@@ -19,17 +19,17 @@ function deriveConsensus(rec: NonNullable<AnalystRatings['recommendations']>): C
 }
 
 const CONSENSUS_COLOR: Record<ConsensusLabel, { bg: string; fg: string }> = {
-  'Strong Buy':  { bg: 'rgba(34,197,94,0.14)',  fg: '#22c55e' },
-  'Buy':         { bg: 'rgba(132,204,18,0.14)', fg: '#84cc16' },
+  'Strong Buy':  { bg: 'rgba(90,112,82,0.14)',  fg: 'var(--ds-gain)' },
+  'Buy':         { bg: 'rgba(120,140,93,0.14)', fg: 'var(--chart-2)' },
   'Hold':        { bg: 'rgba(234,179,8,0.14)',  fg: '#ca8a04' },
-  'Sell':        { bg: 'rgba(249,115,22,0.14)', fg: '#f97316' },
-  'Strong Sell': { bg: 'rgba(239,68,68,0.14)',  fg: '#ef4444' },
+  'Sell':        { bg: 'rgba(184,92,42,0.14)', fg: '#B85C2A' },
+  'Strong Sell': { bg: 'rgba(176,58,46,0.14)',  fg: 'var(--ds-loss)' },
 };
 
 const POSITION_COLOR: Record<string, string> = {
-  buy: '#22c55e', 'strong buy': '#22c55e', outperform: '#22c55e', overweight: '#22c55e',
+  buy: 'var(--ds-gain)', 'strong buy': 'var(--ds-gain)', outperform: 'var(--ds-gain)', overweight: 'var(--ds-gain)',
   hold: '#ca8a04', neutral: '#ca8a04', 'market perform': '#ca8a04', 'equal-weight': '#ca8a04',
-  sell: '#ef4444', 'strong sell': '#ef4444', underperform: '#ef4444', underweight: '#ef4444',
+  sell: 'var(--ds-loss)', 'strong sell': 'var(--ds-loss)', underperform: 'var(--ds-loss)', underweight: 'var(--ds-loss)',
 };
 
 function posColor(pos: string): string {
@@ -69,9 +69,9 @@ const DonutChart: React.FC<DonutProps> = ({ buy, hold, sell, total }) => {
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
       <circle cx={cx} cy={cy} r={R} fill="none" stroke="var(--border)" strokeWidth={sw} />
-      {arc(0, buyEnd, '#22c55e')}
+      {arc(0, buyEnd, 'var(--ds-gain)')}
       {arc(buyEnd, holdEnd, '#ca8a04')}
-      {arc(holdEnd, 1, '#ef4444')}
+      {arc(holdEnd, 1, 'var(--ds-loss)')}
       <text x={cx} y={cy - 4} textAnchor="middle" fill="var(--foreground)"
         fontSize={18} fontWeight={700} fontFamily="inherit">{total}</text>
       <text x={cx} y={cy + 13} textAnchor="middle" fill="var(--muted-foreground)"
@@ -121,9 +121,9 @@ export const InstrumentAnalystRatings: React.FC<{ symbol: string; currentPrice?:
               <DonutChart buy={buyCount} hold={holdCount} sell={sellCount} total={totalAnalysts} />
               <div style={{ display: 'flex', gap: 16 }}>
                 {[
-                  { label: 'Buy', count: buyCount, color: '#22c55e' },
+                  { label: 'Buy', count: buyCount, color: 'var(--ds-gain)' },
                   { label: 'Hold', count: holdCount, color: '#ca8a04' },
-                  { label: 'Sell', count: sellCount, color: '#ef4444' },
+                  { label: 'Sell', count: sellCount, color: 'var(--ds-loss)' },
                 ].map(({ label, count, color }) => (
                   <div key={label} style={{ textAlign: 'center' }}>
                     <div style={{ fontSize: 15, fontWeight: 700, color, fontVariantNumeric: 'tabular-nums' }}>{count}</div>
@@ -169,7 +169,7 @@ export const InstrumentAnalystRatings: React.FC<{ symbol: string; currentPrice?:
                   {upside != null && (
                     <span style={{
                       fontSize: 13, fontWeight: 700, fontVariantNumeric: 'tabular-nums',
-                      color: upside >= 0 ? '#22c55e' : '#ef4444',
+                      color: upside >= 0 ? 'var(--ds-gain)' : 'var(--ds-loss)',
                     }}>
                       {upside >= 0 ? '+' : ''}{upside.toFixed(2)}% {upside >= 0 ? 'Upside' : 'Downside'}
                     </span>
@@ -189,8 +189,8 @@ export const InstrumentAnalystRatings: React.FC<{ symbol: string; currentPrice?:
                         )}
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ fontSize: 10, color: '#ef4444', fontVariantNumeric: 'tabular-nums' }}>${pt.low!.toFixed(2)} Low</span>
-                        <span style={{ fontSize: 10, color: '#22c55e', fontVariantNumeric: 'tabular-nums' }}>High ${pt.high!.toFixed(2)}</span>
+                        <span style={{ fontSize: 10, color: 'var(--ds-loss)', fontVariantNumeric: 'tabular-nums' }}>${pt.low!.toFixed(2)} Low</span>
+                        <span style={{ fontSize: 10, color: 'var(--ds-gain)', fontVariantNumeric: 'tabular-nums' }}>High ${pt.high!.toFixed(2)}</span>
                       </div>
                     </>
                   );
@@ -248,7 +248,7 @@ export const InstrumentAnalystRatings: React.FC<{ symbol: string; currentPrice?:
                           <td style={{ padding: '8px 8px', textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
                             {r.target ? `$${r.target.toFixed(2)}` : '—'}
                           </td>
-                          <td style={{ padding: '8px 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600, color: tgtUpside != null ? (tgtUpside >= 0 ? '#22c55e' : '#ef4444') : 'var(--foreground)' }}>
+                          <td style={{ padding: '8px 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600, color: tgtUpside != null ? (tgtUpside >= 0 ? 'var(--ds-gain)' : 'var(--ds-loss)') : 'var(--foreground)' }}>
                             {tgtUpside != null ? `${tgtUpside >= 0 ? '+' : ''}${tgtUpside.toFixed(1)}%` : '—'}
                           </td>
                           <td style={{ padding: '8px 8px', textAlign: 'right' }}>

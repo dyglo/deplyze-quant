@@ -32,19 +32,19 @@ const SIGNAL5_LABEL: Record<Signal5, string> = {
 };
 
 const SIGNAL5_COLOR: Record<Signal5, string> = {
-  strong_sell: '#ef4444',
-  sell:        '#f97316',
+  strong_sell: 'var(--ds-loss)',
+  sell:        '#B85C2A',
   neutral:     'var(--muted-foreground)',
-  buy:         '#84cc16',
-  strong_buy:  '#22c55e',
+  buy:         'var(--chart-2)',
+  strong_buy:  'var(--ds-gain)',
 };
 
 const SIGNAL5_BG: Record<Signal5, string> = {
-  strong_sell: 'rgba(239,68,68,0.12)',
-  sell:        'rgba(249,115,22,0.12)',
+  strong_sell: 'rgba(176,58,46,0.12)',
+  sell:        'rgba(184,92,42,0.12)',
   neutral:     'var(--muted)',
-  buy:         'rgba(132,204,18,0.12)',
-  strong_buy:  'rgba(34,197,94,0.12)',
+  buy:         'rgba(120,140,93,0.12)',
+  strong_buy:  'rgba(90,112,82,0.12)',
 };
 
 // Maps signal to needle angle: -90° = strong sell … +90° = strong buy
@@ -87,11 +87,11 @@ const SemiGauge: React.FC<GaugeProps> = ({ signal, label, size = 'sm', summary }
 
   // Five equal 36° segments across the upper semicircle
   const segs: Array<{ a1: number; a2: number; color: string }> = [
-    { a1: 180, a2: 144, color: '#ef4444' }, // strong sell
-    { a1: 144, a2: 108, color: '#f97316' }, // sell
-    { a1: 108, a2:  72, color: '#94a3b8' }, // neutral
-    { a1:  72, a2:  36, color: '#84cc16' }, // buy
-    { a1:  36, a2:   0, color: '#22c55e' }, // strong buy
+    { a1: 180, a2: 144, color: 'var(--ds-loss)' }, // strong sell
+    { a1: 144, a2: 108, color: '#B85C2A' }, // sell
+    { a1: 108, a2:  72, color: 'var(--muted-foreground)' }, // neutral
+    { a1:  72, a2:  36, color: 'var(--chart-2)' }, // buy
+    { a1:  36, a2:   0, color: 'var(--ds-gain)' }, // strong buy
   ];
 
   // Needle: SIGNAL5_ANGLE (-80…+80) → math angle via 90 - angle
@@ -165,9 +165,9 @@ const SemiGauge: React.FC<GaugeProps> = ({ signal, label, size = 'sm', summary }
       {/* Buy / Neutral / Sell count breakdown */}
       {summary && (
         <div style={{ display: 'flex', gap: 10, fontSize: 10, color: 'var(--muted-foreground)', marginTop: 2 }}>
-          <span style={{ color: '#ef4444', fontWeight: 600 }}>{summary.sell} Sell</span>
+          <span style={{ color: 'var(--ds-loss)', fontWeight: 600 }}>{summary.sell} Sell</span>
           <span>{summary.neutral} Neutral</span>
-          <span style={{ color: '#22c55e', fontWeight: 600 }}>{summary.buy} Buy</span>
+          <span style={{ color: 'var(--ds-gain)', fontWeight: 600 }}>{summary.buy} Buy</span>
         </div>
       )}
     </div>

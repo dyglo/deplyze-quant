@@ -66,14 +66,14 @@ function toSignal5(s: TechnicalSummary): Signal5 {
 }
 
 const S5_COLOR: Record<Signal5, string> = {
-  strong_sell: '#ef4444', sell: '#f97316', neutral: '#94a3b8', buy: '#84cc16', strong_buy: '#22c55e',
+  strong_sell: 'var(--ds-loss)', sell: '#B85C2A', neutral: 'var(--muted-foreground)', buy: 'var(--chart-2)', strong_buy: 'var(--ds-gain)',
 };
 const S5_LABEL: Record<Signal5, string> = {
   strong_sell: 'Strong Sell', sell: 'Sell', neutral: 'Neutral', buy: 'Buy', strong_buy: 'Strong Buy',
 };
 const S5_BG: Record<Signal5, string> = {
-  strong_sell: 'rgba(239,68,68,0.12)', sell: 'rgba(249,115,22,0.12)', neutral: 'rgba(148,163,184,0.12)',
-  buy: 'rgba(132,204,18,0.12)', strong_buy: 'rgba(34,197,94,0.12)',
+  strong_sell: 'rgba(176,58,46,0.12)', sell: 'rgba(184,92,42,0.12)', neutral: 'rgba(138,134,128,0.12)',
+  buy: 'rgba(120,140,93,0.12)', strong_buy: 'rgba(90,112,82,0.12)',
 };
 
 // Gauge arc: math-convention angles (0°=right, 90°=top, 180°=left), sweep=0=CCW=upward
@@ -393,7 +393,7 @@ export const InstrumentAdvancedChart: React.FC<Props> = ({ symbol, earningsDates
               <Lock size={9} /> Unlock
             </span>
           </div>
-          <div style={{ height: 5, borderRadius: 3, background: 'linear-gradient(to right, #ef4444 0%, #f97316 25%, #eab308 50%, #84cc16 75%, #22c55e 100%)' }} />
+          <div style={{ height: 5, borderRadius: 3, background: 'linear-gradient(to right, var(--ds-loss) 0%, #B85C2A 25%, #C9A227 50%, var(--chart-2) 75%, var(--ds-gain) 100%)' }} />
         </div>
 
         {/* Fair Value */}
@@ -430,11 +430,11 @@ export const InstrumentAdvancedChart: React.FC<Props> = ({ symbol, earningsDates
             const nx = (GCX + nLen * Math.cos(rad(mathAngle))).toFixed(2);
             const ny = (GCY - nLen * Math.sin(rad(mathAngle))).toFixed(2);
             const segs = [
-              { a1: 180, a2: 144, c: '#ef4444' },
-              { a1: 144, a2: 108, c: '#f97316' },
-              { a1: 108, a2:  72, c: '#94a3b8' },
-              { a1:  72, a2:  36, c: '#84cc16' },
-              { a1:  36, a2:   0, c: '#22c55e' },
+              { a1: 180, a2: 144, c: 'var(--ds-loss)' },
+              { a1: 144, a2: 108, c: '#B85C2A' },
+              { a1: 108, a2:  72, c: 'var(--muted-foreground)' },
+              { a1:  72, a2:  36, c: 'var(--chart-2)' },
+              { a1:  36, a2:   0, c: 'var(--ds-gain)' },
             ];
             const ticks = [180, 144, 108, 72, 36, 0];
             return (

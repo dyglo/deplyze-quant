@@ -48,7 +48,6 @@ export const SummaryStrip: React.FC<Props> = ({ payload, compact }) => {
           alignItems: 'center',
           gap: 10,
           padding: '8px 20px',
-          borderLeft: `3px solid ${color}`,
         }}
       >
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>

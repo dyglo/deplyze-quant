@@ -88,9 +88,10 @@ const RegimePanel: React.FC<{
         <div key={i} style={{
           padding: '10px 14px',
           background: SEVERITY_BG[obs.severity],
-          borderLeft: `3px solid ${SEVERITY_COLORS[obs.severity]}`,
-          borderRadius: '0 7px 7px 0',
+          borderRadius: 7,
+          display: 'flex', gap: 8, alignItems: 'flex-start',
         }}>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: SEVERITY_COLORS[obs.severity], flexShrink: 0, marginTop: 5 }} />
           <p style={{ margin: 0, fontSize: 12, color: 'var(--foreground)', lineHeight: 1.6 }}>{obs.text}</p>
         </div>
       ))}

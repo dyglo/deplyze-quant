@@ -46,7 +46,7 @@ const AgentRow: React.FC<{
       {/* Status icon */}
       <span>
         {ran
-          ? <CheckCircle2 size={11} color="#10b981" />
+          ? <CheckCircle2 size={11} color="var(--ds-gain)" />
           : <Clock size={11} color="var(--muted-foreground)" />
         }
       </span>
@@ -73,7 +73,7 @@ const AgentRow: React.FC<{
       {/* High severity */}
       <span style={{
         textAlign: 'right',
-        color: (entry?.high_severity_count ?? 0) > 0 ? '#ef4444' : 'var(--muted-foreground)',
+        color: (entry?.high_severity_count ?? 0) > 0 ? 'var(--ds-loss)' : 'var(--muted-foreground)',
         fontVariantNumeric: 'tabular-nums',
         fontWeight: (entry?.high_severity_count ?? 0) > 0 ? 700 : 400,
       }}>
@@ -122,8 +122,8 @@ export const AgentStatusDashboard: React.FC = () => {
           </span>
           <span style={{
             fontSize: 9, fontWeight: 600, padding: '1px 6px',
-            background: ranCount === totalScheduled ? 'rgba(16,185,129,0.10)' : 'rgba(245,158,11,0.10)',
-            color: ranCount === totalScheduled ? '#10b981' : '#f59e0b',
+            background: ranCount === totalScheduled ? 'rgba(90,112,82,0.10)' : 'rgba(201,162,39,0.10)',
+            color: ranCount === totalScheduled ? 'var(--ds-gain)' : '#C9A227',
             borderRadius: 4,
           }}>
             {ranCount}/{totalScheduled} run today
@@ -131,7 +131,7 @@ export const AgentStatusDashboard: React.FC = () => {
           {highCount > 0 && (
             <span style={{
               fontSize: 9, fontWeight: 700, padding: '1px 6px',
-              background: 'rgba(239,68,68,0.10)', color: '#ef4444', borderRadius: 4,
+              background: 'rgba(176,58,46,0.10)', color: 'var(--ds-loss)', borderRadius: 4,
             }}>
               <AlertTriangle size={8} style={{ display: 'inline', marginRight: 3 }} />
               {highCount} high

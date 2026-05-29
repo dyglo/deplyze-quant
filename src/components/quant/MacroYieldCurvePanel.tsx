@@ -132,7 +132,7 @@ export const MacroYieldCurvePanel: React.FC<Props> = ({ loaded }) => {
                 <CartesianGrid {...GRID} vertical={false} />
                 <XAxis dataKey="tenor" tick={AXIS} axisLine={false} tickLine={false} />
                 <YAxis tick={AXIS} axisLine={false} tickLine={false} tickFormatter={v => `${v}%`} domain={['auto', 'auto']} />
-                <Tooltip contentStyle={TIP} formatter={(v: number | null, name: string) => [v == null ? '—' : `${Number(v).toFixed(2)}%`, name]} />
+                <Tooltip contentStyle={TIP} formatter={(v: number, name: string) => [v == null ? '—' : `${v.toFixed(2)}%`, name]} />
                 <Legend wrapperStyle={{ fontSize: 10 }} />
                 <Line type="monotone" dataKey="ago1y" stroke="var(--muted-foreground)" strokeWidth={1.2} strokeDasharray="3 3" dot={false} name="1Y ago" connectNulls />
                 <Line type="monotone" dataKey="ago3m" stroke="var(--chart-4)" strokeWidth={1.3} dot={false} name="3M ago" connectNulls />
@@ -183,7 +183,7 @@ export const MacroYieldCurvePanel: React.FC<Props> = ({ loaded }) => {
                 <XAxis dataKey="date" tick={AXIS} axisLine={false} tickLine={false}
                   interval={Math.max(0, Math.floor(spreadData.length / 5))} />
                 <YAxis tick={AXIS} axisLine={false} tickLine={false} tickFormatter={v => `${v}`} />
-                <Tooltip contentStyle={TIP} formatter={(v: number | null, name: string) => [v == null ? '—' : `${Number(v).toFixed(0)} bps`, name]} />
+                <Tooltip contentStyle={TIP} formatter={(v: number, name: string) => [v == null ? '—' : `${v.toFixed(0)} bps`, name]} />
                 {inversionAreas.map((a, i) => (
                   <ReferenceArea key={i} x1={a.x1} x2={a.x2} fill="rgba(193,95,60,0.12)" />
                 ))}

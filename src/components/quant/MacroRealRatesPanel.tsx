@@ -96,7 +96,7 @@ export const MacroRealRatesPanel: React.FC<Props> = ({ dgs10, t5yie, dfii10, unr
                 <XAxis dataKey="date" tick={AXIS} axisLine={false} tickLine={false}
                   interval={Math.floor(chartData.length / 5)} />
                 <YAxis tick={AXIS} axisLine={false} tickLine={false} tickFormatter={v => `${v}%`} />
-                <Tooltip contentStyle={TIP} formatter={(v: number | null, name: string) => [v == null ? '—' : `${Number(v).toFixed(2)}%`, name]} />
+                <Tooltip contentStyle={TIP} formatter={(v: number, name: string) => [v == null ? '—' : `${v.toFixed(2)}%`, name]} />
                 <ReferenceLine y={0} stroke="var(--muted-foreground)" strokeDasharray="3 3" />
                 <Legend wrapperStyle={{ fontSize: 10 }} />
                 <Line type="monotone" dataKey="nominal" stroke="var(--chart-3)" strokeWidth={1.5} dot={false} name="10Y Nominal" connectNulls />

@@ -49,25 +49,37 @@ export const MacroRegimeQuadrant: React.FC<Props> = ({ cpi, gdp }) => {
     const gdpPts = gdp?.points ?? [];
     if (cpiPts.length < 14 || gdpPts.length < 5) return { trail: [], current: null, regime: null };
 
-    // CPI inflation: YoY % change
+    // Inflation: CPI YoY % (monthly), standardized over FULL history (stable
+    // baseline — not relative to whatever window is loaded).
     const cpiYoY = yoyChange(cpiPts, 12);
     const inflationZ = toZScores(cpiYoY.map(p => p.value));
+    const infByTs = cpiYoY.map((p, i) => ({ ts: p.ts, z: inflationZ[i] }));
 
-    // GDP growth: QoQ % change (quarterly data)
+    // Growth: GDP QoQ % (quarterly), standardized over full history.
     const gdpGrowth = gdpPts.slice(1).map((p, i) => {
       const prev = gdpPts[i].value;
       return { ts: p.ts, value: prev !== 0 ? (p.value - prev) / Math.abs(prev) * 100 : 0 };
     });
     const growthZ = toZScores(gdpGrowth.map(p => p.value));
 
-    // Align by picking last N common quarters (use last 12 inflation + last 8 growth)
-    const n = Math.min(8, inflationZ.length, growthZ.length);
-    const trail = Array.from({ length: n }, (_, i) => ({
-      growth: growthZ[growthZ.length - n + i],
-      inflation: inflationZ[inflationZ.length - n + i],
-      idx: i,
-      isCurrent: false,
-    }));
+    // CRITICAL: align by DATE, not by array index. CPI is monthly and GDP is
+    // quarterly, so for each GDP quarter we take the most recent CPI YoY at or
+    // before that quarter — otherwise the growth and inflation coordinates come
+    // from different periods and the regime classification is meaningless.
+    const infAsOf = (targetTs: number): number | null => {
+      let v: number | null = null;
+      for (const a of infByTs) { if (a.ts <= targetTs) v = a.z; else break; }
+      return v;
+    };
+    const paired = gdpGrowth
+      .map((g, i) => {
+        const inf = infAsOf(g.ts);
+        return inf == null ? null : { ts: g.ts, growth: growthZ[i], inflation: inf };
+      })
+      .filter((x): x is { ts: number; growth: number; inflation: number } => x != null);
+
+    const n = Math.min(8, paired.length);
+    const trail = paired.slice(-n).map((p, i) => ({ growth: p.growth, inflation: p.inflation, idx: i, isCurrent: false }));
 
     const current = trail.length ? { ...trail[trail.length - 1], isCurrent: true } : null;
 

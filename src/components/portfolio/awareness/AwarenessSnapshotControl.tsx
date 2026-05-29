@@ -61,8 +61,8 @@ export const AwarenessSnapshotControl: React.FC<Props> = ({
           : snapshot
             ? `Snapshot · ${age ?? 'unknown'}`
             : isBackendUnreachable
-              ? 'Snapshot backend unreachable'
-              : 'No backend snapshot'}
+              ? 'Snapshot unavailable'
+              : 'No saved snapshot'}
       </span>
 
       <button
@@ -70,8 +70,8 @@ export const AwarenessSnapshotControl: React.FC<Props> = ({
         disabled={disabled}
         title={
           isBackendUnreachable
-            ? 'Snapshot backend is unreachable right now'
-            : 'Persist this awareness view to the backend store'
+            ? 'Snapshot is unavailable right now'
+            : 'Save this awareness view'
         }
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 5,

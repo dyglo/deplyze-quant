@@ -178,14 +178,11 @@ export const IntelligenceObservationCard: React.FC<{
             </div>
           )}
 
-          {/* Footer — source + timestamp */}
+          {/* Footer — timestamp */}
           <div style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            gap: 8, marginTop: 6,
+            display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+            marginTop: 6,
           }}>
-            <span style={{ fontSize: 9, color: 'var(--muted-foreground)' }}>
-              {output.source_tables?.slice(0, 2).join(' · ')}
-            </span>
             <span style={{ fontSize: 9, color: 'var(--muted-foreground)', flexShrink: 0 }}>
               {fmtDate(output.generated_at)}
             </span>

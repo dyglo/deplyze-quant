@@ -134,10 +134,9 @@ export const ContextualReasoningCard: React.FC<{
           )}
 
           <div style={{
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            display: 'flex', justifyContent: 'flex-end', alignItems: 'center',
             marginTop: 8, fontSize: 9, color: 'var(--muted-foreground)',
           }}>
-            <span>{output.source_tables?.slice(0, 1).join('')}</span>
             <span>{fmtDate(output.generated_at)}</span>
           </div>
         </div>

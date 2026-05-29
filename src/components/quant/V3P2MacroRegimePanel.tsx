@@ -72,12 +72,9 @@ export const V3P2MacroRegimePanel: React.FC = () => {
     <section style={{ marginBottom: 28 }}>
       <h2 className="ds-heading" style={{ margin: '0 0 6px' }}>
         Macro Regime Intelligence
-        <span className="ds-caption" style={{ marginLeft: 8, color: 'var(--muted-foreground)', fontWeight: 400 }}>
-          V3 Phase 2 · deterministic
-        </span>
       </h2>
       <p className="ds-caption" style={{ margin: '0 0 12px', color: 'var(--muted-foreground)', fontSize: 11 }}>
-        Latest liquidity / inflation / rates / growth regime classifications from `research.macro_observations`.
+        Latest liquidity, inflation, rates, and growth regime classifications.
       </p>
 
       <div style={{

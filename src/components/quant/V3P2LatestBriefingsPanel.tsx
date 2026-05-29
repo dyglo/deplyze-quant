@@ -47,13 +47,9 @@ export const V3P2LatestBriefingsPanel: React.FC = () => {
     <section style={{ marginBottom: 24 }}>
       <h2 className="ds-heading" style={{ margin: '0 0 6px' }}>
         Latest Briefings
-        <span className="ds-caption" style={{ marginLeft: 8, color: 'var(--muted-foreground)', fontWeight: 400 }}>
-          V3 Phase 2 · deterministic
-        </span>
       </h2>
       <p className="ds-caption" style={{ margin: '0 0 12px', color: 'var(--muted-foreground)', fontSize: 11 }}>
-        Latest deterministic briefings of each type from `research.generated_briefings`.
-        Re-runs produce identical content per as-of date.
+        The most recent briefing of each type, refreshed daily.
       </p>
 
       {state === 'loading' && (

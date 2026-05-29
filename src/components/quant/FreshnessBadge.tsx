@@ -22,15 +22,24 @@ const STATUS_COLOR: Record<FreshnessStatus, { dot: string; fg: string; bg: strin
   error:  { dot: '#b04848', fg: '#b04848', bg: 'rgba(176,72,72,0.12)' },
 };
 
+// Human-readable status words — never expose cache/infra terminology.
+const STATUS_LABEL: Record<FreshnessStatus, string> = {
+  live:   'Live',
+  cached: 'Updated',
+  stale:  'Refreshing',
+  error:  'Unavailable',
+};
+
 export const FreshnessBadge: React.FC<{
   status: FreshnessStatus;
   fetchedAt: number | null;
   compact?: boolean;
 }> = ({ status, fetchedAt, compact }) => {
   const c = STATUS_COLOR[status];
+  const word = STATUS_LABEL[status];
   const label = compact
-    ? status.toUpperCase()
-    : `${status.toUpperCase()} · ${relTime(fetchedAt)}`;
+    ? word
+    : `${word} · ${relTime(fetchedAt)}`;
   return (
     <span
       title={fetchedAt ? new Date(fetchedAt).toLocaleString() : undefined}

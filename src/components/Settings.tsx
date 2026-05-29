@@ -120,10 +120,8 @@ export const Settings: React.FC = () => {
               </button>
             </header>
             <p className="ds-caption" style={{ color: 'var(--muted-foreground)' }}>
-              Provider API keys live server-side in the gateway. They are never exposed to the
-              browser. Configure them with{' '}
-              <code style={{ fontSize: 11 }}>gcloud run services update</code> or in{' '}
-              <code style={{ fontSize: 11 }}>.env.local</code> for local development.
+              Data sources are managed securely by Deplyze and are never exposed to your browser.
+              Each source below shows its current connection status.
             </p>
 
             <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 8 }}>

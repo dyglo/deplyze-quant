@@ -147,7 +147,7 @@ export const NarrativeExposurePanel: React.FC<{
       ) : !result || result.exposures.length === 0 ? (
         <div style={{ padding: '16px 14px', fontSize: 10, color: 'var(--muted-foreground)' }}>
           {result?.data_quality === 'unavailable'
-            ? 'Narrative memory data not yet available. Run the V3P2 narrative pipeline first.'
+            ? 'Narrative exposure data isn’t available yet.'
             : 'No active narrative themes match current holdings.'
           }
         </div>

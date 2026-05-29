@@ -86,7 +86,7 @@ const DISCOVER_ITEMS = [
 ];
 
 const RESEARCH_ITEMS = [
-  { id: 'history',     label: 'Historical Intelligence Terminal', icon: History, path: '/historical-intelligence' },
+  { id: 'history',     label: 'Historical Intelligence', icon: History, path: '/historical-intelligence' },
   { id: 'research',    label: 'Historical Research',     icon: Compass,        path: '/research' },
   { id: 'lab',         label: 'Quant Lab',              icon: Beaker,          path: '/lab' },
   { id: 'backtesting', label: 'Backtesting',            icon: FlaskConical,    path: '/backtesting' },
@@ -98,7 +98,7 @@ const LIBRARY_ITEMS = [
 ];
 
 const DATA_ITEMS = [
-  { id: 'warehouse',   label: 'Data Warehouse',         icon: Database,        path: '/warehouse' },
+  { id: 'warehouse',   label: 'Warehouse',              icon: Database,        path: '/warehouse' },
 ];
 
 const menuItems = [HOME_ITEM, ...DISCOVER_ITEMS, ...RESEARCH_ITEMS, ...LIBRARY_ITEMS, ...DATA_ITEMS];
@@ -108,11 +108,11 @@ const bottomItems = [
 ];
 
 const MARKET_DASHBOARD_ITEMS = [
-  { id: 'world-equity',  label: 'World Equity Intelligence',  icon: Globe,          path: '/market/world-equity' },
-  { id: 'us-sectors',    label: 'US Sector Intelligence',     icon: BarChart3,      path: '/market/us-sectors' },
+  { id: 'world-equity',  label: 'World Equity',               icon: Globe,          path: '/market/world-equity' },
+  { id: 'us-sectors',    label: 'US Sectors',                 icon: BarChart3,      path: '/market/us-sectors' },
   { id: 'global-yields', label: 'Global Yields',              icon: TrendingUp,     path: '/market/global-yields' },
   { id: 'countries',     label: 'Countries & Regional',       icon: Map,            path: '/market/countries' },
-  { id: 'commodities',   label: 'Commodities Intelligence',   icon: Flame,          path: '/market/commodities' },
+  { id: 'commodities',   label: 'Commodities',                icon: Flame,          path: '/market/commodities' },
   { id: 'fx-liquidity',  label: 'FX & Liquidity',             icon: ArrowLeftRight, path: '/market/fx-liquidity' },
 ];
 

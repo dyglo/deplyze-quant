@@ -6,11 +6,24 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import * as fmp from '../providers/fmp';
+import * as finnhub from '../providers/finnhub';
 import * as eodhd from '../providers/eodhd';
 import { withCache, TTL } from '../services/cache';
 import { withFallback } from '../lib/providerRouter';
+import { log, reqContext } from '../lib/logger';
 
 const router = Router();
+
+type EarningsCalendarEvent = {
+  date: string;
+  symbol: string;
+  epsActual?: number | null;
+  epsEstimate?: number | null;
+  revenue?: number | null;
+  revenueEstimate?: number | null;
+  time?: string;
+  fiscalDateEnding?: string;
+};
 
 type EarningsSurpriseRow = {
   date: string;
@@ -83,19 +96,36 @@ const CalendarQuery = z.object({
 });
 
 router.get('/calendar', async (req, res, next) => {
+  // Validate up front so a bad date never reaches a provider. Zod throws a
+  // ZodError → the central handler returns a clean 400 (not a 500).
+  let parsed: z.infer<typeof CalendarQuery>;
   try {
-    const { from, to } = CalendarQuery.parse(req.query);
-    const today = new Date();
-    const defaultFrom = from ?? today.toISOString().slice(0, 10);
-    const defaultTo = to ?? new Date(today.getTime() + 30 * 86400_000).toISOString().slice(0, 10);
-    const cacheKey = `earnings:calendar:${defaultFrom}:${defaultTo}`;
+    parsed = CalendarQuery.parse(req.query);
+  } catch (err) { next(err); return; }
+
+  const { from, to } = parsed;
+  const today = new Date();
+  const defaultFrom = from ?? today.toISOString().slice(0, 10);
+  const defaultTo = to ?? new Date(today.getTime() + 30 * 86400_000).toISOString().slice(0, 10);
+
+  // Guard against an inverted / absurd window before hitting a provider.
+  if (Date.parse(defaultFrom) > Date.parse(defaultTo)) {
+    res.status(400).json({ error: 'Bad Request', code: 'VALIDATION_ERROR', message: '`from` must be on or before `to`.' });
+    return;
+  }
+
+  const cacheKey = `earnings:calendar:${defaultFrom}:${defaultTo}`;
+  const t0 = Date.now();
+
+  try {
     const data = await withCache(cacheKey, TTL.news, async () => {
-      const { result, providerId } = await withFallback<Array<Record<string, unknown>>>({
+      const { result, providerId } = await withFallback<EarningsCalendarEvent[]>({
         providers: [
+          // Primary: FMP `/stable/earnings-calendar` (broadest coverage).
           {
             id: 'fmp', fn: async () => {
               const items = await fmp.getEarningsCalendar(defaultFrom, defaultTo);
-              return items.map((e) => ({
+              return items.map((e): EarningsCalendarEvent => ({
                 date: e.date,
                 symbol: e.symbol,
                 epsActual: e.epsActual ?? e.eps,
@@ -107,12 +137,57 @@ router.get('/calendar', async (req, res, next) => {
               })).filter((e) => e.date && e.symbol);
             },
           },
+          // Fallback: Finnhub `/calendar/earnings`. FINNHUB_API_KEY is always
+          // configured (required env), so this keeps the route alive whenever
+          // FMP is quota-limited, premium-gated, or down.
+          {
+            id: 'finnhub', fn: async () => {
+              const items = await finnhub.getEarningsCalendar(defaultFrom, defaultTo);
+              return items.map((e): EarningsCalendarEvent => ({
+                date: e.date,
+                symbol: e.symbol,
+                epsActual: e.epsActual ?? null,
+                epsEstimate: e.epsEstimate ?? null,
+                revenue: e.revenueActual ?? null,
+                revenueEstimate: e.revenueEstimate ?? null,
+                time: e.hour,
+              })).filter((e) => e.date && e.symbol);
+            },
+          },
         ],
       });
       return { from: defaultFrom, to: defaultTo, events: result, providerId };
     });
-    res.json(data);
-  } catch (err) { next(err); }
+
+    log.info({
+      event: 'earnings.calendar.ok', ...reqContext(req),
+      servedBy: data.providerId, freshness: 'live',
+      eventsCount: data.events.length, latencyMs: Date.now() - t0,
+      from: defaultFrom, to: defaultTo,
+    });
+    res.json({ ...data, degraded: false, freshness: 'live', fetchedAt: Date.now() });
+  } catch (err) {
+    // Every provider failed (quota / outage / premium gate). This is an
+    // EXPECTED failure mode — degrade gracefully to an empty, freshness-tagged
+    // payload instead of a raw 500 that blanks the calendar. The frontend
+    // already renders an empty calendar as a clean "no events" state.
+    const reason = err instanceof Error ? err.message : String(err);
+    log.warn({
+      event: 'earnings.calendar.degraded', ...reqContext(req),
+      freshness: 'degraded', reason, latencyMs: Date.now() - t0,
+      from: defaultFrom, to: defaultTo,
+    });
+    res.json({
+      from: defaultFrom,
+      to: defaultTo,
+      events: [],
+      providerId: 'none',
+      degraded: true,
+      freshness: 'degraded',
+      reason: 'Earnings calendar provider temporarily unavailable.',
+      fetchedAt: Date.now(),
+    });
+  }
 });
 
 export default router;

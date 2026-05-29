@@ -249,6 +249,18 @@ router.get('/ohlcv/:symbol(*)', async (req, res, next) => {
     const minUsableBars = warehouseEligible ? warehouseMin : SPARSE_MIN;
     let warehouseBars: OHLCVBar[] = [];
 
+    // Coverage gate for the warehouse fast-path. The warehouse holds a rolling
+    // window per symbol, so a shallow (~2-year) warehouse result must NOT
+    // short-circuit a deep (multi-year) request — otherwise a 10-year ask gets
+    // silently truncated to whatever the warehouse happens to hold. For deep
+    // requests (outputsize ≥ 500 ≈ 2y) require the warehouse to cover ≥80% of
+    // the ask before serving it; otherwise fall through to the providers, which
+    // fetch the full requested window.
+    const WAREHOUSE_COVERAGE = 0.8;
+    const warehouseCoversRequest = (n: number): boolean =>
+      n >= warehouseMin
+      && (outputsize < 500 || n >= Math.floor(outputsize * WAREHOUSE_COVERAGE));
+
     const fetchFresh = async (): Promise<OHLCVBar[]> => {
       const today    = new Date().toISOString().slice(0, 10);
       const pastDate = new Date(Date.now() - outputsize * 1.5 * 86400_000).toISOString().slice(0, 10);
@@ -343,7 +355,7 @@ router.get('/ohlcv/:symbol(*)', async (req, res, next) => {
       if (warehouseEligible) {
         try {
           warehouseBars = await queryWarehouseOhlcv(symbol, outputsize);
-          if (warehouseBars.length >= warehouseMin) {
+          if (warehouseCoversRequest(warehouseBars.length)) {
             source = 'warehouse';
             bars = warehouseBars;
             void fetchFresh()
@@ -358,12 +370,20 @@ router.get('/ohlcv/:symbol(*)', async (req, res, next) => {
             res.json({ symbol, interval, bars, source, stale });
             return;
           }
+          // Warehouse present but too shallow for the requested depth — keep it
+          // as a fallback below and continue to the providers for full history.
         } catch (warehouseErr) {
           console.warn(`[ohlcv] warehouse fallback failed for ${symbol}: ${(warehouseErr as Error).message}`);
         }
       }
 
       bars = await withCache(cacheKey, ttl, fetchFresh);
+      // If the providers returned a SHORTER series than the warehouse already
+      // held (e.g. free-tier truncation), keep the deeper warehouse series.
+      if (warehouseBars.length > bars.length) {
+        bars = warehouseBars;
+        source = 'warehouse';
+      }
       // Post-cache sparse guard (equities only)
       if (bars.length < minUsableBars) {
         console.warn(`[ohlcv] stale sparse cache for ${symbol} — re-fetching`);

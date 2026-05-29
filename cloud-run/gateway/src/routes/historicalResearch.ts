@@ -9,6 +9,8 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { geminiGenerate } from '../services/gemini';
+import { buildFallbackPlan } from '../lib/researchPlanFallback';
+import { log, reqContext } from '../lib/logger';
 
 const router = Router();
 
@@ -34,7 +36,7 @@ ResearchPlan schema:
 {
   "intent": "compare" | "regime_behavior" | "relationship" | "single_asset_history" | "anomaly_search",
   "assets":        string[],            // 1..5 tickers, primary first
-  "benchmark":     string | null,       // optional reference (e.g. "SPY")
+  "benchmark":     string | null,       // null unless the user EXPLICITLY asks to compare against a reference
   "timeframe": {
     "start":       "YYYY-MM-DD" | null, // null = use lookbackYears
     "end":         "YYYY-MM-DD" | null,
@@ -62,6 +64,10 @@ Heuristics:
 - Date ranges in the query ("between 1960 and 2025", "from 2000 to 2020") -> set timeframe.start and timeframe.end explicitly to "YYYY-01-01" / "YYYY-12-31".
 - "decades" or wide horizon language -> lookbackYears>=20.
 - If user names no horizon -> lookbackYears=10.
+- benchmark: set ONLY when the user explicitly asks to compare/benchmark against a specific reference
+  (e.g. "relative to the S&P 500", "benchmarked against QQQ", "vs the market"). Otherwise benchmark=null.
+  NEVER default to SPY or add a benchmark the user did not ask for — the investigation must use only the
+  assets the user named.
 
 Regime extraction (CRITICAL — most institutional questions name specific windows):
 - A "regime" is a labeled sub-window the user wants the analysis sliced into. Examples:
@@ -86,8 +92,14 @@ Provider note (do NOT include in output, just use it to set timeframe):
 `.trim();
 
 router.post('/plan', async (req, res, next) => {
+  // Validate first — a bad body is a 400, not a 500.
+  let query: string;
   try {
-    const { query } = PlanBody.parse(req.body);
+    ({ query } = PlanBody.parse(req.body));
+  } catch (err) { next(err); return; }
+
+  const t0 = Date.now();
+  try {
     const raw = await geminiGenerate({
       systemInstruction: PLAN_SYSTEM,
       prompt: `User query: ${query}\n\nReturn the ResearchPlan JSON now.`,
@@ -95,12 +107,44 @@ router.post('/plan', async (req, res, next) => {
     });
 
     const plan = extractJson(raw);
-    if (!plan) {
-      res.status(502).json({ error: 'Planner returned unparseable output', raw });
+    const llmAssets = planAssets(plan);
+
+    if (!plan || llmAssets.length === 0) {
+      // Either the model replied with unparseable JSON, or it parsed but
+      // resolved no tradeable assets (common for flow/macro phrasings like
+      // "retail inflows in the US stock market"). Rather than 502 / dead-end the
+      // investigation, backfill assets from the deterministic keyword planner.
+      const fallback = buildFallbackPlan(query);
+      const reason = !plan ? 'planner_unparseable' : 'planner_no_assets';
+      // If the LLM produced a usable plan body, keep its structure and only
+      // graft the resolved assets onto it; otherwise use the fallback wholesale.
+      const repaired = (plan && typeof plan === 'object' && fallback.assets.length > 0)
+        ? { ...(plan as Record<string, unknown>), assets: fallback.assets, benchmark: (plan as Record<string, unknown>).benchmark ?? null }
+        : fallback;
+      log.warn({
+        event: 'historical_research.plan.degraded', ...reqContext(req),
+        freshness: 'degraded', reason, assets: fallback.assets, latencyMs: Date.now() - t0,
+      });
+      res.json({ plan: repaired, degraded: true, source: 'fallback', reason });
       return;
     }
-    res.json({ plan });
-  } catch (err) { next(err); }
+
+    log.info({
+      event: 'historical_research.plan.ok', ...reqContext(req),
+      servedBy: 'gemini', freshness: 'live', latencyMs: Date.now() - t0,
+    });
+    res.json({ plan, degraded: false, source: 'llm' });
+  } catch (err) {
+    // Gemini unavailable (quota / key / model error / timeout). Degrade to the
+    // deterministic planner so the workspace stays usable instead of 500ing.
+    const reason = err instanceof Error ? err.message : String(err);
+    const fallback = buildFallbackPlan(query);
+    log.warn({
+      event: 'historical_research.plan.degraded', ...reqContext(req),
+      freshness: 'degraded', reason, assets: fallback.assets, latencyMs: Date.now() - t0,
+    });
+    res.json({ plan: fallback, degraded: true, source: 'fallback', reason: 'planner_unavailable' });
+  }
 });
 
 // ─── /reason ──────────────────────────────────────────────────────────────
@@ -155,12 +199,20 @@ router.post('/reason', async (req, res, next) => {
       'Write the commentary now.',
     ].join('\n');
 
-    const narrative = await geminiGenerate({
-      systemInstruction: REASON_SYSTEM,
-      prompt,
-      temperature: 0.2,
-    });
-    res.json({ narrative });
+    let narrative: string;
+    try {
+      narrative = await geminiGenerate({ systemInstruction: REASON_SYSTEM, prompt, temperature: 0.2 });
+      res.json({ narrative, degraded: false });
+    } catch (e) {
+      // Numbers come from the frontend, not the model — so a reasoning outage
+      // is non-fatal. Return a neutral, grounded note instead of a 500.
+      const reason = e instanceof Error ? e.message : String(e);
+      log.warn({ event: 'historical_research.reason.degraded', ...reqContext(req), freshness: 'degraded', reason });
+      res.json({
+        narrative: 'Automated commentary is temporarily unavailable. The computed metrics below are accurate — review the observations directly.',
+        degraded: true,
+      });
+    }
   } catch (err) { next(err); }
 });
 
@@ -217,12 +269,17 @@ router.post('/followup-ask', async (req, res, next) => {
       'Answer directly and substantively, grounded in the observations and prior analysis above.',
     ].filter(Boolean).join('\n\n');
 
-    const answer = await geminiGenerate({
-      systemInstruction: FOLLOWUP_ASK_SYSTEM,
-      prompt,
-      temperature: 0.3,
-    });
-    res.json({ answer });
+    try {
+      const answer = await geminiGenerate({ systemInstruction: FOLLOWUP_ASK_SYSTEM, prompt, temperature: 0.3 });
+      res.json({ answer, degraded: false });
+    } catch (e) {
+      const reason = e instanceof Error ? e.message : String(e);
+      log.warn({ event: 'historical_research.followup_ask.degraded', ...reqContext(req), freshness: 'degraded', reason });
+      res.json({
+        answer: 'The research assistant is temporarily unavailable. The investigation metrics remain accurate — try your follow-up again shortly.',
+        degraded: true,
+      });
+    }
   } catch (err) { next(err); }
 });
 
@@ -245,8 +302,26 @@ follow-up requests. Same heuristics as the initial planner apply.
 `.trim();
 
 router.post('/followup-refine', async (req, res, next) => {
+  let body: z.infer<typeof FollowupRefineBody>;
   try {
-    const body = FollowupRefineBody.parse(req.body);
+    body = FollowupRefineBody.parse(req.body);
+  } catch (err) { next(err); return; }
+
+  // Degraded refiner: keep the existing plan and fold in any assets the
+  // follow-up names. Never invent regimes. Used whenever the LLM path fails.
+  const degradedRefine = () => {
+    const prior = (body.plan ?? {}) as Partial<ReturnType<typeof buildFallbackPlan>>;
+    const fromQuestion = buildFallbackPlan(body.question);
+    const assets = Array.from(new Set([...(prior.assets ?? []), ...fromQuestion.assets])).slice(0, 5);
+    return {
+      ...buildFallbackPlan(body.query),
+      ...prior,
+      assets: assets.length ? assets : fromQuestion.assets,
+      reasoning_focus: 'Degraded refine — merged locally without the LLM planner.',
+    };
+  };
+
+  try {
     const raw = await geminiGenerate({
       systemInstruction: `${PLAN_SYSTEM}\n\n${FOLLOWUP_REFINE_SYSTEM}`,
       prompt: [
@@ -260,14 +335,27 @@ router.post('/followup-refine', async (req, res, next) => {
     });
     const plan = extractJson(raw);
     if (!plan) {
-      res.status(502).json({ error: 'Refiner returned unparseable output', raw });
+      log.warn({ event: 'historical_research.refine.unparseable', ...reqContext(req), freshness: 'degraded', reason: 'refiner returned unparseable output' });
+      res.json({ plan: degradedRefine(), degraded: true, source: 'fallback', reason: 'refiner_unparseable' });
       return;
     }
-    res.json({ plan });
-  } catch (err) { next(err); }
+    res.json({ plan, degraded: false, source: 'llm' });
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    log.warn({ event: 'historical_research.refine.degraded', ...reqContext(req), freshness: 'degraded', reason });
+    res.json({ plan: degradedRefine(), degraded: true, source: 'fallback', reason: 'refiner_unavailable' });
+  }
 });
 
 // ─── helpers ──────────────────────────────────────────────────────────────
+
+/** Safely read a non-empty assets array off an untyped LLM plan object. */
+function planAssets(plan: unknown): string[] {
+  if (!plan || typeof plan !== 'object') return [];
+  const a = (plan as Record<string, unknown>).assets;
+  if (!Array.isArray(a)) return [];
+  return a.map((x) => String(x).trim()).filter(Boolean);
+}
 
 function extractJson(s: string): unknown | null {
   const trimmed = s.trim();

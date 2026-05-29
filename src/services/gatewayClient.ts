@@ -52,11 +52,15 @@ function buildQuery(params?: QueryParams): string {
 
 async function handle<T>(res: Response): Promise<T> {
   if (!res.ok) {
-    let body: unknown;
-    try { body = await res.json(); } catch { body = await res.text(); }
+    // Read the body exactly ONCE. Calling res.json() consumes the stream even
+    // when parsing fails, so a follow-up res.text() would throw "body stream
+    // already read" — masking the real error. Read text, then try to parse.
+    const raw = await res.text().catch(() => '');
+    let body: unknown = raw;
+    if (raw) { try { body = JSON.parse(raw); } catch { /* keep raw text */ } }
     const message = typeof body === 'object' && body && 'error' in body
       ? String((body as { error: unknown }).error)
-      : res.statusText;
+      : (raw || res.statusText);
     throw new GatewayError(res.status, message, body);
   }
   return (await res.json()) as T;

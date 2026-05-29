@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     TWELVE_DATA_API_KEY: str = ""
     ALPHA_VANTAGE_API_KEY: str = ""
     GEMINI_API_KEY: str = ""
+    # Overridable so a model rotation is a config change, not a redeploy.
+    GEMINI_MODEL: str = "gemini-3-flash-preview"
     TAVILY_API_KEY: str = ""
     SERPER_API_KEY: str = ""
 

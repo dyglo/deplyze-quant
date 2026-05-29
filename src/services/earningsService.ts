@@ -39,6 +39,7 @@ export async function fetchEarningsCalendar(
     from: string; to: string;
     events: EarningsEvent[];
     providerId: string;
+    degraded?: boolean;
   }>('/earnings/calendar', { from: defaultFrom, to: defaultTo }, ClientTTL.news);
 
   return {
@@ -47,6 +48,7 @@ export async function fetchEarningsCalendar(
     events: r.events,
     source: r.providerId as EarningsCalendar['source'],
     fetchedAt: Date.now(),
+    degraded: Boolean(r.degraded),
   };
 }
 

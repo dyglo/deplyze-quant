@@ -289,7 +289,7 @@ def _llm_refine(payload: dict[str, Any], fallback: dict[str, Any]) -> dict[str, 
             "draft": fallback,
         }
         response = httpx.post(
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+            f"https://generativelanguage.googleapis.com/v1beta/models/{settings.GEMINI_MODEL}:generateContent",
             params={"key": settings.GEMINI_API_KEY},
             json={
                 "contents": [{"parts": [{"text": json.dumps(prompt, default=str)}]}],

@@ -122,3 +122,25 @@ export async function getBasicFinancials(symbol: string): Promise<FinnhubBasicFi
   const url = `${BASE}/stock/metric?symbol=${encodeURIComponent(symbol)}&metric=all&token=${key()}`;
   return getJson<FinnhubBasicFinancials>('finnhub', url);
 }
+
+// ─── Earnings calendar ──────────────────────────────────────────────────────
+// Fallback for /v1/earnings/calendar when FMP is unavailable / quota-limited.
+// Docs: https://finnhub.io/docs/api/earnings-calendar
+
+export interface FinnhubEarningsCalendarItem {
+  date: string;
+  symbol: string;
+  epsActual?: number | null;
+  epsEstimate?: number | null;
+  hour?: string;          // "bmo" | "amc" | "dmh"
+  quarter?: number;
+  revenueActual?: number | null;
+  revenueEstimate?: number | null;
+  year?: number;
+}
+
+export async function getEarningsCalendar(from: string, to: string): Promise<FinnhubEarningsCalendarItem[]> {
+  const url = `${BASE}/calendar/earnings?from=${from}&to=${to}&token=${key()}`;
+  const r = await getJson<{ earningsCalendar?: FinnhubEarningsCalendarItem[] }>('finnhub', url);
+  return Array.isArray(r.earningsCalendar) ? r.earningsCalendar : [];
+}

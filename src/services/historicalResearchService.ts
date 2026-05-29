@@ -62,9 +62,19 @@ export interface ResearchObservation {
   period?: string;
 }
 
-export async function planResearch(query: string): Promise<ResearchPlan> {
-  const r = await gatewayPost<{ plan: ResearchPlan }>('/historical-research/plan', { query });
-  return normalizePlan(r.plan);
+export interface PlanResult {
+  plan: ResearchPlan;
+  /** True when the gateway served a locally-derived plan because the LLM
+   *  planner was unavailable — the investigation still runs in degraded mode. */
+  degraded: boolean;
+}
+
+export async function planResearch(query: string): Promise<PlanResult> {
+  const r = await gatewayPost<{ plan: ResearchPlan; degraded?: boolean }>(
+    '/historical-research/plan',
+    { query },
+  );
+  return { plan: normalizePlan(r.plan), degraded: Boolean(r.degraded) };
 }
 
 export async function reasonOverObservations(opts: {

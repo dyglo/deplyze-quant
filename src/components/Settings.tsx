@@ -3,8 +3,13 @@ import { useAuth } from './AuthProvider';
 import { useWorkspace } from './WorkspaceContext';
 import { useProviderHealth } from '../hooks/useProviders';
 import { Sun, Moon, Monitor, Check, LogOut } from 'lucide-react';
+import {
+  fetchEmailPreferences,
+  updateEmailPreferences,
+  type EmailPreferences,
+} from '../services/emailPreferencesService';
 
-type TabId = 'profile' | 'workspace' | 'providers' | 'appearance';
+type TabId = 'profile' | 'workspace' | 'providers' | 'email' | 'appearance';
 
 const PROVIDERS = [
   { id: 'polygon',       label: 'Real-time Quotes',   hint: 'Equities quotes, snapshots, market data' },
@@ -27,6 +32,8 @@ export const Settings: React.FC = () => {
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>(
     () => (localStorage.getItem('deplyze_theme') as 'light' | 'dark' | 'system') ?? 'system',
   );
+  const [emailPrefs, setEmailPrefs] = useState<EmailPreferences | null>(null);
+  const [emailPrefsSaving, setEmailPrefsSaving] = useState(false);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -46,8 +53,28 @@ export const Settings: React.FC = () => {
     { id: 'profile',    label: 'Profile' },
     { id: 'workspace',  label: 'Workspace' },
     { id: 'providers',  label: 'Data Providers' },
+    { id: 'email',      label: 'Email' },
     { id: 'appearance', label: 'Appearance' },
   ];
+
+  useEffect(() => {
+    if (tab !== 'email' || emailPrefs) return;
+    let alive = true;
+    fetchEmailPreferences()
+      .then((prefs) => { if (alive) setEmailPrefs(prefs); })
+      .catch(() => { if (alive) setEmailPrefs(null); });
+    return () => { alive = false; };
+  }, [tab, emailPrefs]);
+
+  const patchEmailPrefs = async (patch: Partial<EmailPreferences>) => {
+    setEmailPrefsSaving(true);
+    try {
+      const next = await updateEmailPreferences(patch);
+      setEmailPrefs(next);
+    } finally {
+      setEmailPrefsSaving(false);
+    }
+  };
 
   return (
     <div style={{ padding: '0 24px 48px', maxWidth: 880, margin: '0 auto' }}>
@@ -147,6 +174,49 @@ export const Settings: React.FC = () => {
           </div>
         )}
 
+        {tab === 'email' && (
+          <div className="ds-surface" style={{ padding: 20, borderRadius: 12, display: 'grid', gap: 14 }}>
+            <h2 className="ds-heading">Email Intelligence</h2>
+            <p className="ds-caption" style={{ color: 'var(--muted-foreground)' }}>
+              Email delivery is handled by the secure gateway. No email provider secrets are stored in the browser.
+            </p>
+            {emailPrefs ? (
+              <div style={{ display: 'grid', gap: 10 }}>
+                <PreferenceToggle
+                  label="Daily Portfolio Intelligence Brief"
+                  hint="Portfolio summary, contributors, risk/regime context, volatility, narratives, watchlist intelligence, and concise AI context."
+                  checked={!emailPrefs.unsubscribedAll && emailPrefs.dailyPortfolioBrief}
+                  disabled={emailPrefsSaving || emailPrefs.unsubscribedAll}
+                  onChange={(checked) => patchEmailPrefs({ dailyPortfolioBrief: checked })}
+                />
+                <PreferenceToggle
+                  label="Portfolio Risk/Regime Alerts"
+                  hint="Material risk, volatility, concentration, or regime context changes."
+                  checked={!emailPrefs.unsubscribedAll && emailPrefs.riskRegimeAlerts}
+                  disabled={emailPrefsSaving || emailPrefs.unsubscribedAll}
+                  onChange={(checked) => patchEmailPrefs({ riskRegimeAlerts: checked })}
+                />
+                <PreferenceToggle
+                  label="Onboarding And Account Emails"
+                  hint="Welcome and account lifecycle messages."
+                  checked={!emailPrefs.unsubscribedAll && emailPrefs.onboarding}
+                  disabled={emailPrefsSaving || emailPrefs.unsubscribedAll}
+                  onChange={(checked) => patchEmailPrefs({ onboarding: checked })}
+                />
+                <PreferenceToggle
+                  label="Unsubscribe From All"
+                  hint="Disable all non-essential Deplyze Quant emails."
+                  checked={emailPrefs.unsubscribedAll}
+                  disabled={emailPrefsSaving}
+                  onChange={(checked) => patchEmailPrefs({ unsubscribedAll: checked })}
+                />
+              </div>
+            ) : (
+              <p className="ds-caption" style={{ color: 'var(--muted-foreground)' }}>Loading email preferences...</p>
+            )}
+          </div>
+        )}
+
         {tab === 'appearance' && (
           <div className="ds-surface" style={{ padding: 20, borderRadius: 12, display: 'grid', gap: 14 }}>
             <h2 className="ds-heading">Appearance</h2>
@@ -188,6 +258,32 @@ const Field: React.FC<{ label: string; value: string; mono?: boolean }> = ({ lab
       {value}
     </span>
   </div>
+);
+
+const PreferenceToggle: React.FC<{
+  label: string;
+  hint: string;
+  checked: boolean;
+  disabled?: boolean;
+  onChange: (checked: boolean) => void;
+}> = ({ label, hint, checked, disabled, onChange }) => (
+  <label style={{
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16,
+    padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 8,
+    opacity: disabled ? 0.68 : 1,
+  }}>
+    <span style={{ display: 'grid', gap: 3 }}>
+      <span className="ds-heading">{label}</span>
+      <span className="ds-caption" style={{ color: 'var(--muted-foreground)' }}>{hint}</span>
+    </span>
+    <input
+      type="checkbox"
+      checked={checked}
+      disabled={disabled}
+      onChange={(event) => onChange(event.target.checked)}
+      style={{ width: 18, height: 18, flex: '0 0 auto' }}
+    />
+  </label>
 );
 
 export default Settings;

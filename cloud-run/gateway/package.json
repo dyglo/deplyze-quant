@@ -8,7 +8,12 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "email:test": "tsx src/scripts/emailAdmin.ts --mode=test --send",
+    "email:test:dry-run": "tsx src/scripts/emailAdmin.ts --mode=test --dry-run",
+    "email:verify-webhooks": "tsx src/scripts/emailAdmin.ts --mode=verify-webhooks",
+    "email:batch:dry-run": "tsx src/scripts/emailAdmin.ts --mode=batch --dry-run",
+    "email:batch:send": "tsx src/scripts/emailAdmin.ts --mode=batch --send --confirm=SEND_OPTED_IN_BATCH"
   },
   "engines": {
     "node": ">=20"
@@ -22,6 +27,7 @@
     "firebase-admin": "^12.1.0",
     "helmet": "^8.0.0",
     "ioredis": "^5.4.2",
+    "resend": "^6.12.4",
     "uuid": "^11.1.0",
     "zod": "^3.24.0"
   },

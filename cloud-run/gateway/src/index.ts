@@ -22,6 +22,14 @@
  *   EODHD_API_KEY
  *   FRED_API_KEY          (free key at fred.stlouisfed.org — macro fallback)
  *   SEC_EDGAR_USER_AGENT  ("AppName contact@email.com" format)
+ *
+ * Email infrastructure (server-side only; optional unless scripts/routes used):
+ *   RESEND_API_KEY
+ *   RESEND_FROM_EMAIL       ("Deplyze Quant <intelligence@verified-domain>")
+ *   RESEND_WEBHOOK_SECRET
+ *   EMAIL_UNSUBSCRIBE_SECRET
+ *   APP_BASE_URL
+ *   GATEWAY_PUBLIC_URL
  */
 
 // Load .env.local when running locally (cwd = cloud-run/gateway or repo root).
@@ -81,6 +89,8 @@ import backtestRouter from './routes/backtest';
 import personalizationRouter from './routes/personalization';
 import portfolioAwarenessRouter from './routes/portfolioAwareness';
 import historicalResearchRouter from './routes/historicalResearch';
+import { authenticatedEmailRouter, publicEmailRouter } from './routes/email';
+import { resendWebhookHandler } from './email/webhook';
 
 // ─── Firebase Admin init (idempotent) ──────────────────────────────────────
 
@@ -128,8 +138,15 @@ app.use((req, _res, next) => {
 });
 
 app.use(applyCors);
+
+// Resend requires the exact raw request body for webhook signature verification.
+app.post(['/webhooks/resend', '/api/webhooks/resend'], express.raw({ type: 'application/json', limit: '1mb' }), resendWebhookHandler);
+
 app.use(express.json({ limit: '2mb' }));
 app.use(rateLimiter);
+
+// Public email utility routes (unsubscribe links from email clients).
+app.use(['/email', '/api/email'], publicEmailRouter);
 
 // Unauthenticated health
 app.get('/health', (_req, res) => {
@@ -156,6 +173,7 @@ router.use('/backtest', backtestRouter);
 router.use('/personalization', personalizationRouter);
 router.use('/portfolio-awareness', portfolioAwarenessRouter);
 router.use('/historical-research', historicalResearchRouter);
+router.use('/email', authenticatedEmailRouter);
 // V3 Phase 2 routes — multi-prefix (/macro/regimes, /filings/*, /narratives/*,
 // /research/macro-observations, /relations/context, /briefings/latest).
 // Mounted last so the established /macro and /briefings routers handle their

@@ -71,6 +71,7 @@ import { applyCors } from './middleware/cors';
 import { requestId } from './middleware/requestId';
 import { rateLimiter, userRateLimiter } from './middleware/rateLimiter';
 import { authenticate } from './middleware/auth';
+import { requireFullAccount } from './middleware/requireFullAccount';
 
 import marketRouter from './routes/market';
 import macroRouter from './routes/macro';
@@ -148,8 +149,9 @@ app.use(rateLimiter);
 // Public email utility routes (unsubscribe links from email clients).
 app.use(['/email', '/api/email'], publicEmailRouter);
 
-// Unauthenticated health
-app.get('/health', (_req, res) => {
+// Unauthenticated health. Expose both direct Cloud Run and Firebase Hosting
+// rewrite paths so `/api/health` can verify the production edge.
+app.get(['/health', '/api/health'], (_req, res) => {
   res.json({ ok: true, service: 'deplyze-quant-gateway' });
 });
 
@@ -169,11 +171,17 @@ router.use('/earnings', earningsRouter);
 router.use('/edgar', edgarRouter);
 router.use('/intelligence', intelligenceRouter);
 router.use('/agents', agentsRouter);
-router.use('/backtest', backtestRouter);
-router.use('/personalization', personalizationRouter);
-router.use('/portfolio-awareness', portfolioAwarenessRouter);
-router.use('/historical-research', historicalResearchRouter);
-router.use('/email', authenticatedEmailRouter);
+// ─── Full-account-only routers ─────────────────────────────────────────────
+// Anonymous guests pass `authenticate` (valid token) but these features are
+// personalized / workspace-writing, so `requireFullAccount` 403s them. The
+// public-allowed routers above (market, macro, instruments, briefings, …) keep
+// `authenticate` only, so guest tokens are accepted there. (The /agents read vs
+// write split is finalized in a later PR.)
+router.use('/backtest', requireFullAccount, backtestRouter);
+router.use('/personalization', requireFullAccount, personalizationRouter);
+router.use('/portfolio-awareness', requireFullAccount, portfolioAwarenessRouter);
+router.use('/historical-research', requireFullAccount, historicalResearchRouter);
+router.use('/email', requireFullAccount, authenticatedEmailRouter);
 // V3 Phase 2 routes — multi-prefix (/macro/regimes, /filings/*, /narratives/*,
 // /research/macro-observations, /relations/context, /briefings/latest).
 // Mounted last so the established /macro and /briefings routers handle their

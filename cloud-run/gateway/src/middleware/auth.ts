@@ -18,6 +18,10 @@ declare global {
     interface Request {
       uid: string;
       email: string | undefined;
+      /** True when the verified token belongs to an anonymous (guest) session.
+       *  Guests may read public data but are blocked from personalized /
+       *  workspace-writing routes (see requireFullAccount). */
+      isAnonymous: boolean;
     }
   }
 }
@@ -47,6 +51,9 @@ export async function authenticate(
     const decoded = await getAuth().verifyIdToken(idToken, checkRevoked);
     req.uid = decoded.uid;
     req.email = decoded.email;
+    // Firebase stamps the sign-in method into the token. Anonymous guests get
+    // 'anonymous'; any real provider (password, google.com, …) is a full user.
+    req.isAnonymous = decoded.firebase?.sign_in_provider === 'anonymous';
     next();
   } catch (err: unknown) {
     const error = err as { code?: string; message?: string };

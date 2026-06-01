@@ -18,6 +18,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { BigQuery, type Query } from '@google-cloud/bigquery';
+import { requireFullAccount } from '../middleware/requireFullAccount';
 import { withCache, TTL } from '../services/cache';
 
 const router = Router();
@@ -156,8 +157,11 @@ router.get('/outputs/:domain', async (req, res, next) => {
 });
 
 // ─── GET /agents/portfolio/:portfolioId ───────────────────────────────────────
+// Portfolio-scoped agent outputs are personal — full accounts only. The rest of
+// the /agents reads (regime, risk, reasoning, analog, …) stay open to guests so
+// the public Home/Terminal intelligence surfaces work.
 
-router.get('/portfolio/:portfolioId', async (req, res, next) => {
+router.get('/portfolio/:portfolioId', requireFullAccount, async (req, res, next) => {
   try {
     const pid = req.params.portfolioId;
     const days = z.coerce.number().int().min(1).max(14).default(3).parse(req.query.days);
@@ -391,8 +395,9 @@ router.get('/analog', async (req, res, next) => {
 });
 
 // ─── POST /agents/vulnerability ───────────────────────────────────────────────
+// Runs a portfolio-vulnerability computation — full accounts only.
 
-router.post('/vulnerability', async (req, res, next) => {
+router.post('/vulnerability', requireFullAccount, async (req, res, next) => {
   try {
     if (!QUANT_ENGINE_URL) {
       return res.status(503).json({ error: 'Vulnerability engine not configured' });

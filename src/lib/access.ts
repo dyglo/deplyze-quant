@@ -24,6 +24,7 @@ const PUBLIC_MATCHERS: PathMatcher[] = [
   prefix('/instruments'),
   prefix('/market'),
   prefix('/briefings'),
+  prefix('/historical-intelligence'),
 ];
 
 /** True when a guest may view this path without signing in. */

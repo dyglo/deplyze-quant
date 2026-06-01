@@ -66,7 +66,12 @@ const WorkspaceContext = createContext<WorkspaceContextType>({
 });
 
 export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, profile, refreshProfile } = useAuth();
+  const { user: rawUser, profile, refreshProfile } = useAuth();
+  // Anonymous guests get an inert workspace context: every effect/action below
+  // keys off `user`, so treating a guest as signed-out here means we never open
+  // a Firestore subscription, never auto-create a workspace, and never write a
+  // guest document. Personalized workspace state stays a full-account feature.
+  const user = rawUser && !rawUser.isAnonymous ? rawUser : null;
   const [workspaces, setWorkspaces] = useState<Organization[]>([]);
   const [currentWorkspace, setCurrentWorkspace] = useState<Organization | null>(null);
   const [projects, setProjects] = useState<Site[]>([]);

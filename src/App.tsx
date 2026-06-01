@@ -60,10 +60,13 @@ const LoadingScreen: React.FC = () => (
 );
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, loading: authLoading } = useAuth();
+  const { user, isGuest, loading: authLoading } = useAuth();
   const { loading: workspaceLoading } = useWorkspace();
   if (authLoading) return <LoadingScreen />;
-  if (!user) return <Login />;
+  // Anonymous guests carry a token but are not full users — gated routes still
+  // present the sign-in surface. (Public routes, added in a later PR, render for
+  // guests without this gate.)
+  if (!user || isGuest) return <Login />;
   if (workspaceLoading) return <LoadingScreen />;
   return <Layout>{children}</Layout>;
 };

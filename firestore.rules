@@ -30,6 +30,15 @@ service cloud.firestore {
 
     function isSignedIn() { return request.auth != null; }
 
+    // A *full* (non-anonymous) account. Anonymous guests carry a valid token so
+    // `isSignedIn()` is true for them, but they must never write persisted data
+    // (workspaces, portfolios, profiles, …). All client write paths below gate
+    // on this so guest sessions can browse but never pollute Firestore.
+    function isFullUser() {
+      return request.auth != null
+        && request.auth.token.firebase.sign_in_provider != 'anonymous';
+    }
+
     // Membership pivot uses a deterministic id: `${uid}_${orgId}`.
     function isOrgMember(orgId) {
       return isSignedIn()
@@ -51,11 +60,12 @@ service cloud.firestore {
     // server-side and is tracked for a later stage.
     match /users/{userId} {
       allow read: if isSignedIn();
-      allow create, update: if isSignedIn() && request.auth.uid == userId;
+      allow create, update: if isFullUser() && request.auth.uid == userId;
 
       // Saved Historical Research investigations — owner-scoped, personal.
       match /historical_research/{investigationId} {
-        allow read, write, delete: if isSignedIn() && request.auth.uid == userId;
+        allow read:        if isSignedIn() && request.auth.uid == userId;
+        allow write, delete: if isFullUser() && request.auth.uid == userId;
       }
     }
 
@@ -66,9 +76,9 @@ service cloud.firestore {
     match /memberships/{membershipId} {
       allow read:   if isSignedIn()
         && (resource.data.uid == request.auth.uid || canAccessOrg(resource.data.orgId));
-      allow create: if isSignedIn()
+      allow create: if isFullUser()
         && (request.resource.data.uid == request.auth.uid || canAccessOrg(request.resource.data.orgId));
-      allow update, delete: if isSignedIn()
+      allow update, delete: if isFullUser()
         && (resource.data.uid == request.auth.uid || canAccessOrg(resource.data.orgId));
     }
 
@@ -88,10 +98,10 @@ service cloud.firestore {
     match /organizations/{orgId} {
       allow read:   if isSignedIn()
         && (resource.data.ownerId == request.auth.uid || isOrgMember(orgId));
-      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
-      allow update: if isSignedIn()
+      allow create: if isFullUser() && request.resource.data.ownerId == request.auth.uid;
+      allow update: if isFullUser()
         && (resource.data.ownerId == request.auth.uid || isOrgMember(orgId));
-      allow delete: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+      allow delete: if isFullUser() && resource.data.ownerId == request.auth.uid;
     }
 
     // ─── Workspaces — server-written subtree, org-scoped client reads ──────
@@ -132,32 +142,37 @@ service cloud.firestore {
     // ─── Sites (active projects; scoped by `orgId` field) ──────────────────
     match /sites/{siteId} {
       allow read:           if canAccessOrg(resource.data.orgId);
-      allow create:         if canAccessOrg(request.resource.data.orgId);
-      allow update, delete: if canAccessOrg(resource.data.orgId);
+      allow create:         if isFullUser() && canAccessOrg(request.resource.data.orgId);
+      allow update, delete: if isFullUser() && canAccessOrg(resource.data.orgId);
     }
 
     // ─── Invites (scoped by `orgId` field) ─────────────────────────────────
     match /invites/{inviteId} {
       allow read:           if canAccessOrg(resource.data.orgId);
-      allow create:         if canAccessOrg(request.resource.data.orgId);
-      allow update, delete: if canAccessOrg(resource.data.orgId);
+      allow create:         if isFullUser() && canAccessOrg(request.resource.data.orgId);
+      allow update, delete: if isFullUser() && canAccessOrg(resource.data.orgId);
     }
 
     // ─── Portfolio Intelligence ───────────────────────────────────────────
     // Top-level collections scoped by `uid` on each document. Clients own their
     // own portfolio documents; no cross-user access.
     match /portfolios/{portfolioId} {
-      allow read, write: if isSignedIn() && request.auth.uid == resource.data.uid;
-      allow create:      if isSignedIn() && request.auth.uid == request.resource.data.uid;
+      allow read:   if isSignedIn() && request.auth.uid == resource.data.uid;
+      allow write:  if isFullUser() && request.auth.uid == resource.data.uid;
+      allow create: if isFullUser() && request.auth.uid == request.resource.data.uid;
 
       // Holdings + simulated transaction ledger inherit ownership from the
       // parent portfolio document (subcollections do NOT inherit parent rules).
       match /holdings/{holdingId} {
-        allow read, write: if isSignedIn()
+        allow read:  if isSignedIn()
+          && get(/databases/$(database)/documents/portfolios/$(portfolioId)).data.uid == request.auth.uid;
+        allow write: if isFullUser()
           && get(/databases/$(database)/documents/portfolios/$(portfolioId)).data.uid == request.auth.uid;
       }
       match /transactions/{transactionId} {
-        allow read, write: if isSignedIn()
+        allow read:  if isSignedIn()
+          && get(/databases/$(database)/documents/portfolios/$(portfolioId)).data.uid == request.auth.uid;
+        allow write: if isFullUser()
           && get(/databases/$(database)/documents/portfolios/$(portfolioId)).data.uid == request.auth.uid;
       }
     }
@@ -165,25 +180,28 @@ service cloud.firestore {
     // Observations reference a portfolio by id; ownership flows from that
     // parent portfolio's `uid`. (Queries always filter by `portfolioId`.)
     match /portfolioIntelligence/{observationId} {
-      allow read, update, delete: if isSignedIn()
+      allow read:           if isSignedIn()
         && get(/databases/$(database)/documents/portfolios/$(resource.data.portfolioId)).data.uid == request.auth.uid;
-      allow create: if isSignedIn()
+      allow update, delete: if isFullUser()
+        && get(/databases/$(database)/documents/portfolios/$(resource.data.portfolioId)).data.uid == request.auth.uid;
+      allow create: if isFullUser()
         && get(/databases/$(database)/documents/portfolios/$(request.resource.data.portfolioId)).data.uid == request.auth.uid;
     }
 
     match /intelligenceWatchlists/{watchlistId} {
-      allow read, write: if isSignedIn() && (
+      allow read:  if isSignedIn() && resource.data.uid == request.auth.uid;
+      allow write: if isFullUser() && (
         resource.data.uid == request.auth.uid
         || request.resource.data.uid == request.auth.uid
       );
-      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow create: if isFullUser() && request.resource.data.uid == request.auth.uid;
     }
 
     // ─── Custom stress scenarios (scoped by `uid`) ─────────────────────────
     match /customScenarios/{scenarioId} {
       allow read:           if isSignedIn() && resource.data.uid == request.auth.uid;
-      allow create:         if isSignedIn() && request.resource.data.uid == request.auth.uid;
-      allow update, delete: if isSignedIn() && resource.data.uid == request.auth.uid;
+      allow create:         if isFullUser() && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if isFullUser() && resource.data.uid == request.auth.uid;
     }
 
     // ─── V5 Personalization · low-latency mirrors ─────────────────────────
@@ -196,16 +214,20 @@ service cloud.firestore {
       allow write: if false;
     }
     match /users/{userId}/investigations/{investigationId} {
-      allow read, write: if isSignedIn() && request.auth.uid == userId;
+      allow read:  if isSignedIn() && request.auth.uid == userId;
+      allow write: if isFullUser() && request.auth.uid == userId;
     }
     match /users/{userId}/savedBriefings/{briefingId} {
-      allow read, write: if isSignedIn() && request.auth.uid == userId;
+      allow read:  if isSignedIn() && request.auth.uid == userId;
+      allow write: if isFullUser() && request.auth.uid == userId;
     }
     match /users/{userId}/workflowMemory/{memoryId} {
-      allow read, write: if isSignedIn() && request.auth.uid == userId;
+      allow read:  if isSignedIn() && request.auth.uid == userId;
+      allow write: if isFullUser() && request.auth.uid == userId;
     }
     match /users/{userId}/personalizationControls/{docId} {
-      allow read, write: if isSignedIn() && request.auth.uid == userId;
+      allow read:  if isSignedIn() && request.auth.uid == userId;
+      allow write: if isFullUser() && request.auth.uid == userId;
     }
 
     // ─── Server-only collections ──────────────────────────────────────────

@@ -1,9 +1,13 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signInWithPopup,
+  signInAnonymously,
   createUserWithEmailAndPassword,
+  linkWithCredential,
+  linkWithPopup,
+  EmailAuthProvider,
   GoogleAuthProvider,
   signOut as firebaseSignOut,
   updateProfile,
@@ -17,6 +21,10 @@ import type { UserProfile, AuthState } from '../types';
 // ─── Context type ──────────────────────────────────────────────────────────
 
 export interface AuthContextType extends AuthState {
+  /** True for anonymous (guest) sessions or before any sign-in resolves.
+   *  A guest carries a real Firebase ID token (so gateway calls work) but has
+   *  no persisted profile/workspace and is gated out of personalized features. */
+  isGuest: boolean;
   signInWithGoogle: () => Promise<void>;
   signInWithEmail: (email: string, password: string) => Promise<void>;
   signUpWithEmail: (email: string, password: string, displayName: string) => Promise<void>;
@@ -32,6 +40,7 @@ export const AuthContext = createContext<AuthContextType>({
   user: null,
   profile: null,
   loading: true,
+  isGuest: true,
   authError: null,
   signInWithGoogle: async () => {},
   signInWithEmail: async () => {},
@@ -101,14 +110,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // ── Auth state listener ────────────────────────────────────────────────
+  // Guards against repeated anonymous sign-in attempts within a session.
+  const anonAttemptedRef = useRef(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
-      setUser(fbUser);
-      if (fbUser) {
-        await refreshProfile(fbUser.uid, fbUser);
-      } else {
+      // No session yet → silently establish a *guest* identity so public
+      // surfaces and the gateway (which requires a real ID token) work without
+      // a signup wall. Anonymous provider must be enabled in the Firebase
+      // console; if it isn't, we fail open to the signed-out state (the app
+      // keeps its existing behavior) and never throw.
+      if (!fbUser) {
+        if (!anonAttemptedRef.current) {
+          anonAttemptedRef.current = true;
+          try {
+            await signInAnonymously(auth);
+            return; // onAuthStateChanged re-fires with the anonymous user
+          } catch (err) {
+            console.warn('[Auth] Anonymous sign-in unavailable — staying signed out.', err);
+          }
+        }
+        setUser(null);
         setProfile(null);
+        setLoading(false);
+        return;
+      }
+
+      setUser(fbUser);
+      // Guests carry a token but get no persisted profile/workspace. Skipping
+      // the profile upsert keeps anonymous uids out of Firestore entirely.
+      if (fbUser.isAnonymous) {
+        setProfile(null);
+      } else {
+        await refreshProfile(fbUser.uid, fbUser);
       }
       setLoading(false);
     });
@@ -122,6 +156,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: 'select_account' });
+      const current = auth.currentUser;
+      // Upgrade a guest in place so the uid (and any guest-created state) is
+      // preserved. If the Google account already exists, linking fails with
+      // credential-already-in-use → fall back to a normal sign-in.
+      if (current?.isAnonymous) {
+        try {
+          const linked = await linkWithPopup(current, provider);
+          // Linking keeps the same session signed in, so onAuthStateChanged
+          // may not re-fire — update local state + bootstrap the profile here.
+          setUser(linked.user);
+          await refreshProfile(linked.user.uid, linked.user);
+          return;
+        } catch (linkErr) {
+          const code = (linkErr as AuthError).code || '';
+          if (code !== 'auth/credential-already-in-use' && code !== 'auth/email-already-in-use') {
+            throw linkErr;
+          }
+          // Existing account — sign in normally (guest session is discarded).
+        }
+      }
       await signInWithPopup(auth, provider);
     } catch (err) {
       setAuthError(parseAuthError(err));
@@ -146,6 +200,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   ) => {
     clearAuthError();
     try {
+      const current = auth.currentUser;
+      // Upgrade an anonymous guest into a permanent account, keeping the uid.
+      if (current?.isAnonymous) {
+        const credential = EmailAuthProvider.credential(email, password);
+        const linked = await linkWithCredential(current, credential);
+        if (displayName) {
+          await updateProfile(linked.user, { displayName });
+        }
+        // Linking keeps the same session signed in (onAuthStateChanged may not
+        // re-fire) — update local state + bootstrap the profile here.
+        setUser(linked.user);
+        await refreshProfile(linked.user.uid, linked.user);
+        return;
+      }
       const cred = await createUserWithEmailAndPassword(auth, email, password);
       if (displayName) {
         await updateProfile(cred.user, { displayName });
@@ -167,6 +235,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         user,
         profile,
         loading,
+        isGuest: !user || user.isAnonymous,
         authError,
         clearAuthError,
         signInWithGoogle,

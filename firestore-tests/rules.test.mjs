@@ -89,6 +89,10 @@ const bob = () => testEnv.authenticatedContext('bob').firestore();
 const carol = () => testEnv.authenticatedContext('carol').firestore();
 const dave = () => testEnv.authenticatedContext('dave').firestore();
 const anon = () => testEnv.unauthenticatedContext().firestore();
+// Anonymous (guest) session: signed in, but token carries the anonymous
+// sign-in provider → isFullUser() is false, so all client writes must fail.
+const guest = () =>
+  testEnv.authenticatedContext('guest1', { firebase: { sign_in_provider: 'anonymous' } }).firestore();
 
 // ─── Portfolios ──────────────────────────────────────────────────────────────
 
@@ -214,6 +218,36 @@ test('invites: org members only', async () => {
 test('workspaces artifacts: org members only', async () => {
   await assertSucceeds(getDoc(doc(alice(), 'workspaces/org1/projects/proj1/artifacts/a1')));
   await assertFails(getDoc(doc(carol(), 'workspaces/org1/projects/proj1/artifacts/a1')));
+});
+
+// ─── Guest (anonymous) write gating ────────────────────────────────────────────
+// Guests carry a valid token (isSignedIn) but must never persist data. Reads of
+// their own-scoped data are allowed by the rules; only writes are blocked.
+
+test('guest: cannot create a portfolio (write requires full account)', async () => {
+  await assertFails(setDoc(doc(guest(), 'portfolios', 'pg'), { uid: 'guest1' }));
+});
+
+test('guest: cannot create an organization', async () => {
+  await assertFails(setDoc(doc(guest(), 'organizations', 'orgG'), { ownerId: 'guest1' }));
+});
+
+test('guest: cannot create a membership', async () => {
+  await assertFails(setDoc(doc(guest(), 'memberships', 'guest1_org1'), { uid: 'guest1', orgId: 'org1' }));
+});
+
+test('guest: cannot write customScenarios or watchlists', async () => {
+  await assertFails(setDoc(doc(guest(), 'customScenarios', 'csg'), { uid: 'guest1' }));
+  await assertFails(setDoc(doc(guest(), 'intelligenceWatchlists', 'wg'), { uid: 'guest1' }));
+});
+
+test('guest: cannot create or update own user profile doc', async () => {
+  await assertFails(setDoc(doc(guest(), 'users', 'guest1'), { email: 'g@x.z' }));
+});
+
+test('guest: cannot write personalization subcollections', async () => {
+  await assertFails(setDoc(doc(guest(), 'users/guest1/savedBriefings/bg'), { id: 'bg' }));
+  await assertFails(setDoc(doc(guest(), 'users/guest1/workflowMemory/mg'), { id: 'mg' }));
 });
 
 // ─── Server-only collections ───────────────────────────────────────────────────

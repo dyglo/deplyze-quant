@@ -18,6 +18,7 @@ import type { Briefing } from '../types';
 import type { BriefingGenerateKind } from '../services/briefingService';
 import { createArtifactFromBriefing } from '../services/artifactService';
 import { useAuth } from '../components/AuthProvider';
+import { useAuthGate } from '../components/auth/AuthGate';
 
 function normalizeBriefing(raw: Record<string, unknown>): Briefing {
   const createdAt = raw.createdAt;
@@ -34,6 +35,7 @@ export const BriefingDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const { currentWorkspace, currentProject } = useWorkspace();
   const { user } = useAuth();
+  const { requireAuth } = useAuthGate();
   const [briefing, setBriefing] = useState<Briefing | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -65,6 +67,7 @@ export const BriefingDetail: React.FC = () => {
   useEffect(() => { load(); }, [load]);
 
   const handleRegenerate = async () => {
+    if (!requireAuth({ title: 'Regenerate this briefing', description: 'Create a free workspace to run and save your own briefings.' })) return;
     if (!briefing || !currentWorkspace || !currentProject) return;
     const out = await gen.run({
       kind: briefing.kind as BriefingGenerateKind,
@@ -81,6 +84,7 @@ export const BriefingDetail: React.FC = () => {
   };
 
   const handleSaveAsArtifact = async () => {
+    if (!requireAuth({ title: 'Save to your research timeline', description: 'Create a free workspace to save briefings and build a research library.' })) return;
     if (!briefing || !currentWorkspace?.id || !currentProject?.id || !user) return;
     setSavingArtifact(true);
     try {

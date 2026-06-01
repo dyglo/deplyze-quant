@@ -34,6 +34,7 @@ import { closes, logReturns, annualisedVol, maxDrawdown, trendLabel } from '../l
 import { createInstrumentSnapshot } from '../services/artifactService';
 import { useWorkspace } from '../components/WorkspaceContext';
 import { useAuth } from '../components/AuthProvider';
+import { useAuthGate } from '../components/auth/AuthGate';
 import type { IntelligenceWatchlist } from '../lib/portfolio/schemas';
 import { symbolCountry } from '../components/market-home/format';
 
@@ -72,6 +73,7 @@ export const InstrumentDetail: React.FC = () => {
 
   const { currentWorkspace, currentProject } = useWorkspace();
   const { user } = useAuth();
+  const { requireAuth } = useAuthGate();
   const artifacts = useArtifacts(currentWorkspace?.id ?? null, currentProject?.id ?? null);
   const briefings = useBriefings(currentWorkspace?.id ?? null, currentProject?.id ?? null);
 
@@ -138,6 +140,7 @@ export const InstrumentDetail: React.FC = () => {
 
   // Watchlist handlers
   const handleAddToWatchlist = async (wl: IntelligenceWatchlist) => {
+    if (!requireAuth({ title: 'Save to a watchlist', description: 'Create a free workspace to track instruments across your watchlists.' })) return;
     if (!sym) return;
     if (wl.symbols.includes(sym)) {
       toast.error(`Already in watchlist "${wl.name}"`);
@@ -152,6 +155,7 @@ export const InstrumentDetail: React.FC = () => {
   };
 
   const handleRemoveFromWatchlist = async (wl: IntelligenceWatchlist) => {
+    if (!requireAuth()) return;
     if (!sym) return;
     try {
       await updateWatchlist(wl.id, { symbols: wl.symbols.filter(s => s !== sym) });
@@ -162,6 +166,7 @@ export const InstrumentDetail: React.FC = () => {
   };
 
   const handleCreateWatchlist = async () => {
+    if (!requireAuth({ title: 'Create a watchlist', description: 'Create a free workspace to build and track watchlists.' })) return;
     if (!newWlName.trim() || !user || !currentWorkspace || !sym) return;
     try {
       await createWatchlist(user.uid, currentWorkspace.id, {
@@ -176,6 +181,7 @@ export const InstrumentDetail: React.FC = () => {
   };
 
   const handleSaveSnapshot = async () => {
+    if (!requireAuth({ title: 'Save a research snapshot', description: 'Create a free workspace to save snapshots to your research timeline.' })) return;
     if (!sym || !q || !analytics || !currentWorkspace?.id || !currentProject?.id || !user) return;
     setSavingSnap(true);
     try {

@@ -13,11 +13,17 @@ type PathMatcher = (path: string) => boolean;
 const exact = (p: string): PathMatcher => (path) => path === p;
 const prefix = (p: string): PathMatcher => (path) => path === p || path.startsWith(p + '/');
 
-// Opened in PR2 (home + terminal). Later PRs append macro, relations-map,
-// instruments, market dashboards, briefings, historical-intelligence.
+// Opened progressively. PR2: home + terminal. PR3: discovery surfaces (macro,
+// relations-map, instrument detail, market dashboards, briefings). Historical
+// Intelligence opens in PR4 once the historical-research router splits read/write.
 const PUBLIC_MATCHERS: PathMatcher[] = [
   exact('/'),
   prefix('/terminal'),
+  prefix('/macro'),
+  prefix('/relations-map'),
+  prefix('/instruments'),
+  prefix('/market'),
+  prefix('/briefings'),
 ];
 
 /** True when a guest may view this path without signing in. */

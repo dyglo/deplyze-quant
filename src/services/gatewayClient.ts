@@ -20,16 +20,34 @@ const PREFIX = '/api/v1';
 const FETCH_TIMEOUT_MS = 30_000;
 
 export class GatewayError extends Error {
+  public code?: string;
+
   constructor(public status: number, message: string, public body?: unknown) {
-    super(`Gateway ${status}: ${message}`);
+    super(sanitizeGatewayMessage(status, message, body));
+    this.name = 'GatewayError';
+    if (typeof body === 'object' && body && 'code' in body) {
+      this.code = String((body as { code: unknown }).code);
+    }
   }
 }
 
-// Resolves once Firebase has restored persisted auth state (or confirmed signed-out).
-// On browser refresh, auth.currentUser is null for ~100–400ms while Firebase checks
-// IndexedDB. Without this gate every gateway call on mount throws 401 and never retries.
+// Resolves once a usable identity is established. Two things race on first load:
+// Firebase restoring a persisted session (~100–400ms), and AuthProvider kicking
+// off a silent anonymous (guest) sign-in. The first onAuthStateChanged callback
+// fires `null` *before* the anonymous sign-in completes — resolving then made
+// every guest's first fetch throw 401 (and useSWR does not retry), leaving the
+// public pages permanently empty. So we resolve on the first NON-null user
+// (anonymous or full), with a timeout safety-valve so a genuinely signed-out
+// state (or anonymous auth being disabled in the Firebase project) can't hang
+// requests forever — it falls through to the 401 path instead.
+const AUTH_READY_TIMEOUT_MS = 8_000;
 const authReady: Promise<void> = new Promise((resolve) => {
-  const unsub = onAuthStateChanged(auth, () => { unsub(); resolve(); });
+  let done = false;
+  const finish = () => { if (!done) { done = true; resolve(); } };
+  const unsub = onAuthStateChanged(auth, (user) => {
+    if (user) { finish(); try { unsub(); } catch { /* noop */ } }
+  });
+  setTimeout(finish, AUTH_READY_TIMEOUT_MS);
 });
 
 async function authHeader(): Promise<HeadersInit> {
@@ -38,6 +56,29 @@ async function authHeader(): Promise<HeadersInit> {
   if (!user) throw new GatewayError(401, 'Not signed in');
   const token = await user.getIdToken();
   return { Authorization: `Bearer ${token}` };
+}
+
+function stripHtml(input: string): string {
+  return input
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function sanitizeGatewayMessage(status: number, message: string, body?: unknown): string {
+  const raw = String(message || '');
+  const fromBody = typeof body === 'object' && body && 'message' in body
+    ? String((body as { message: unknown }).message)
+    : raw;
+  const cleaned = stripHtml(fromBody || raw);
+  if (status === 401) return 'Your session is not authorized. Please sign in again.';
+  if (status === 403) return 'You do not have permission to access this data.';
+  if (status === 404) return 'The requested data endpoint was not found.';
+  if (status === 429) return 'The data service is rate limited. Retrying later may succeed.';
+  if (status >= 500) return 'The data service is temporarily unavailable.';
+  return cleaned || `Request failed with status ${status}`;
 }
 
 type QueryParams = Record<string, string | number | boolean | undefined | null>;
@@ -205,9 +246,17 @@ export async function gatewayGetMeta<T>(
 }
 
 export async function gatewayPost<T>(path: string, body: unknown): Promise<T> {
+  return gatewayPostWithTimeout<T>(path, body, FETCH_TIMEOUT_MS);
+}
+
+export async function gatewayPostWithTimeout<T>(
+  path: string,
+  body: unknown,
+  timeoutMs: number,
+): Promise<T> {
   const headers = await authHeader();
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(`${PREFIX}${path}`, {
       method: 'POST',

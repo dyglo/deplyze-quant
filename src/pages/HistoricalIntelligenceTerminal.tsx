@@ -11,6 +11,7 @@
  */
 
 import React, { useMemo, useState } from 'react';
+import { useDocumentHead } from '../lib/seo';
 import {
   History,
   Layers,
@@ -63,6 +64,11 @@ const LOOKBACK_BARS: Record<LookbackKey, number> = {
 
 
 export const HistoricalIntelligenceTerminal: React.FC = () => {
+  useDocumentHead({
+    title: 'Historical Intelligence',
+    description: 'Historical analogs, regime classification, extremes, mean-reversion, and forward-return distributions from real market history.',
+    canonicalPath: '/historical-intelligence',
+  });
   const [symbol, setSymbol] = useState<string>(DEFAULT_SYMBOL);
   const [benchmark, setBenchmark] = useState<string>('SPY');
   const [lookback, setLookback] = useState<LookbackKey>(DEFAULT_LOOKBACK);

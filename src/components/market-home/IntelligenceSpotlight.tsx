@@ -32,7 +32,7 @@ const Card: React.FC<{ o: AgentOutput }> = ({ o }) => {
         <span style={{ fontSize: 10, color: 'var(--muted-foreground)' }}>{relTime(o.generated_at)}</span>
       </div>
       <p style={{ margin: 0, fontSize: 12, fontWeight: 700, lineHeight: 1.3, color: 'var(--foreground)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-        {stripMarkdown(o.title) || 'Intelligence observation'}
+        {stripMarkdown(o.title) || 'Market observation'}
       </p>
       {o.summary && (
         <p style={{ margin: 0, fontSize: 11, lineHeight: 1.45, color: 'var(--muted-foreground)', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
@@ -56,7 +56,7 @@ export const IntelligenceSpotlight: React.FC = () => {
 
   return (
     <SectionCard
-      title="Deplyze Intelligence Spotlight"
+      title="Deplyze Market Spotlight"
       subtitle="Agent-generated research signals"
       action={<Sparkles size={15} style={{ color: 'var(--primary)' }} />}
     >
@@ -65,7 +65,7 @@ export const IntelligenceSpotlight: React.FC = () => {
           {Array.from({ length: 3 }).map((_, i) => <div key={i} style={{ height: 110, borderRadius: 8, background: 'var(--muted)', animation: 'pulse 1.8s infinite' }} />)}
         </div>
       ) : error && items.length === 0 ? (
-        <p className="ds-caption" style={{ color: 'var(--muted-foreground)', padding: '14px 2px' }}>Intelligence signals are temporarily unavailable.</p>
+        <p className="ds-caption" style={{ color: 'var(--muted-foreground)', padding: '14px 2px' }}>Market signals are temporarily unavailable.</p>
       ) : items.length === 0 ? (
         <p className="ds-caption" style={{ color: 'var(--muted-foreground)', padding: '14px 2px' }}>No recent observations.</p>
       ) : (

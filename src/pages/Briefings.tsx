@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useWorkspace } from '../components/WorkspaceContext';
+import { useAuthGate } from '../components/auth/AuthGate';
 import { useBriefings } from '../hooks/useArtifacts';
 import { useBriefingGenerate } from '../hooks/useBriefingGenerate';
 import { PageHeader } from '../components/quant/PageHeader';
@@ -57,6 +58,7 @@ export const Briefings: React.FC = () => {
   const { currentWorkspace, currentProject } = useWorkspace();
   const { items, loading } = useBriefings(currentWorkspace?.id ?? null, currentProject?.id ?? null);
   const gen = useBriefingGenerate();
+  const { requireAuth } = useAuthGate();
   const [activeKind, setActiveKind] = useState<string | null>(null);
 
   // V4: earnings + sentiment agent observations
@@ -66,6 +68,7 @@ export const Briefings: React.FC = () => {
   const [historyTab, setHistoryTab] = useState<string>('all');
 
   const handleGenerate = async (kind: BriefingGenerateKind, params?: { symbol?: string; query?: string }) => {
+    if (!requireAuth({ title: 'Generate your own briefings', description: 'Create a free workspace to run and save institutional briefings.' })) return;
     if (!currentWorkspace || !currentProject) {
       toast.error('Select a workspace and project first.');
       return;

@@ -99,10 +99,10 @@ export default function App() {
             <Route path="/"                     element={<PublicRoute><MarketHome /></PublicRoute>} />
             <Route path="/terminal"             element={<PublicRoute><IntelligenceTerminal /></PublicRoute>} />
             <Route path="/investigations"       element={<ProtectedRoute><Investigations /></ProtectedRoute>} />
-            {/* Single-asset research */}
-            <Route path="/instruments/:symbol"     element={<ProtectedRoute><InstrumentDetail /></ProtectedRoute>} />
-            <Route path="/macro"                element={<ProtectedRoute><MacroRegimeDesk /></ProtectedRoute>} />
-            <Route path="/relations-map"        element={<ProtectedRoute><RelationsMap /></ProtectedRoute>} />
+            {/* Single-asset research (public discovery) */}
+            <Route path="/instruments/:symbol"     element={<PublicRoute><InstrumentDetail /></PublicRoute>} />
+            <Route path="/macro"                element={<PublicRoute><MacroRegimeDesk /></PublicRoute>} />
+            <Route path="/relations-map"        element={<PublicRoute><RelationsMap /></PublicRoute>} />
             <Route path="/cross-asset"          element={<Navigate to="/relations-map" replace />} />
             <Route path="/research"             element={<ProtectedRoute><HistoricalResearch /></ProtectedRoute>} />
             <Route path="/research/i/:id"       element={<ProtectedRoute><HistoricalResearch /></ProtectedRoute>} />
@@ -112,18 +112,18 @@ export default function App() {
             <Route path="/lab"                  element={<ProtectedRoute><QuantLab /></ProtectedRoute>} />
             <Route path="/copilot"              element={<ProtectedRoute><ResearchCopilot /></ProtectedRoute>} />
             <Route path="/historical-intelligence" element={<ProtectedRoute><HistoricalIntelligenceTerminal /></ProtectedRoute>} />
-            <Route path="/briefings"            element={<ProtectedRoute><Briefings /></ProtectedRoute>} />
-            <Route path="/briefings/:id"        element={<ProtectedRoute><BriefingDetail /></ProtectedRoute>} />
+            <Route path="/briefings"            element={<PublicRoute><Briefings /></PublicRoute>} />
+            <Route path="/briefings/:id"        element={<PublicRoute><BriefingDetail /></PublicRoute>} />
             <Route path="/library"              element={<ProtectedRoute><ResearchLibrary /></ProtectedRoute>} />
             <Route path="/artifacts/:id"        element={<ProtectedRoute><ArtifactPage /></ProtectedRoute>} />
             <Route path="/settings"             element={<ProtectedRoute><Settings /></ProtectedRoute>} />
-            {/* Market Dashboards — Phase 1 + 2 */}
-            <Route path="/market/world-equity"  element={<ProtectedRoute><WorldEquityIntelligence /></ProtectedRoute>} />
-            <Route path="/market/us-sectors"    element={<ProtectedRoute><UsSectorIntelligence /></ProtectedRoute>} />
-            <Route path="/market/global-yields" element={<ProtectedRoute><GlobalYields /></ProtectedRoute>} />
-            <Route path="/market/countries"     element={<ProtectedRoute><CountriesRegionalMarkets /></ProtectedRoute>} />
-            <Route path="/market/commodities"   element={<ProtectedRoute><CommoditiesIntelligence /></ProtectedRoute>} />
-            <Route path="/market/fx-liquidity"  element={<ProtectedRoute><FxLiquidityIntelligence /></ProtectedRoute>} />
+            {/* Market Dashboards — Phase 1 + 2 (public discovery) */}
+            <Route path="/market/world-equity"  element={<PublicRoute><WorldEquityIntelligence /></PublicRoute>} />
+            <Route path="/market/us-sectors"    element={<PublicRoute><UsSectorIntelligence /></PublicRoute>} />
+            <Route path="/market/global-yields" element={<PublicRoute><GlobalYields /></PublicRoute>} />
+            <Route path="/market/countries"     element={<PublicRoute><CountriesRegionalMarkets /></PublicRoute>} />
+            <Route path="/market/commodities"   element={<PublicRoute><CommoditiesIntelligence /></PublicRoute>} />
+            <Route path="/market/fx-liquidity"  element={<PublicRoute><FxLiquidityIntelligence /></PublicRoute>} />
             {/* Portfolio Intelligence Workspace */}
             <Route path="/portfolio/overview"     element={<ProtectedRoute><PortfolioOverview /></ProtectedRoute>} />
             <Route path="/portfolio/holdings"     element={<ProtectedRoute><HoldingsWatchlist /></ProtectedRoute>} />

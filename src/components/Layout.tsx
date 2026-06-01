@@ -41,9 +41,12 @@ import {
   PieChart,
   ShieldAlert,
   Zap,
+  Lock,
 } from 'lucide-react';
 import { useAuth } from './AuthProvider';
 import { useWorkspace } from './WorkspaceContext';
+import { useAuthGate } from './auth/AuthGate';
+import { isPublicPath } from '../lib/access';
 import {
   CreateWorkspaceModal,
   CreateProjectModal,
@@ -150,6 +153,8 @@ const SidebarInner: React.FC<{ signOut: () => void; user: any; profile: any }> =
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
   const location = useLocation();
+  const { isGuest } = useAuth();
+  const { requireAuth } = useAuthGate();
 
   const {
     workspaces,
@@ -209,6 +214,29 @@ const SidebarInner: React.FC<{ signOut: () => void; user: any; profile: any }> =
     localStorage.setItem('portfolio-intelligence-expanded', String(next));
   };
 
+  // Group gating for guests. Portfolio Intelligence is always a full-account
+  // feature; Market Dashboards become public in a later PR (driven by access.ts).
+  const marketPublic = isPublicPath('/market/world-equity');
+  const marketGatedForGuest = isGuest && !marketPublic;
+  const onMarketClick = () => {
+    if (marketGatedForGuest) {
+      requireAuth({ title: 'Market Dashboards', description: 'Sign in to open the full market dashboard suite. Your session carries over.' });
+      return;
+    }
+    toggleMd();
+  };
+  const onPortfolioClick = () => {
+    if (isGuest) {
+      requireAuth({ title: 'Portfolio Intelligence is a workspace feature', description: 'Create a free workspace to build and analyze portfolios.' });
+      return;
+    }
+    togglePi();
+  };
+  // Never reveal gated group children to a guest, even if a prior session left
+  // the group expanded in localStorage.
+  const mdExpanded = mdOpen && !marketGatedForGuest;
+  const piExpanded = piOpen && !isGuest;
+
   const currentTab = menuItems.find(item =>
     item.path === '/' ? location.pathname === '/' : location.pathname.startsWith(item.path)
   )?.id || (location.pathname.startsWith('/settings') ? 'settings' : 'dashboard');
@@ -224,6 +252,62 @@ const SidebarInner: React.FC<{ signOut: () => void; user: any; profile: any }> =
   // Shared renderer for a flat (non-collapsible) main-nav item.
   const renderNavItem = (item: typeof menuItems[number]) => {
     const active = currentTab === item.id;
+    // Guests may open public surfaces; everything else prompts a sign-in
+    // (preserving the page) instead of bouncing them to the full Login screen.
+    const gated = isGuest && !isPublicPath(item.path);
+    const baseStyle: React.CSSProperties = {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '0.625rem',
+      padding: '0.4375rem 0.625rem',
+      borderRadius: '0.375rem',
+      fontSize: '0.8125rem',
+      fontWeight: active ? 500 : 400,
+      color: active ? 'var(--sidebar-accent-foreground)' : 'var(--sidebar-foreground)',
+      opacity: active ? 1 : 0.8,
+      background: active ? 'var(--sidebar-accent)' : 'transparent',
+      border: active ? '1px solid var(--sidebar-border)' : '1px solid transparent',
+      width: '100%',
+      textDecoration: 'none',
+    };
+    const hoverIn = (e: React.MouseEvent) => {
+      if (!active) {
+        (e.currentTarget as HTMLElement).style.background = 'var(--sidebar-accent)';
+        (e.currentTarget as HTMLElement).style.color = 'var(--sidebar-accent-foreground)';
+      }
+    };
+    const hoverOut = (e: React.MouseEvent) => {
+      if (!active) {
+        (e.currentTarget as HTMLElement).style.background = 'transparent';
+        (e.currentTarget as HTMLElement).style.color = 'var(--sidebar-foreground)';
+      }
+    };
+    const icon = (
+      <item.icon
+        size={15}
+        style={{ color: active ? 'var(--sidebar-primary)' : 'var(--sidebar-foreground)', opacity: active ? 1 : 0.6, flexShrink: 0 }}
+      />
+    );
+
+    if (gated) {
+      return (
+        <SidebarMenuItem key={item.id}>
+          <SidebarMenuButton
+            onClick={() => requireAuth({ title: `${item.label} is a workspace feature`, description: 'Create a free workspace to use it — your current session carries over.' })}
+            tooltip={collapsed ? `${item.label} — sign in` : undefined}
+            className="ds-transition-fast"
+            style={{ ...baseStyle, cursor: 'pointer' }}
+            onMouseEnter={hoverIn}
+            onMouseLeave={hoverOut}
+          >
+            {icon}
+            {!collapsed && <span style={{ flex: 1 }}>{item.label}</span>}
+            {!collapsed && <Lock size={11} style={{ color: 'var(--muted-foreground)', opacity: 0.6, flexShrink: 0 }} />}
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      );
+    }
+
     return (
       <SidebarMenuItem key={item.id}>
         <SidebarMenuButton
@@ -231,38 +315,11 @@ const SidebarInner: React.FC<{ signOut: () => void; user: any; profile: any }> =
           isActive={active}
           tooltip={collapsed ? item.label : undefined}
           className="ds-transition-fast"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.625rem',
-            padding: '0.4375rem 0.625rem',
-            borderRadius: '0.375rem',
-            fontSize: '0.8125rem',
-            fontWeight: active ? 500 : 400,
-            color: active ? 'var(--sidebar-accent-foreground)' : 'var(--sidebar-foreground)',
-            opacity: active ? 1 : 0.8,
-            background: active ? 'var(--sidebar-accent)' : 'transparent',
-            border: active ? '1px solid var(--sidebar-border)' : '1px solid transparent',
-            width: '100%',
-            textDecoration: 'none',
-          }}
-          onMouseEnter={(e) => {
-            if (!active) {
-              (e.currentTarget as HTMLElement).style.background = 'var(--sidebar-accent)';
-              (e.currentTarget as HTMLElement).style.color = 'var(--sidebar-accent-foreground)';
-            }
-          }}
-          onMouseLeave={(e) => {
-            if (!active) {
-              (e.currentTarget as HTMLElement).style.background = 'transparent';
-              (e.currentTarget as HTMLElement).style.color = 'var(--sidebar-foreground)';
-            }
-          }}
+          style={baseStyle}
+          onMouseEnter={hoverIn}
+          onMouseLeave={hoverOut}
         >
-          <item.icon
-            size={15}
-            style={{ color: active ? 'var(--sidebar-primary)' : 'var(--sidebar-foreground)', opacity: active ? 1 : 0.6, flexShrink: 0 }}
-          />
+          {icon}
           {!collapsed && <span>{item.label}</span>}
         </SidebarMenuButton>
       </SidebarMenuItem>
@@ -309,6 +366,28 @@ const SidebarInner: React.FC<{ signOut: () => void; user: any; profile: any }> =
               </div>
             </Link>
 
+            {isGuest ? (
+              /* Guests have no workspace — offer the institutional CTA instead
+                 of the workspace/project selectors. */
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <p style={{ fontSize: '0.55rem', fontWeight: 600, color: 'var(--muted-foreground)', letterSpacing: '0.06em', textTransform: 'uppercase', margin: 0 }}>Guest session</p>
+                <button
+                  onClick={() => requireAuth({ title: 'Create your workspace', description: 'Save research, build portfolios, and personalize your intelligence feed. Your current session carries over.' })}
+                  className="ds-transition-fast"
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                    width: '100%', padding: '0.4375rem 0.625rem', borderRadius: '0.5rem',
+                    background: 'var(--primary)', color: 'var(--primary-foreground)',
+                    border: 'none', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600,
+                  }}
+                >
+                  <Sparkles size={12} /> Create Workspace
+                </button>
+                <p style={{ fontSize: '0.5625rem', lineHeight: 1.4, color: 'var(--muted-foreground)', margin: 0 }}>
+                  Browsing public intelligence. Sign in to personalize.
+                </p>
+              </div>
+            ) : (<>
             {/* Workspace Select Menu */}
             <div className="relative">
               <p style={{ fontSize: '0.55rem', fontWeight: 600, color: 'var(--muted-foreground)', letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: '0.18rem' }}>Workspace</p>
@@ -493,6 +572,7 @@ const SidebarInner: React.FC<{ signOut: () => void; user: any; profile: any }> =
             <CreateWorkspaceModal isOpen={showCreateWs} onClose={() => setShowCreateWs(false)} />
             <CreateProjectModal isOpen={showCreateProj} onClose={() => setShowCreateProj(false)} />
             <WorkspaceSettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} />
+            </>)}
           </div>
         )}
       </SidebarHeader>
@@ -529,7 +609,7 @@ const SidebarInner: React.FC<{ signOut: () => void; user: any; profile: any }> =
                 background: isMarketRoute ? 'var(--sidebar-accent)' : 'transparent',
                 border: isMarketRoute ? '1px solid var(--sidebar-border)' : '1px solid transparent',
               }}
-              onClick={toggleMd}
+              onClick={onMarketClick}
             >
               <LayoutDashboard
                 size={15}
@@ -543,7 +623,7 @@ const SidebarInner: React.FC<{ signOut: () => void; user: any; profile: any }> =
             <>
               {/* Group header button */}
               <button
-                onClick={toggleMd}
+                onClick={onMarketClick}
                 aria-expanded={mdOpen}
                 style={{
                   display: 'flex',
@@ -602,7 +682,7 @@ const SidebarInner: React.FC<{ signOut: () => void; user: any; profile: any }> =
               </button>
 
               {/* Group children */}
-              {mdOpen && (
+              {mdExpanded && (
                 <div style={{ marginTop: 2, paddingLeft: 8 }}>
                   {MARKET_DASHBOARD_ITEMS.map((item) => {
                     const active = location.pathname === item.path || location.pathname.startsWith(item.path + '/');
@@ -685,7 +765,7 @@ const SidebarInner: React.FC<{ signOut: () => void; user: any; profile: any }> =
                 background: isPortfolioRoute ? 'var(--sidebar-accent)' : 'transparent',
                 border: isPortfolioRoute ? '1px solid var(--sidebar-border)' : '1px solid transparent',
               }}
-              onClick={togglePi}
+              onClick={onPortfolioClick}
             >
               <Briefcase
                 size={15}
@@ -698,7 +778,7 @@ const SidebarInner: React.FC<{ signOut: () => void; user: any; profile: any }> =
           ) : (
             <>
               <button
-                onClick={togglePi}
+                onClick={onPortfolioClick}
                 aria-expanded={piOpen}
                 style={{
                   display: 'flex',
@@ -755,7 +835,7 @@ const SidebarInner: React.FC<{ signOut: () => void; user: any; profile: any }> =
                 </span>
               </button>
 
-              {piOpen && (
+              {piExpanded && (
                 <div style={{ marginTop: 2, paddingLeft: 8 }}>
                   {PORTFOLIO_INTELLIGENCE_ITEMS.map((item) => {
                     const isAwareness = item.id === 'portfolio-awareness';
@@ -829,6 +909,35 @@ const SidebarInner: React.FC<{ signOut: () => void; user: any; profile: any }> =
       {/* Footer: User Profile & Settings Navigation */}
       <SidebarFooter className="px-2 pb-3" style={{ borderTop: '1px solid var(--sidebar-border)' }}>
         <div style={{ paddingTop: '0.75rem' }}>
+          {isGuest ? (
+            <button
+              onClick={() => requireAuth({ title: 'Sign in to Deplyze Quant', description: 'Access your settings, saved research, and personalized intelligence.' })}
+              className="ds-transition-fast"
+              title={collapsed ? 'Sign in' : undefined}
+              style={{
+                display: 'flex', alignItems: 'center',
+                justifyContent: collapsed ? 'center' : 'flex-start',
+                gap: collapsed ? 0 : '0.625rem',
+                padding: collapsed ? '0.375rem' : '0.5rem',
+                borderRadius: '0.5rem', border: '1px solid var(--sidebar-border)',
+                background: 'transparent', cursor: 'pointer', width: '100%', boxSizing: 'border-box',
+              }}
+            >
+              <div style={{
+                width: '1.875rem', height: '1.875rem', borderRadius: '50%', flexShrink: 0,
+                background: 'var(--sidebar-accent)', border: '1px solid var(--sidebar-border)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <Lock size={13} style={{ color: 'var(--sidebar-foreground)', opacity: 0.7 }} />
+              </div>
+              {!collapsed && (
+                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '0.125rem', textAlign: 'left' }}>
+                  <p style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--sidebar-foreground)', margin: 0, lineHeight: 1.2 }}>Sign in</p>
+                  <p style={{ fontSize: '0.625rem', color: 'var(--sidebar-foreground)', opacity: 0.6, margin: 0, lineHeight: 1.2 }}>Guest session</p>
+                </div>
+              )}
+            </button>
+          ) : (
           <Link
             to="/settings"
             className="ds-transition-fast"
@@ -945,6 +1054,7 @@ const SidebarInner: React.FC<{ signOut: () => void; user: any; profile: any }> =
               />
             )}
           </Link>
+          )}
         </div>
       </SidebarFooter>
     </Sidebar>
@@ -952,7 +1062,8 @@ const SidebarInner: React.FC<{ signOut: () => void; user: any; profile: any }> =
 };
 
 export const Layout: React.FC<LayoutProps> = ({ children }) => {
-  const { user, profile, signOut } = useAuth();
+  const { user, profile, signOut, isGuest } = useAuth();
+  const { requireAuth } = useAuthGate();
   const { currentWorkspace, currentProject } = useWorkspace();
   const location = useLocation();
 
@@ -1010,10 +1121,23 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                 }}
               />
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8125rem' }}>
+                {isGuest ? (
+                  /* Guests have no workspace/asset context — show a calm public
+                     indicator instead of placeholder workspace names. */
+                  <div style={{
+                    display: 'inline-flex', alignItems: 'center', gap: '0.375rem',
+                    padding: '0.1875rem 0.5rem', borderRadius: '0.25rem',
+                    background: 'var(--secondary)', border: '1px solid var(--border)',
+                    fontSize: '0.75rem', fontWeight: 600, color: 'var(--foreground)',
+                  }}>
+                    <span style={{ fontSize: '0.55rem', fontWeight: 800, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Public</span>
+                    <span>Intelligence</span>
+                  </div>
+                ) : (<>
                 {/* Workspace indicator chip */}
-                <div style={{ 
-                  display: 'inline-flex', 
-                  alignItems: 'center', 
+                <div style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
                   gap: '0.375rem',
                   padding: '0.1875rem 0.5rem',
                   borderRadius: '0.25rem',
@@ -1030,9 +1154,9 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                 <span style={{ color: 'var(--muted-foreground)', opacity: 0.6, fontFamily: 'monospace', fontSize: '0.75rem', userSelect: 'none' }}>/</span>
 
                 {/* Project/Site indicator chip */}
-                <div style={{ 
-                  display: 'inline-flex', 
-                  alignItems: 'center', 
+                <div style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
                   gap: '0.375rem',
                   padding: '0.1875rem 0.5rem',
                   borderRadius: '0.25rem',
@@ -1045,6 +1169,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                   <span style={{ fontSize: '0.55rem', fontWeight: 800, color: 'var(--chart-2)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>ASSET</span>
                   <span className="truncate" style={{ maxWidth: '7.5rem' }}>{currentProject?.name || 'Institutional Portfolio'}</span>
                 </div>
+                </>)}
 
                 <span style={{ color: 'var(--muted-foreground)', opacity: 0.6, fontFamily: 'monospace', fontSize: '0.75rem', userSelect: 'none' }}>/</span>
 
@@ -1059,6 +1184,12 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
               <Link
                 to="/copilot"
                 title="Deplyze Assistant — context-aware research copilot"
+                onClick={(e) => {
+                  if (isGuest) {
+                    e.preventDefault();
+                    requireAuth({ title: 'Deplyze Assistant', description: 'Sign in to use the context-aware research copilot. Your session carries over.' });
+                  }
+                }}
                 className="ds-transition-fast"
                 style={{
                   display: 'inline-flex',
@@ -1123,21 +1254,41 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                 {theme === 'light' ? <Moon size={13} /> : <Sun size={13} />}
               </button>
 
-              {/* Live status pill */}
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.375rem',
-                padding: '0.25rem 0.625rem',
-                borderRadius: '999px',
-                background: 'color-mix(in srgb, var(--chart-2) 12%, transparent)',
-                border: '1px solid color-mix(in srgb, var(--chart-2) 25%, transparent)',
-              }}>
-                <span className="ds-dot ds-dot-live" />
-                <span style={{ fontSize: '0.625rem', fontWeight: 600, color: 'var(--chart-2)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-                  System Active
-                </span>
-              </div>
+              {/* Top-right slot: guests get the institutional CTA; full accounts
+                  keep the live system indicator. */}
+              {isGuest ? (
+                <button
+                  onClick={() => requireAuth({ title: 'Create your workspace', description: 'Save research, build portfolios, and personalize your intelligence feed. Your current session carries over.' })}
+                  className="ds-transition-fast"
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: '0.375rem',
+                    height: '1.75rem', padding: '0 0.75rem', borderRadius: '999px',
+                    background: 'var(--primary)', color: 'var(--primary-foreground)',
+                    border: 'none', cursor: 'pointer', fontSize: '0.6875rem', fontWeight: 600,
+                    letterSpacing: '0.02em',
+                  }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = '0.92'; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
+                >
+                  <Sparkles size={12} />
+                  <span>Create Workspace</span>
+                </button>
+              ) : (
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.375rem',
+                  padding: '0.25rem 0.625rem',
+                  borderRadius: '999px',
+                  background: 'color-mix(in srgb, var(--chart-2) 12%, transparent)',
+                  border: '1px solid color-mix(in srgb, var(--chart-2) 25%, transparent)',
+                }}>
+                  <span className="ds-dot ds-dot-live" />
+                  <span style={{ fontSize: '0.625rem', fontWeight: 600, color: 'var(--chart-2)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                    System Active
+                  </span>
+                </div>
+              )}
             </div>
           </header>
 

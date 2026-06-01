@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './components/AuthProvider';
 import { WorkspaceProvider, useWorkspace } from './components/WorkspaceContext';
+import { AuthGateProvider } from './components/auth/AuthGate';
 import { Layout } from './components/Layout';
 import { Login } from './components/Login';
 import { Settings } from './components/Settings';
@@ -71,16 +72,32 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   return <Layout>{children}</Layout>;
 };
 
+/**
+ * PublicRoute — open to guests AND full accounts. Renders the same Layout as a
+ * gated route (the Layout itself adapts to guest sessions: institutional CTA,
+ * no workspace selectors). Full accounts still wait for their workspace to load
+ * so the workspace chrome is correct; guests have an inert workspace context
+ * (loading resolves immediately), so they fall straight through.
+ */
+const PublicRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { loading: authLoading } = useAuth();
+  const { loading: workspaceLoading } = useWorkspace();
+  if (authLoading || workspaceLoading) return <LoadingScreen />;
+  return <Layout>{children}</Layout>;
+};
+
 export default function App() {
   return (
     <AuthProvider>
       <WorkspaceProvider>
         <BrowserRouter>
+          <AuthGateProvider>
           <DrawerProvider>
           <Routes>
             <Route path="/login"                element={<Login />} />
-            <Route path="/"                     element={<ProtectedRoute><MarketHome /></ProtectedRoute>} />
-            <Route path="/terminal"             element={<ProtectedRoute><IntelligenceTerminal /></ProtectedRoute>} />
+            {/* ── Public surfaces (guests + full accounts) ── */}
+            <Route path="/"                     element={<PublicRoute><MarketHome /></PublicRoute>} />
+            <Route path="/terminal"             element={<PublicRoute><IntelligenceTerminal /></PublicRoute>} />
             <Route path="/investigations"       element={<ProtectedRoute><Investigations /></ProtectedRoute>} />
             {/* Single-asset research */}
             <Route path="/instruments/:symbol"     element={<ProtectedRoute><InstrumentDetail /></ProtectedRoute>} />
@@ -120,6 +137,7 @@ export default function App() {
           </Routes>
           <Toaster />
           </DrawerProvider>
+          </AuthGateProvider>
         </BrowserRouter>
       </WorkspaceProvider>
     </AuthProvider>

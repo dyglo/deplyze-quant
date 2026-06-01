@@ -64,7 +64,7 @@ export async function getMacroSeries(id: string): Promise<MacroSeriesResult> {
     api_key: k,
     file_type: 'json',
     sort_order: 'asc',
-    observation_start: '1990-01-01',
+    observation_start: process.env.FRED_OBSERVATION_START ?? '1960-01-01',
   });
 
   const resp = await getJson<FredObsResp>('fred', `${BASE}/series/observations?${params}`);

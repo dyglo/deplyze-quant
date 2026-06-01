@@ -47,7 +47,7 @@ export const ProgressTrace: React.FC<Props> = ({
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
           <StatusDot state={allDone ? 'done' : 'failed'} />
           <span style={{ fontSize: 12, color: 'var(--foreground)' }}>
-            {allDone ? 'Investigation complete' : 'Investigation finished with errors'}
+            {allDone ? 'Deep Research complete' : 'Deep Research finished with errors'}
           </span>
           <Sep />
           <Mono>{fmtMs(total)}</Mono>
@@ -69,8 +69,8 @@ export const ProgressTrace: React.FC<Props> = ({
             {busy
               ? 'Investigating…'
               : allDone
-                ? 'Investigation complete'
-                : 'Investigation finished'}
+                ? 'Deep Research complete'
+                : 'Deep Research finished'}
           </span>
         </span>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>

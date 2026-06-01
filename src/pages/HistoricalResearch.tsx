@@ -39,6 +39,9 @@ import { RollingVolChart } from '../components/quant/historical-research/Rolling
 import { CorrelationMatrixWidget } from '../components/quant/historical-research/CorrelationMatrixWidget';
 import { RiskReturnScatter } from '../components/quant/historical-research/RiskReturnScatter';
 import { RegimeTable } from '../components/quant/historical-research/RegimeTable';
+import { SeriesSmallMultiples } from '../components/quant/historical-research/SeriesSmallMultiples';
+import { MonthlyCorrelationMatrix } from '../components/quant/historical-research/MonthlyCorrelationMatrix';
+import { CycleSnapshotTable } from '../components/quant/historical-research/CycleSnapshotTable';
 import { FollowUpThread, type FollowupTurn } from '../components/quant/historical-research/FollowUpThread';
 import { FollowUpInput } from '../components/quant/historical-research/FollowUpInput';
 import { seriesColor } from '../components/quant/historical-research/palette';
@@ -52,12 +55,14 @@ import { useAuth } from '../components/AuthProvider';
 const STORAGE_PREFIX = 'hr:';
 
 type WidgetId =
-  | 'regimes' | 'normalized' | 'drawdown' | 'rolling' | 'rollingvol'
+  | 'regimes' | 'snapshot' | 'levels' | 'normalized' | 'drawdown' | 'rolling' | 'rollingvol'
   | 'annual' | 'distribution' | 'correlation' | 'scatter'
-  | 'performance' | 'reasoning' | 'observations' | 'followups';
+  | 'monthlycorr' | 'performance' | 'reasoning' | 'observations' | 'followups';
 
 const ALL_WIDGETS: { id: WidgetId; label: string }[] = [
   { id: 'regimes',      label: 'Regime comparison' },
+  { id: 'snapshot',     label: 'Cycle snapshot' },
+  { id: 'levels',       label: 'Raw series panels' },
   { id: 'performance',  label: 'Performance summary' },
   { id: 'normalized',   label: 'Normalized history' },
   { id: 'drawdown',     label: 'Drawdown' },
@@ -66,24 +71,25 @@ const ALL_WIDGETS: { id: WidgetId; label: string }[] = [
   { id: 'annual',       label: 'Annual returns' },
   { id: 'distribution', label: 'Return distribution' },
   { id: 'correlation',  label: 'Correlation matrix' },
+  { id: 'monthlycorr',  label: 'Monthly correlation' },
   { id: 'scatter',      label: 'Risk vs return' },
   { id: 'reasoning',    label: 'Reasoning' },
   { id: 'observations', label: 'Observations' },
   { id: 'followups',    label: 'Follow-ups' },
 ];
 
-function newInvestigationId(): string {
+function newReportId(): string {
   return `i_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
 }
 
-function readInvestigation(id: string): ResearchResult | null {
+function readReport(id: string): ResearchResult | null {
   try {
     const raw = sessionStorage.getItem(STORAGE_PREFIX + id);
     return raw ? (JSON.parse(raw) as ResearchResult) : null;
   } catch { return null; }
 }
 
-function writeInvestigation(id: string, r: ResearchResult): void {
+function writeReport(id: string, r: ResearchResult): void {
   try { sessionStorage.setItem(STORAGE_PREFIX + id, JSON.stringify(r)); } catch { /* quota */ }
 }
 
@@ -98,14 +104,16 @@ export const HistoricalResearch: React.FC = () => {
   const { steps, busy, result, error, run, reset, hydrate } = useHistoricalResearch();
 
   const initialQuery = (location.state as { prefillQuery?: string } | null)?.prefillQuery ?? '';
+  const routeError = (location.state as { routeError?: string } | null)?.routeError ?? '';
   const [missing, setMissing] = useState(false);
   const [recentTick, setRecentTick] = useState(0);
+  const lastQueryRef = useRef(initialQuery);
 
   // Ids created by a local run() in THIS session. The URL→state sync effect must
-  // never treat such an id as a "missing" saved investigation — it has no
+  // never treat such an id as a missing saved report — it has no
   // Firestore doc yet (and won't until the user saves), but the pipeline is
   // running or has produced an in-memory result. Without this guard the async
-  // Firestore lookup races the in-flight run and flashes "Investigation not found".
+  // Firestore lookup races the in-flight run and flashes a missing-report state.
   const localRunIdsRef = useRef<Set<string>>(new Set());
   // Live mirror of `busy` for use inside async callbacks (avoids stale closures).
   const busyRef = useRef(busy);
@@ -125,16 +133,16 @@ export const HistoricalResearch: React.FC = () => {
   useEffect(() => {
     if (!routeId) { setMissing(false); return; }
     if (result) return;
-    // A freshly-created investigation from this session's run() — never "missing".
+    // A freshly-created report from this session's run() — never "missing".
     if (localRunIdsRef.current.has(routeId)) { setMissing(false); return; }
-    const stored = readInvestigation(routeId);
+    const stored = readReport(routeId);
     if (stored) {
       hydrate(stored);
       setFollowups(stored.followups ?? []);
       setMissing(false);
       return;
     }
-    // Not in sessionStorage — try Firestore (saved investigations).
+    // Not in sessionStorage — try Firestore (saved reports).
     if (user?.uid) {
       let cancelled = false;
       loadInvestigation(user.uid, routeId)
@@ -143,34 +151,51 @@ export const HistoricalResearch: React.FC = () => {
           if (r) {
             hydrate(r);
             setFollowups(r.followups ?? []);
-            writeInvestigation(routeId, r); // warm sessionStorage cache
+            writeReport(routeId, r); // warm sessionStorage cache
             setSavedState('saved');
             setMissing(false);
           } else if (!busyRef.current && !localRunIdsRef.current.has(routeId)) {
-            const stillIdle = steps.every((s) => s.state === 'pending');
-            if (stillIdle) setMissing(true);
+            navigate('/research', {
+              replace: true,
+              state: { routeError: 'That saved Deep Research report is not available in this session.' },
+            });
           }
         })
         .catch(() => {
-          if (!cancelled && !busyRef.current && !localRunIdsRef.current.has(routeId)) setMissing(true);
+          if (!cancelled && !busyRef.current && !localRunIdsRef.current.has(routeId)) {
+            navigate('/research', {
+              replace: true,
+              state: { routeError: 'The saved Deep Research report could not be loaded.' },
+            });
+          }
         });
       return () => { cancelled = true; };
     } else if (!busyRef.current) {
-      const stillIdle = steps.every((s) => s.state === 'pending');
-      if (stillIdle) setMissing(true);
+      navigate('/research', {
+        replace: true,
+        state: { routeError: 'Sign in again to open that saved Deep Research report.' },
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routeId, user?.uid]);
 
+  useEffect(() => {
+    if (!routeId || !error || busy || result) return;
+    navigate('/research', {
+      replace: true,
+      state: { routeError: error, prefillQuery: lastQueryRef.current },
+    });
+  }, [routeId, error, busy, result, navigate]);
+
   // ── Persist + bump recent rail ────────────────────────────────────────
   useEffect(() => {
     if (result && routeId) {
-      writeInvestigation(routeId, result);
+      writeReport(routeId, result);
       setRecentTick((t) => t + 1);
     }
   }, [result, routeId]);
 
-  // Reset toolbar UI when a fresh investigation loads
+  // Reset toolbar UI when a fresh report loads
   useEffect(() => {
     setRefineOpen(false);
     setHidden(new Set());
@@ -190,7 +215,8 @@ export const HistoricalResearch: React.FC = () => {
 
   // ── Actions ────────────────────────────────────────────────────────────
   const submit = useCallback((q: string) => {
-    const id = newInvestigationId();
+    const id = newReportId();
+    lastQueryRef.current = q;
     localRunIdsRef.current.add(id);
     setMissing(false);
     navigate(`/research/i/${id}`, { replace: false });
@@ -198,7 +224,8 @@ export const HistoricalResearch: React.FC = () => {
   }, [navigate, run]);
 
   const submitQuickBuild = useCallback((plan: ResearchPlan, query: string) => {
-    const id = newInvestigationId();
+    const id = newReportId();
+    lastQueryRef.current = query;
     localRunIdsRef.current.add(id);
     setMissing(false);
     navigate(`/research/i/${id}`, { replace: false });
@@ -212,14 +239,14 @@ export const HistoricalResearch: React.FC = () => {
     navigate('/research', { state: { prefillQuery: q } });
   }, [navigate, result]);
 
-  const newInvestigation = useCallback(() => {
+  const newReport = useCallback(() => {
     reset();
     navigate('/research');
   }, [navigate, reset]);
 
   const applyRefinedPlan = useCallback((nextPlan: ResearchPlan) => {
     if (!result) return;
-    const id = newInvestigationId();
+    const id = newReportId();
     localRunIdsRef.current.add(id);
     setMissing(false);
     navigate(`/research/i/${id}`, { replace: false });
@@ -234,7 +261,7 @@ export const HistoricalResearch: React.FC = () => {
     });
   }, [applyRefinedPlan, result]);
 
-  const openInvestigation = useCallback((id: string) => {
+  const openReport = useCallback((id: string) => {
     setMissing(false);
     navigate(`/research/i/${id}`);
   }, [navigate]);
@@ -278,7 +305,7 @@ export const HistoricalResearch: React.FC = () => {
       // Persist back to sessionStorage and Firestore (if previously saved)
       if (routeId) {
         const enriched: ResearchResult = { ...result, followups: next };
-        writeInvestigation(routeId, enriched);
+        writeReport(routeId, enriched);
         if (savedState === 'saved' && user?.uid) {
           saveInvestigation(user.uid, routeId, enriched).catch(() => {});
         }
@@ -295,17 +322,22 @@ export const HistoricalResearch: React.FC = () => {
   // Only surface widgets that have data on this run.
   const availableWidgets = useMemo((): WidgetId[] => {
     if (!result) return [];
+    const hasMarket = result.assets.some((a) => !isMacroSeries(a.symbol));
+    const macroOnly = result.assets.length > 0 && !hasMarket;
     const out: WidgetId[] = [];
     if ((result.regimeMetrics ?? []).length > 0) out.push('regimes');
-    if (result.analytics.performance.length) out.push('performance');
+    if (result.assets.length > 0) out.push('snapshot');
+    if (result.assets.length > 0) out.push('levels');
+    if (hasMarket && result.analytics.performance.length) out.push('performance');
     if (result.assets.length > 0) out.push('normalized');
-    if (result.analytics.drawdowns.length) out.push('drawdown');
-    if (result.rollingCorrelations.length > 0) out.push('rolling');
-    if (result.analytics.rollingVols.some((rv) => rv.series.length > 0)) out.push('rollingvol');
-    if (result.analytics.annualReturns.length > 0) out.push('annual');
-    if (result.analytics.distributions.some((d) => d.buckets.length > 0)) out.push('distribution');
-    if (result.analytics.corrMatrix) out.push('correlation');
-    if (result.analytics.performance.length >= 1) out.push('scatter');
+    if (hasMarket && result.analytics.drawdowns.length) out.push('drawdown');
+    if (!macroOnly && result.rollingCorrelations.length > 0) out.push('rolling');
+    if (result.assets.length >= 2) out.push('monthlycorr');
+    if (hasMarket && result.analytics.rollingVols.some((rv) => rv.series.length > 0)) out.push('rollingvol');
+    if (hasMarket && result.analytics.annualReturns.length > 0) out.push('annual');
+    if (hasMarket && result.analytics.distributions.some((d) => d.buckets.length > 0)) out.push('distribution');
+    if (hasMarket && result.analytics.corrMatrix) out.push('correlation');
+    if (hasMarket && result.analytics.performance.length >= 1) out.push('scatter');
     out.push('reasoning');
     out.push('observations');
     out.push('followups');
@@ -330,6 +362,9 @@ export const HistoricalResearch: React.FC = () => {
 
   // ── Render ─────────────────────────────────────────────────────────────
   const landing = !routeId;
+  const hasMarketSeries = result ? result.assets.some((a) => !isMacroSeries(a.symbol)) : false;
+  const marketAssets = result ? result.assets.filter((a) => !isMacroSeries(a.symbol)) : [];
+  const marketSymbols = marketAssets.map((a) => a.symbol);
 
   const resultActions = result ? (
     <ResultToolbar
@@ -346,7 +381,7 @@ export const HistoricalResearch: React.FC = () => {
       }
       onBack={back}
       onEditQuery={edit}
-      onNew={newInvestigation}
+      onNew={newReport}
       onSave={handleSave}
       saveDisabled={!user?.uid || savedState === 'saving'}
       saveState={savedState}
@@ -360,21 +395,22 @@ export const HistoricalResearch: React.FC = () => {
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 24px 64px' }}>
       <PageHeader
-        title={landing ? 'Deep Research' : 'Investigation'}
+        title="Deep Research"
         subtitle={landing
           ? 'Ask a historical question or build one structurally — the workspace retrieves price history, computes a full performance picture, and generates grounded commentary.'
-          : (result?.query ? `“${result.query}”` : 'Loading investigation…')}
+          : (result?.query ? `“${result.query}”` : 'Loading Deep Research…')}
         actions={landing ? <LandingToolbar /> : resultActions}
       />
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
         {landing && (
           <>
+            {routeError && <ErrorPanel message={routeError} />}
             <InputModeSwitch mode={inputMode} onChange={setInputMode} />
             {inputMode === 'nl'
               ? <CommandBar busy={busy} onSubmit={submit} initial={initialQuery} />
               : <QuickBuild busy={busy} onSubmit={submitQuickBuild} />}
-            <RecentRail onOpen={openInvestigation} refreshKey={recentTick} />
+            <RecentRail onOpen={openReport} refreshKey={recentTick} />
             {inputMode === 'nl' && <EmptyState onPick={submit} />}
           </>
         )}
@@ -414,6 +450,19 @@ export const HistoricalResearch: React.FC = () => {
                   onApply={applyRefinedPlan}
                 />
 
+                {isVisible('snapshot') && result.assets.length > 0 && (
+                  <Widget
+                    title="Cycle snapshot"
+                    info="Compact latest, one-year, three-year and full-window change table for every retrieved series. Macro rows use point changes; market rows use percentage changes."
+                    caption={`${result.assets.length} series · latest state`}
+                    menuItems={[
+                      { id: 'hide', label: 'Hide widget', icon: <EyeOff size={12} />, onSelect: () => toggleWidget('snapshot') },
+                    ]}
+                  >
+                    <CycleSnapshotTable assets={result.assets} />
+                  </Widget>
+                )}
+
                 {isVisible('regimes') && (result.regimeMetrics ?? []).length > 0 && (
                   <Widget
                     title="Regime comparison"
@@ -430,7 +479,24 @@ export const HistoricalResearch: React.FC = () => {
                   </Widget>
                 )}
 
-                {isVisible('performance') && (
+                {isVisible('levels') && result.assets.length > 0 && (
+                  <Widget
+                    title="Raw series panels"
+                    info="Small multiples with one y-axis per requested series. Use this when a report mixes rates, macro levels, ETF prices, commodities or currency proxies."
+                    caption={`${result.assets.length} separate axes`}
+                    legend={result.assets.map<LegendChip>((a, i) => ({
+                      label: a.symbol,
+                      color: seriesColor(i),
+                    }))}
+                    menuItems={[
+                      { id: 'hide', label: 'Hide widget', icon: <EyeOff size={12} />, onSelect: () => toggleWidget('levels') },
+                    ]}
+                  >
+                    <SeriesSmallMultiples assets={result.assets} />
+                  </Widget>
+                )}
+
+                {isVisible('performance') && hasMarketSeries && (
                   <Widget
                     title="Performance summary"
                     info="Per-asset risk and return statistics computed over the analysis window: total return, CAGR, annualised vol, Sharpe, Sortino, max drawdown, Calmar, skew and excess kurtosis."
@@ -460,7 +526,7 @@ export const HistoricalResearch: React.FC = () => {
                   </Widget>
                 )}
 
-                {isVisible('drawdown') && (
+                {isVisible('drawdown') && hasMarketSeries && (
                   <Widget
                     title="Drawdown"
                     info="Percentage below running peak for each asset. Synchronized with the Normalized chart — hover anywhere to align all time-series."
@@ -494,7 +560,20 @@ export const HistoricalResearch: React.FC = () => {
                   </Widget>
                 )}
 
-                {isVisible('rollingvol') && (
+                {isVisible('monthlycorr') && result.assets.length >= 2 && (
+                  <Widget
+                    title="Monthly correlation"
+                    info="Pairwise correlation heatmap computed on calendar-month changes. This keeps macro data and market data comparable even when their native frequencies differ."
+                    caption={`${result.assets.length} series · monthly aligned`}
+                    menuItems={[
+                      { id: 'hide', label: 'Hide widget', icon: <EyeOff size={12} />, onSelect: () => toggleWidget('monthlycorr') },
+                    ]}
+                  >
+                    <MonthlyCorrelationMatrix assets={result.assets} />
+                  </Widget>
+                )}
+
+                {isVisible('rollingvol') && hasMarketSeries && (
                   <Widget
                     title="Rolling volatility"
                     info="60-bar annualised volatility (standard deviation of daily returns × √252). Synchronized with other time-series."
@@ -510,7 +589,7 @@ export const HistoricalResearch: React.FC = () => {
                   </Widget>
                 )}
 
-                {isVisible('annual') && (
+                {isVisible('annual') && hasMarketSeries && (
                   <Widget
                     title="Annual returns"
                     info="Calendar-year P&L per asset, computed from first-to-last close in each year."
@@ -520,13 +599,13 @@ export const HistoricalResearch: React.FC = () => {
                   >
                     <AnnualReturnsChart
                       rows={result.analytics.annualReturns}
-                      symbols={result.assets.map((a) => a.symbol)}
+                      symbols={marketSymbols}
                     />
                   </Widget>
                 )}
 
                 <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))' }}>
-                  {isVisible('distribution') && (
+                  {isVisible('distribution') && hasMarketSeries && (
                     <Widget
                       title="Return distribution"
                       info="Histogram of daily simple returns. Solid dashed line marks the mean; dotted lines mark ±1 standard deviation."
@@ -538,7 +617,7 @@ export const HistoricalResearch: React.FC = () => {
                     </Widget>
                   )}
 
-                  {isVisible('scatter') && result.analytics.performance.length >= 1 && (
+                  {isVisible('scatter') && hasMarketSeries && result.analytics.performance.length >= 1 && (
                     <Widget
                       title="Risk vs return"
                       info="Each asset positioned by annualised volatility (x) and CAGR (y). The benchmark, when set, is labelled."
@@ -602,7 +681,7 @@ export const HistoricalResearch: React.FC = () => {
                 {isVisible('followups') && (
                   <Widget
                     title="Follow-ups"
-                    info="Ask grounded follow-up questions about this investigation. The model can only cite numbers that appear in the Observations panel above."
+                    info="Ask grounded follow-up questions about this report. The model can only cite numbers that appear in the Observations panel above."
                     caption={`${followups.length} turn${followups.length === 1 ? '' : 's'}`}
                     menuItems={[
                       { id: 'hide', label: 'Hide widget', icon: <EyeOff size={12} />, onSelect: () => toggleWidget('followups') },
@@ -642,6 +721,16 @@ function followupStarters(r: ResearchResult): string[] {
   if (a0 && a1) out.push(`When did ${a0} and ${a1} decouple most?`);
   if (r.rollingCorrelations.length > 0) out.push('What did the correlation do during crisis windows?');
   return out.slice(0, 3);
+}
+
+const MACRO_SERIES_IDS = new Set([
+  'CPI', 'INFLATION', 'FEDFUNDS', 'DGS2', 'DGS3M', 'DGS5', 'DGS10',
+  'DGS20', 'DGS30', 'T10Y2Y', 'DFII10', 'T5YIE', 'UNRATE', 'UNEMP',
+  'GDP', 'RETAILSALES',
+]);
+
+function isMacroSeries(symbol: string): boolean {
+  return MACRO_SERIES_IDS.has(symbol.toUpperCase());
 }
 
 // ─── kpi helpers ─────────────────────────────────────────────────────────
@@ -726,7 +815,8 @@ const DataCoverageNote: React.FC<{ w: ResearchResult['dataWindow'] }> = ({ w }) 
         }}>
           Data coverage · {w.actualYears.toFixed(1)} of {w.requestedYears} years
         </div>
-        Daily history from current providers reaches ~20 years for US ETFs.
+        {w.coverageNote ?? 'Daily history from current providers reaches ~20 years for US ETFs.'}
+        {' '}
         Analysis covers <strong style={{ color: 'var(--foreground)' }}>{w.actualStart} → {w.actualEnd}</strong>;
         conclusions below describe that window only.
         <div style={{ marginTop: 8, height: 4, background: 'var(--border)', borderRadius: 2, overflow: 'hidden' }}>
@@ -749,7 +839,7 @@ const ErrorPanel: React.FC<{ message: string }> = ({ message }) => (
     <div style={{
       fontSize: 10, letterSpacing: 0.8, textTransform: 'uppercase',
       color: 'var(--muted-foreground)', marginBottom: 4,
-    }}>Could not complete investigation</div>
+    }}>Could not complete Deep Research</div>
     {message}
   </div>
 );
@@ -766,8 +856,8 @@ const MissingPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => (
     <div style={{
       fontSize: 10, letterSpacing: 0.8, textTransform: 'uppercase',
       marginBottom: 4,
-    }}>Investigation not found</div>
-    This investigation isn't available in your current session. Start a new one to continue.
+    }}>Deep Research report not found</div>
+    This report isn't available in your current session. Start a new one to continue.
     <div style={{ marginTop: 10 }}>
       <button
         onClick={onBack}
@@ -775,7 +865,7 @@ const MissingPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => (
           padding: '6px 10px', border: '1px solid var(--border)', borderRadius: 6,
           background: 'transparent', color: 'var(--foreground)', cursor: 'pointer', fontSize: 12,
         }}
-      >Go to landing</button>
+      >Back to Deep Research</button>
     </div>
   </div>
 );

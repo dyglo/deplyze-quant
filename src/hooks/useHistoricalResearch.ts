@@ -8,6 +8,7 @@
 
 import { useCallback, useRef, useState } from 'react';
 import { fetchOHLCV } from '../services/marketService';
+import { fetchMacroSeries } from '../services/macroService';
 import {
   planResearch,
   reasonOverObservations,
@@ -75,6 +76,7 @@ export interface ResearchResult {
     requestedYears: number;
     actualYears: number;
     shortfall: boolean;
+    coverageNote?: string;
   };
   steps: ProgressStep[];
   totalElapsedMs: number;
@@ -92,6 +94,11 @@ const BARS_PER_YEAR_DAILY  = 252;
 const BARS_PER_YEAR_WEEKLY =  52;
 const ROLL_WINDOW_DAILY    =  60;   // ~3 months of trading days
 const ROLL_WINDOW_WEEKLY   =  26;   // ~6 months of weeks
+const MACRO_SERIES_IDS = new Set([
+  'CPI', 'INFLATION', 'FEDFUNDS', 'DGS2', 'DGS3M', 'DGS5', 'DGS10',
+  'DGS20', 'DGS30', 'T10Y2Y', 'DFII10', 'T5YIE', 'UNRATE', 'UNEMP',
+  'GDP', 'RETAILSALES',
+]);
 
 const INITIAL_STEPS: ProgressStep[] = [
   { id: 'plan',     label: 'Resolving intent',          state: 'pending', log: [] },
@@ -189,7 +196,7 @@ export function useHistoricalResearch() {
         finish('plan', { detail: planDegraded ? `${planSummary(plan)} · degraded` : planSummary(plan) });
         if (planDegraded) {
           // Institutional transparency: the LLM planner was unavailable, so we
-          // derived the plan locally. The investigation still proceeds.
+          // derived the plan locally. The report still proceeds.
           appendLog('plan', { type: 'action', prefix: '✓', text: 'planner offline — derived plan locally from your query' });
         }
         appendLog('plan', { type: 'narrative', text: `Resolved ${plan.assets.join(', ')} — ${prettyIntent(plan.intent)} over ${planWindow(plan)}.` });
@@ -214,16 +221,20 @@ export function useHistoricalResearch() {
       appendLog('retrieve', { type: 'narrative', text: `Let me fetch OHLCV price history for ${symbols.join(', ')}.` });
 
       const barLabel = useWeekly ? 'weekly' : 'daily';
+      const hasMacroSeries = symbols.some(isMacroSeriesId);
 
       // Pre-emit all "→ requesting" entries before any fetch starts (sync).
       for (const sym of symbols) {
-        appendLog('retrieve', { type: 'action', prefix: '→', text: `${sym}: requesting ${requestedYears}Y ${barLabel} bars` });
+        const label = isMacroSeriesId(sym) ? 'FRED macro observations' : `${barLabel} bars`;
+        appendLog('retrieve', { type: 'action', prefix: '→', text: `${sym}: requesting ${requestedYears}Y ${label}` });
       }
 
       let fetchedCount = 0;
       const bars = await Promise.all(symbols.map(async (sym) => {
         try {
-          const r = await fetchOHLCV(sym, interval, outputsize);
+          const r = isMacroSeriesId(sym)
+            ? await fetchMacroHistory(sym, plan.timeframe)
+            : await fetchMarketHistory(sym, interval, outputsize, plan.timeframe);
           fetchedCount++;
           appendLog('retrieve', { type: 'action', prefix: '✓', text: `${sym}: ${r.bars.length.toLocaleString()} bars received` });
           if (fetchedCount < symbols.length) {
@@ -248,7 +259,9 @@ export function useHistoricalResearch() {
         return;
       }
       finish('retrieve', {
-        detail: `${usable.length}/${symbols.length} assets · up to ${outputsize.toLocaleString()} bars each`,
+        detail: hasMacroSeries
+          ? `${usable.length}/${symbols.length} series · FRED/direct + provider history`
+          : `${usable.length}/${symbols.length} assets · up to ${outputsize.toLocaleString()} bars each`,
       });
 
       // ── 3. Compute ─────────────────────────────────────────────────────
@@ -295,13 +308,16 @@ export function useHistoricalResearch() {
         }
       }
 
+      const marketUsable = usable.filter((u) => !isMacroSeriesId(u.symbol));
       const analytics = computeRichAnalytics(
-        usable.map((u) => ({ symbol: u.symbol, bars: u.bars })),
+        marketUsable.map((u) => ({ symbol: u.symbol, bars: u.bars })),
       );
-      appendLog('compute', { type: 'action', prefix: '✓', text: `performance metrics · drawdowns · annual returns · distributions` });
+      if (marketUsable.length > 0) {
+        appendLog('compute', { type: 'action', prefix: '✓', text: `market performance metrics · drawdowns · annual returns · distributions` });
+      }
 
       const regimeMetrics = computeRegimeMetrics(
-        usable.map((u) => ({ symbol: u.symbol, bars: u.bars })),
+        marketUsable.map((u) => ({ symbol: u.symbol, bars: u.bars })),
         plan.regimes ?? [],
       );
       if (regimeMetrics.length > 0) {
@@ -330,6 +346,9 @@ export function useHistoricalResearch() {
         requestedYears,
         actualYears,
         shortfall,
+        coverageNote: hasMacroSeries
+          ? 'Macro series are fetched directly from FRED/Alpha Vantage and filtered to the requested window.'
+          : 'Daily history from current providers reaches ~20 years for US ETFs.',
       };
 
       const dataWindowObs: ResearchObservation[] = shortfall ? [{
@@ -435,8 +454,11 @@ export function useHistoricalResearch() {
         return rows;
       })();
 
+      const macroObs = macroSeriesObservations(usable, period);
+
       const observations: ResearchObservation[] = [
         ...dataWindowObs,
+        ...macroObs,
         ...regimeObs,
         ...perfObs,
         ...drawdownObs,
@@ -476,12 +498,12 @@ export function useHistoricalResearch() {
 
       let narrative = '';
       try {
-        narrative = await reasonOverObservations({ query, plan, observations });
+        narrative = await reasonOverObservations({ query, plan, observations: observations.slice(0, 280) });
         if (my !== seq.current) return;
         const wordCount = narrative.split(/\s+/).filter(Boolean).length;
         finish('reason', { detail: `${observations.length} observations · ${wordCount} words` });
         appendLog('reason', { type: 'action', prefix: '✓', text: `${observations.length} observations synthesized · ${wordCount} words written` });
-        appendLog('reason', { type: 'narrative', text: 'Investigation complete.' });
+        appendLog('reason', { type: 'narrative', text: 'Deep Research complete.' });
       } catch (e) {
         if (my !== seq.current) return;
         fail('reason', e instanceof Error ? e.message : String(e));
@@ -546,6 +568,203 @@ export function useHistoricalResearch() {
 
 function dedupe(xs: string[]): string[] { return Array.from(new Set(xs.filter(Boolean))); }
 
+function isMacroSeriesId(symbol: string): boolean {
+  return MACRO_SERIES_IDS.has(symbol.toUpperCase());
+}
+
+async function fetchMarketHistory(
+  symbol: string,
+  interval: '1day' | '1week',
+  outputsize: number,
+  timeframe: ResearchPlan['timeframe'],
+): Promise<{ symbol: string; bars: OHLCVBar[] }> {
+  const out = await fetchOHLCV(symbol, interval, outputsize);
+  let bars = filterBarsForTimeframe(out.bars, timeframe);
+  if (bars.length === 0 && interval === '1week') {
+    bars = aggregateBars(await fetchStooqDaily(symbol, timeframe), interval, outputsize);
+  }
+  if (bars.length === 0 && interval === '1day') {
+    bars = await fetchStooqDaily(symbol, timeframe);
+  }
+  return { symbol: out.symbol ?? symbol, bars };
+}
+
+async function fetchMacroHistory(
+  symbol: string,
+  timeframe: ResearchPlan['timeframe'],
+): Promise<{ symbol: string; bars: OHLCVBar[] }> {
+  const series = await fetchMacroSeries(symbol);
+  const bars = series.points
+    .map((p) => ({
+      ts: p.ts,
+      open: p.value,
+      high: p.value,
+      low: p.value,
+      close: p.value,
+      volume: 0,
+    }))
+    .filter((b) => Number.isFinite(b.ts) && Number.isFinite(b.close));
+  return { symbol: symbol.toUpperCase(), bars: filterBarsForTimeframe(bars, timeframe) };
+}
+
+async function fetchStooqDaily(
+  symbol: string,
+  timeframe: ResearchPlan['timeframe'],
+): Promise<OHLCVBar[]> {
+  const stooqSymbol = toStooqSymbol(symbol);
+  if (!stooqSymbol) return [];
+  const { startTs, endTs } = timeframeBounds(timeframe);
+  const d1 = yyyymmdd(startTs);
+  const d2 = yyyymmdd(endTs);
+  const url = `https://stooq.com/q/d/l/?s=${encodeURIComponent(stooqSymbol)}&d1=${d1}&d2=${d2}&i=d`;
+  const res = await fetch(url);
+  if (!res.ok) return [];
+  const csv = await res.text();
+  const lines = csv.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  if (lines.length < 2 || /^no data/i.test(lines[0])) return [];
+  return lines.slice(1).map((line) => {
+    const [date, open, high, low, close, volume] = line.split(',').map((v) => v.trim());
+    return {
+      ts: Date.parse(date),
+      open: Number(open),
+      high: Number(high),
+      low: Number(low),
+      close: Number(close),
+      volume: Number(volume ?? 0),
+    };
+  }).filter((b) =>
+    Number.isFinite(b.ts) &&
+    Number.isFinite(b.open) &&
+    Number.isFinite(b.high) &&
+    Number.isFinite(b.low) &&
+    Number.isFinite(b.close),
+  );
+}
+
+function toStooqSymbol(symbol: string): string | null {
+  const s = symbol.trim().toUpperCase();
+  if (!/^[A-Z][A-Z0-9.-]{0,14}$/.test(s)) return null;
+  return `${s.replaceAll('.', '-').toLowerCase()}.us`;
+}
+
+function yyyymmdd(ts: number): string {
+  return new Date(ts).toISOString().slice(0, 10).replaceAll('-', '');
+}
+
+function aggregateBars(bars: OHLCVBar[], interval: '1day' | '1week', outputsize: number): OHLCVBar[] {
+  if (interval === '1day') return bars.slice(-outputsize);
+  const sorted = [...bars].sort((a, b) => a.ts - b.ts);
+  const groups = new Map<string, OHLCVBar[]>();
+  for (const bar of sorted) {
+    const d = new Date(bar.ts);
+    const monday = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+    const day = monday.getUTCDay() || 7;
+    monday.setUTCDate(monday.getUTCDate() - day + 1);
+    const key = monday.toISOString().slice(0, 10);
+    const bucket = groups.get(key);
+    if (bucket) bucket.push(bar);
+    else groups.set(key, [bar]);
+  }
+  const out: OHLCVBar[] = [];
+  for (const bucket of groups.values()) {
+    const first = bucket[0];
+    const last = bucket[bucket.length - 1];
+    out.push({
+      ts: last.ts,
+      open: first.open,
+      high: Math.max(...bucket.map((b) => b.high)),
+      low: Math.min(...bucket.map((b) => b.low)),
+      close: last.close,
+      volume: bucket.reduce((sum, b) => sum + (Number.isFinite(b.volume) ? b.volume : 0), 0),
+    });
+  }
+  return out.slice(-outputsize);
+}
+
+function filterBarsForTimeframe(bars: OHLCVBar[], timeframe: ResearchPlan['timeframe']): OHLCVBar[] {
+  const { startTs, endTs } = timeframeBounds(timeframe);
+  return bars.filter((b) => b.ts >= startTs && b.ts <= endTs);
+}
+
+function timeframeBounds(timeframe: ResearchPlan['timeframe']): { startTs: number; endTs: number } {
+  const now = Date.now();
+  const endTsRaw = timeframe.end ? Date.parse(`${timeframe.end}T23:59:59Z`) : now;
+  const endTs = Number.isFinite(endTsRaw) ? Math.min(endTsRaw, now) : now;
+  const startTsRaw = timeframe.start ? Date.parse(`${timeframe.start}T00:00:00Z`) : NaN;
+  const startTs = Number.isFinite(startTsRaw)
+    ? startTsRaw
+    : endTs - Math.max(1, timeframe.lookbackYears || 10) * 365.25 * 86400_000;
+  return { startTs, endTs };
+}
+
+function macroSeriesObservations(
+  series: { symbol: string; bars: OHLCVBar[] }[],
+  period: string,
+): ResearchObservation[] {
+  const macro = series.filter((s) => isMacroSeriesId(s.symbol) && s.bars.length >= 2);
+  if (!macro.length) return [];
+
+  const rows: ResearchObservation[] = [];
+  for (const s of macro) {
+    const vals = s.bars.map((b) => b.close).filter(Number.isFinite);
+    if (vals.length < 2) continue;
+    const first = vals[0];
+    const latest = vals[vals.length - 1];
+    const avg = vals.reduce((sum, v) => sum + v, 0) / vals.length;
+    const min = Math.min(...vals);
+    const max = Math.max(...vals);
+    const window = formatPeriod(s.bars);
+    rows.push({ label: `${s.symbol} first value`, value: fmtNum(first), period: window });
+    rows.push({ label: `${s.symbol} latest value`, value: fmtNum(latest), period: tsLabel(s.bars[s.bars.length - 1].ts) });
+    rows.push({ label: `${s.symbol} average`, value: fmtNum(avg), period: window });
+    rows.push({ label: `${s.symbol} range`, value: `${fmtNum(min)} → ${fmtNum(max)}`, period: window });
+    rows.push({ label: `${s.symbol} window change`, value: `${fmtSigned(latest - first)} pts`, period: window });
+    if (first > 0 && latest > 0) {
+      rows.push({ label: `${s.symbol} cumulative level change`, value: pct(latest / first - 1), period: window });
+    }
+  }
+
+  for (let i = 0; i < macro.length; i++) {
+    for (let j = i + 1; j < macro.length; j++) {
+      const left = macro[i];
+      const right = macro[j];
+      const aligned = alignClosesByTs(left.bars, right.bars);
+      if (aligned.a.length < 6) continue;
+      rows.push({
+        label: `${left.symbol}/${right.symbol} level correlation`,
+        value: pearson(aligned.a, aligned.b).toFixed(2),
+        period,
+      });
+      const changeA = diffs(aligned.a);
+      const changeB = diffs(aligned.b);
+      if (changeA.length >= 5) {
+        rows.push({
+          label: `${left.symbol}/${right.symbol} change correlation`,
+          value: pearson(changeA, changeB).toFixed(2),
+          period,
+        });
+      }
+    }
+  }
+
+  return rows;
+}
+
+function diffs(values: number[]): number[] {
+  const out: number[] = [];
+  for (let i = 1; i < values.length; i++) out.push(values[i] - values[i - 1]);
+  return out;
+}
+
+function fmtNum(n: number): string {
+  return Number.isFinite(n) ? n.toFixed(Math.abs(n) >= 100 ? 1 : 2) : 'n/a';
+}
+
+function fmtSigned(n: number): string {
+  if (!Number.isFinite(n)) return 'n/a';
+  return `${n >= 0 ? '+' : ''}${fmtNum(n)}`;
+}
+
 function pctReturns(values: number[]): number[] {
   const out: number[] = [];
   for (let i = 1; i < values.length; i++) {
@@ -586,7 +805,7 @@ function ensureComparisons(c: ResearchPlan['comparisons'], assetCount: number): 
 function effectiveYears(tf: ResearchPlan['timeframe']): number {
   if (tf.start && tf.end) {
     const a = Date.parse(tf.start);
-    const b = Date.parse(tf.end);
+    const b = Math.min(Date.parse(tf.end), Date.now());
     if (Number.isFinite(a) && Number.isFinite(b) && b > a) {
       const y = (b - a) / (365.25 * 86400_000);
       return Math.max(1, Math.round(y));

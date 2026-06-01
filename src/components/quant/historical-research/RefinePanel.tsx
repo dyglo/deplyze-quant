@@ -66,7 +66,7 @@ export const RefinePanel: React.FC<Props> = ({
     plan.timeframe.start && plan.timeframe.end ? 'custom' : 'lookback',
   );
 
-  // Reset draft whenever the baseline plan changes (e.g. new investigation).
+  // Reset draft whenever the baseline plan changes (e.g. new report).
   useEffect(() => {
     setDraft(plan);
     setWindowMode(plan.timeframe.start && plan.timeframe.end ? 'custom' : 'lookback');

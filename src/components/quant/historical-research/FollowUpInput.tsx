@@ -1,6 +1,6 @@
 /**
  * FollowUpInput — single-line composer for follow-up questions on a completed
- * investigation. Submits a string; the parent decides whether to route the
+ * report. Submits a string; the parent decides whether to route the
  * question through `/followup-ask` (grounded Q&A) or `/followup-refine`
  * (re-run pipeline with a new plan).
  */
@@ -33,7 +33,7 @@ export const FollowUpInput: React.FC<Props> = ({ busy, onAsk, starters }) => {
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
-          placeholder={busy ? 'Thinking…' : 'Ask a follow-up about this investigation…'}
+          placeholder={busy ? 'Thinking…' : 'Ask a follow-up about this report…'}
           disabled={busy}
           style={inputStyle}
         />

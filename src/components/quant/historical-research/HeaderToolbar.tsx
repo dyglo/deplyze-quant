@@ -77,7 +77,7 @@ interface ResultToolbarProps {
   saveDisabled?: boolean;
   /** 'idle' | 'saving' | 'saved' | 'error' — surfaces a pill state for the Save action. */
   saveState?: 'idle' | 'saving' | 'saved' | 'error';
-  /** Export actions — only shown when the investigation is saved. */
+  /** Export actions — only shown when the report is saved. */
   onExportPdf?: () => void;
   onExportMarkdown?: () => void;
   onExportJson?: () => void;
@@ -100,7 +100,7 @@ export const ResultToolbar: React.FC<ResultToolbarProps> = ({
   const menu: MenuItem[] = [
     { id: 'back',  label: 'Back to landing', icon: <ArrowLeft size={12} />, onSelect: onBack },
     { id: 'edit',  label: 'Edit query',      icon: <Pencil size={12} />,    onSelect: onEditQuery },
-    { id: 'new',   label: 'New investigation', icon: <Plus size={12} />,    onSelect: onNew },
+    { id: 'new',   label: 'New report',        icon: <Plus size={12} />,    onSelect: onNew },
   ];
 
   return (
@@ -130,7 +130,7 @@ export const ResultToolbar: React.FC<ResultToolbarProps> = ({
           onPrint={onPrint}
         />
       )}
-      <OptionsMenu items={menu} ariaLabel="Investigation actions" />
+      <OptionsMenu items={menu} ariaLabel="Deep Research actions" />
     </div>
   );
 };

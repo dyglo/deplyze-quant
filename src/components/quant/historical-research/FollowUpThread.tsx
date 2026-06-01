@@ -1,6 +1,6 @@
 /**
  * FollowUpThread — renders the Q&A list that lives on a completed
- * investigation. Each turn shows the user's question and the grounded answer.
+ * report. Each turn shows the user's question and the grounded answer.
  *
  * Grounding is enforced gateway-side (the LLM is told to cite only the
  * observation list). The thread is plain text — no markdown — to match the

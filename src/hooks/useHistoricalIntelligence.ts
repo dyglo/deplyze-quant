@@ -33,7 +33,7 @@ const LOOKBACK_BARS: Record<LookbackKey, number> = {
   '3Y':  756,
   '5Y':  1260,
   '10Y': 2520,
-  '20Y': 5040,
+  '20Y': 5000,
 };
 
 const MIN_BARS = 220;

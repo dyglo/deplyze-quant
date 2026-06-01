@@ -1,5 +1,5 @@
 /**
- * ResultHeader — investigation-state header strip.
+ * ResultHeader — Deep Research result header strip.
  *
  * Sits at the top of the result surface and gives the user three explicit
  * affordances they're missing in V1: go back to landing, edit the query that
@@ -50,14 +50,14 @@ export const ResultHeader: React.FC<Props> = ({
         onClick={onSave}
         disabled={saveDisabled}
         style={{ ...ghostBtn, opacity: saveDisabled ? 0.45 : 1, cursor: saveDisabled ? 'not-allowed' : 'pointer' }}
-        aria-label="Save investigation"
-        title={saveDisabled ? 'Saving comes in a follow-up release' : 'Save investigation'}
+        aria-label="Save report"
+        title={saveDisabled ? 'Saving comes in a follow-up release' : 'Save report'}
       >
         <Bookmark size={12} />
         <span>{saveLabel}</span>
       </button>
     )}
-    <button type="button" onClick={onNew} style={primaryGhost} aria-label="New investigation">
+    <button type="button" onClick={onNew} style={primaryGhost} aria-label="New report">
       <Plus size={12} />
       <span>New</span>
     </button>

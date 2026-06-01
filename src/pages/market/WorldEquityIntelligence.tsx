@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
+import { useDocumentHead } from '../../lib/seo';
 import { Globe, ArrowUpDown, ArrowUp, ArrowDown, RefreshCw, Search, X, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { MarketPulseStrip } from '../../components/quant/MarketPulseStrip';
 import { Sparkline } from '../../components/quant/Sparkline';
@@ -225,6 +226,11 @@ const IntelligenceView: React.FC<{ quotes: DashboardQuote[] }> = ({ quotes }) =>
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export const WorldEquityIntelligence: React.FC = () => {
+  useDocumentHead({
+    title: 'World Equity Intelligence',
+    description: 'Global equity index dashboard — performance, breadth, and regime context across world markets.',
+    canonicalPath: '/market/world-equity',
+  });
   const { data: quotes, loading, error, status, fetchedAt, refresh } = useWorldEquity();
 
   const [sortKey, setSortKey] = useState<SortKey>('changePercent');

@@ -19,6 +19,7 @@ import type { BriefingGenerateKind } from '../services/briefingService';
 import { createArtifactFromBriefing } from '../services/artifactService';
 import { useAuth } from '../components/AuthProvider';
 import { useAuthGate } from '../components/auth/AuthGate';
+import { useDocumentHead } from '../lib/seo';
 
 function normalizeBriefing(raw: Record<string, unknown>): Briefing {
   const createdAt = raw.createdAt;
@@ -42,6 +43,14 @@ export const BriefingDetail: React.FC = () => {
   const [savingArtifact, setSavingArtifact] = useState(false);
   const gen = useBriefingGenerate();
   const drawer = useDrawer();
+
+  useDocumentHead({
+    title: briefing?.title || 'Briefing',
+    description: 'An institutional research briefing grounded in real market data.',
+    canonicalPath: id ? `/briefings/${id}` : '/briefings',
+    type: 'article',
+  });
+
   const artifacts = useArtifacts(currentWorkspace?.id ?? null, currentProject?.id ?? null);
   const briefings = useBriefings(currentWorkspace?.id ?? null, currentProject?.id ?? null);
 

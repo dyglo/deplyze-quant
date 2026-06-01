@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { useDocumentHead } from '../../lib/seo';
 import { Flame, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { DashboardShell } from '../../components/market-dashboards/DashboardShell';
 import { DashboardSectionCard } from '../../components/market-dashboards/DashboardSectionCard';
@@ -95,6 +96,11 @@ const IntelligenceSummaryView: React.FC<{ quotes: DashboardQuote[] }> = ({ quote
 };
 
 export const CommoditiesIntelligence: React.FC = () => {
+  useDocumentHead({
+    title: 'Commodities Intelligence',
+    description: 'Commodities dashboard — energy, metals, and agriculture performance with regime context.',
+    canonicalPath: '/market/commodities',
+  });
   const { data: quotes, loading, error, status, fetchedAt, refresh } = useCommodityDashboard();
   const { drawerState, openDrawer, closeDrawer } = useInstrumentDrawer();
 

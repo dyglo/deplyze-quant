@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useDocumentHead } from '../lib/seo';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useWorkspace } from '../components/WorkspaceContext';
@@ -60,6 +61,12 @@ export const Briefings: React.FC = () => {
   const gen = useBriefingGenerate();
   const { requireAuth } = useAuthGate();
   const [activeKind, setActiveKind] = useState<string | null>(null);
+
+  useDocumentHead({
+    title: 'Institutional Briefings',
+    description: 'AI-generated institutional research briefings — trade theses, earnings reviews, and macro notes grounded in real market data.',
+    canonicalPath: '/briefings',
+  });
 
   // V4: earnings + sentiment agent observations
   const briefingAgentOutputs = useAgentOutputs({ placement: 'Briefings', limit: 12 });

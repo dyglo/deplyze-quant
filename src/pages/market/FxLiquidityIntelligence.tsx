@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { useDocumentHead } from '../../lib/seo';
 import { ArrowLeftRight, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, ReferenceLine, Cell } from 'recharts';
 import { DashboardShell } from '../../components/market-dashboards/DashboardShell';
@@ -242,6 +243,11 @@ const LiquidityPanel: React.FC<{ quotes: DashboardQuote[] }> = ({ quotes }) => {
 };
 
 export const FxLiquidityIntelligence: React.FC = () => {
+  useDocumentHead({
+    title: 'FX & Liquidity Intelligence',
+    description: 'Foreign-exchange and liquidity dashboard — major and EM currency performance with macro context.',
+    canonicalPath: '/market/fx-liquidity',
+  });
   const { data: quotes, loading, error, status, fetchedAt, refresh } = useFXDashboard();
   const { drawerState, openDrawer, closeDrawer } = useInstrumentDrawer();
 

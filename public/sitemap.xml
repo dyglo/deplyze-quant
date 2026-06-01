@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Core public surfaces. Per-instrument and per-briefing URLs are dynamic and are
+  best emitted by a generated sitemap in a later pass (driven by a symbol list /
+  published briefings); this static map covers the stable entry points.
+-->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://app.deplyze.com/</loc><changefreq>hourly</changefreq><priority>1.0</priority></url>
+  <url><loc>https://app.deplyze.com/terminal</loc><changefreq>hourly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://app.deplyze.com/macro</loc><changefreq>hourly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://app.deplyze.com/relations-map</loc><changefreq>daily</changefreq><priority>0.8</priority></url>
+  <url><loc>https://app.deplyze.com/historical-intelligence</loc><changefreq>daily</changefreq><priority>0.8</priority></url>
+  <url><loc>https://app.deplyze.com/briefings</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://app.deplyze.com/market/world-equity</loc><changefreq>hourly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://app.deplyze.com/market/us-sectors</loc><changefreq>hourly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://app.deplyze.com/market/global-yields</loc><changefreq>hourly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://app.deplyze.com/market/countries</loc><changefreq>hourly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://app.deplyze.com/market/commodities</loc><changefreq>hourly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://app.deplyze.com/market/fx-liquidity</loc><changefreq>hourly</changefreq><priority>0.7</priority></url>
+</urlset>

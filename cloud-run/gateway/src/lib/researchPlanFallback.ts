@@ -37,16 +37,20 @@ export interface ResearchPlan {
 // Asset-class / macro keyword → liquid US proxy ticker. Mirrors the conventions
 // the LLM planner is instructed to use so degraded plans stay consistent.
 const KEYWORD_TICKERS: Array<[RegExp, string]> = [
+  [/\b(inflation|consumer prices?|cpi|price growth)\b/i, 'INFLATION'],
+  [/\b(gdp|real gdp|economic growth|growth trends?|output growth)\b/i, 'GDP'],
+  [/\b(unemployment|jobless|labor market slack)\b/i, 'UNRATE'],
+  [/\b(fed funds?|policy rates?|interest rates?)\b/i, 'FEDFUNDS'],
   [/\bgold\b/i, 'GLD'],
   [/\b(oil|crude|wti)\b/i, 'USO'],
+  [/\b(long[\s-]?term\s+treasur(y|ies)|long[\s-]?duration\s+(bonds?|treasur(y|ies))|long bonds?|20[\s-]?year|tlt)\b/i, 'TLT'],
+  [/\b(dollar|usd|dxy|greenback)\b/i, 'UUP'],
   // Broad US equity market. Matches the many ways users name "the stock market"
   // (incl. flow/macro phrasings like "retail inflows in the US stock market"),
   // proxied by SPY since this tool charts price history, not fund flows.
   [/\b(s&?p\s?500|spx|stock market|equity market|equit(y|ies)|stocks?|the market|wall\s?street|us\s+(stock|equit|market)|dow(\s+jones)?)\b/i, 'SPY'],
   [/\b(nasdaq|tech stocks|qqq)\b/i, 'QQQ'],
   [/\b(treasur(y|ies)|bonds?|10[\s-]?year|10y)\b/i, 'IEF'],
-  [/\b(long bonds?|20[\s-]?year|tlt)\b/i, 'TLT'],
-  [/\b(dollar|usd|dxy|greenback)\b/i, 'UUP'],
   [/\b(volatility|vix)\b/i, 'VIX'],
   [/\b(bitcoin|btc|crypto)\b/i, 'BTC'],
   [/\b(silver)\b/i, 'SLV'],
@@ -56,7 +60,7 @@ const KEYWORD_TICKERS: Array<[RegExp, string]> = [
 // but are clearly not tickers. Keeps "GOLD VS THE MARKET" from yielding "VS"/"THE".
 const STOPWORDS = new Set([
   'A', 'AN', 'AND', 'OR', 'VS', 'THE', 'OF', 'TO', 'IN', 'ON', 'AT', 'BY', 'FOR',
-  'IS', 'IT', 'AS', 'BE', 'DO', 'IF', 'SO', 'US', 'WE', 'HOW', 'WHY', 'WHAT',
+  'IS', 'IT', 'AS', 'BE', 'DO', 'IF', 'SO', 'US', 'U', 'S', 'WE', 'HOW', 'WHY', 'WHAT',
   'WHEN', 'DID', 'DOES', 'HAS', 'HAD', 'ETF', 'ETFS', 'PER', 'YOY', 'CAGR',
   'EPS', 'GDP', 'CPI', 'PCE', 'FED', 'QE', 'QT', 'ZIRP', 'GFC', 'COVID',
 ]);
@@ -77,6 +81,9 @@ function extractKeywordTickers(query: string): string[] {
   for (const [re, ticker] of KEYWORD_TICKERS) {
     if (re.test(query) && !out.includes(ticker)) out.push(ticker);
   }
+  if (out.includes('TLT') && out.includes('IEF') && !/\b(10[\s-]?year|10y|intermediate)\b/i.test(query)) {
+    out.splice(out.indexOf('IEF'), 1);
+  }
   return out;
 }
 
@@ -96,12 +103,17 @@ function extractTimeframe(query: string): { start: string | null; end: string | 
 }
 
 function inferLookbackYears(query: string): number {
+  const decadeMatch = query.match(/\b(\d{1,2})\s*[- ]?decades?\b/i);
+  if (decadeMatch) {
+    const n = Number(decadeMatch[1]) * 10;
+    if (Number.isFinite(n) && n >= 1) return Math.min(50, n);
+  }
   if (/\bdecades?\b/i.test(query)) return 20;
-  if (/\b(century|long[\s-]?run|all history|ever)\b/i.test(query)) return 30;
+  if (/\b(century|long[\s-]?run|all history|ever)\b/i.test(query)) return 50;
   if (/\b(last|past)\s+(\d{1,2})\s*years?\b/i.test(query)) {
     const m = query.match(/\b(last|past)\s+(\d{1,2})\s*years?\b/i);
     const n = m ? Number(m[2]) : NaN;
-    if (Number.isFinite(n) && n >= 1 && n <= 30) return n;
+    if (Number.isFinite(n) && n >= 1 && n <= 50) return n;
   }
   return 10;
 }
@@ -114,10 +126,11 @@ function inferLookbackYears(query: string): number {
 export function buildFallbackPlan(query: string): ResearchPlan {
   const q = query.trim();
 
-  // Prefer explicitly typed tickers; fold in keyword proxies; cap at 5.
+  // Prefer explicitly typed tickers; fold in keyword proxies; cap at 8 so
+  // mixed macro/cross-asset questions do not silently drop requested legs.
   const explicit = extractExplicitTickers(q);
   const keyword = extractKeywordTickers(q);
-  const assets = Array.from(new Set([...explicit, ...keyword])).slice(0, 5);
+  const assets = Array.from(new Set([...explicit, ...keyword])).slice(0, 8);
 
   const { start, end } = extractTimeframe(q);
   const lookbackYears = inferLookbackYears(q);

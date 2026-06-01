@@ -120,18 +120,49 @@ export async function refineFollowup(opts: {
 function normalizePlan(p: ResearchPlan): ResearchPlan {
   return {
     intent: p.intent ?? 'single_asset_history',
-    assets: (p.assets ?? []).map((s) => String(s).toUpperCase()).filter(Boolean).slice(0, 5),
+    assets: (p.assets ?? []).map(normalizeAssetId).filter(Boolean).slice(0, 8),
     benchmark: p.benchmark ? String(p.benchmark).toUpperCase() : null,
     timeframe: {
       start: p.timeframe?.start ?? null,
       end: p.timeframe?.end ?? null,
-      lookbackYears: clamp(p.timeframe?.lookbackYears ?? 10, 1, 30),
+      lookbackYears: clamp(p.timeframe?.lookbackYears ?? 10, 1, 50),
     },
     comparisons: Array.isArray(p.comparisons) ? p.comparisons : [],
     overlays: Array.isArray(p.overlays) ? p.overlays : [],
     reasoning_focus: p.reasoning_focus ?? '',
     regimes: normalizeRegimes((p as unknown as { regimes?: unknown }).regimes),
   };
+}
+
+function normalizeAssetId(raw: unknown): string {
+  const s = String(raw ?? '').trim().toUpperCase().replace(/[\s-]+/g, '_');
+  const aliases: Record<string, string> = {
+    REAL_GDP: 'GDP',
+    REALGDP: 'GDP',
+    GDPC1: 'GDP',
+    GDP_GROWTH: 'GDP',
+    INFLATION_RATE: 'INFLATION',
+    CPI_YOY: 'INFLATION',
+    CPIAUCSL: 'CPI',
+    UNEMPLOYMENT: 'UNRATE',
+    UNEMPLOYMENT_RATE: 'UNRATE',
+    FEDERAL_FUNDS_RATE: 'FEDFUNDS',
+    FED_FUNDS_RATE: 'FEDFUNDS',
+    FFR: 'FEDFUNDS',
+    FEDFUNDSRATE: 'FEDFUNDS',
+    US_DOLLAR: 'UUP',
+    DXY: 'UUP',
+    USD: 'UUP',
+    LONG_TERM_TREASURIES: 'TLT',
+    LONG_TERM_TREASURY: 'TLT',
+    LONG_TREASURIES: 'TLT',
+    LONG_BONDS: 'TLT',
+    TREASURY_BONDS: 'TLT',
+    OIL: 'USO',
+    WTI: 'USO',
+    GOLD: 'GLD',
+  };
+  return aliases[s] ?? s;
 }
 
 function normalizeRegimes(input: unknown): ResearchRegime[] {

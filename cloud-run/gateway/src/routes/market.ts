@@ -85,8 +85,61 @@ async function queryWarehouseOhlcv(symbol: string, limit: number): Promise<OHLCV
   })).filter((b) => Number.isFinite(b.ts) && Number.isFinite(b.close));
 }
 
+function assetClassFor(symbol: string): string {
+  if (coingecko.isCryptoSupported(symbol)) return 'crypto';
+  if (fred.isFxSupported(symbol)) return symbol.startsWith('X') || symbol.includes('OIL') ? 'commodity' : 'fx_commodity';
+  if (symbol.includes('/')) return 'cross_asset';
+  if (symbol.startsWith('^')) return 'index';
+  return 'equity_etf';
+}
+
+function lookbackDaysFor(interval: string, outputsize: number): number {
+  if (interval === '1week') return Math.ceil(outputsize * 7 * 1.25);
+  if (interval === '1month') return Math.ceil(outputsize * 31 * 1.15);
+  return Math.ceil(outputsize * 1.6);
+}
+
+function aggregateBars(bars: OHLCVBar[], interval: string, outputsize: number): OHLCVBar[] {
+  if (interval === '1day') return bars.slice(-outputsize);
+  if (interval !== '1week' && interval !== '1month') return bars.slice(-outputsize);
+
+  const sorted = [...bars].filter((b) => Number.isFinite(b.ts)).sort((a, b) => a.ts - b.ts);
+  const groups = new Map<string, OHLCVBar[]>();
+  for (const bar of sorted) {
+    const d = new Date(bar.ts);
+    let key: string;
+    if (interval === '1month') {
+      key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+    } else {
+      const monday = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+      const day = monday.getUTCDay() || 7;
+      monday.setUTCDate(monday.getUTCDate() - day + 1);
+      key = monday.toISOString().slice(0, 10);
+    }
+    const bucket = groups.get(key);
+    if (bucket) bucket.push(bar);
+    else groups.set(key, [bar]);
+  }
+
+  const aggregated: OHLCVBar[] = [];
+  for (const bucket of groups.values()) {
+    if (!bucket.length) continue;
+    const first = bucket[0];
+    const last = bucket[bucket.length - 1];
+    aggregated.push({
+      ts: last.ts,
+      open: first.open,
+      high: Math.max(...bucket.map((b) => b.high)),
+      low: Math.min(...bucket.map((b) => b.low)),
+      close: last.close,
+      volume: bucket.reduce((sum, b) => sum + (Number.isFinite(b.volume) ? b.volume : 0), 0),
+    });
+  }
+  return aggregated.slice(-outputsize);
+}
+
 // ─── /quote/:symbol ────────────────────────────────────────────────────────
-router.get('/quote/:symbol', async (req, res, next) => {
+router.get('/quote/:symbol(*)', async (req, res, next) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
     // FX, commodities and crypto use XX/YY format — Polygon (US equities only)
@@ -236,7 +289,8 @@ router.get('/ohlcv/:symbol(*)', async (req, res, next) => {
     const { interval, outputsize } = OhlcvQuery.parse(req.query);
     const isDaily = interval === '1day' || interval === '1week' || interval === '1month';
     const ttl = isDaily ? TTL.ohlcv_daily : TTL.ohlcv_intraday;
-    const cacheKey = `ohlcv:v4:${symbol}:${interval}:${outputsize}`;
+    const assetClass = assetClassFor(symbol);
+    const cacheKey = `ohlcv:v6:route=/market/ohlcv:asset=${assetClass}:symbol=${symbol}:interval=${interval}:bars=${outputsize}`;
 
     const isFx     = fred.isFxSupported(symbol);
     const isCrypto = coingecko.isCryptoSupported(symbol);
@@ -263,7 +317,7 @@ router.get('/ohlcv/:symbol(*)', async (req, res, next) => {
 
     const fetchFresh = async (): Promise<OHLCVBar[]> => {
       const today    = new Date().toISOString().slice(0, 10);
-      const pastDate = new Date(Date.now() - outputsize * 1.5 * 86400_000).toISOString().slice(0, 10);
+      const pastDate = new Date(Date.now() - lookbackDaysFor(interval, outputsize) * 86400_000).toISOString().slice(0, 10);
       const tdInterval = interval as Parameters<typeof td.getTimeSeries>[1];
 
       // ── FX / Commodity: FRED is the primary free source ─────────────────
@@ -291,16 +345,16 @@ router.get('/ohlcv/:symbol(*)', async (req, res, next) => {
         eodhd: isDaily ? async (signal) => {
           const rawBars = await eodhd.getHistoricalBars(symbol, { from: pastDate, to: today }, signal);
           if (!rawBars.length) throw new Error('EODHD: empty response');
-          const bars = rawBars.slice(-outputsize).map((b) => ({
+          const bars = aggregateBars(rawBars.map((b) => ({
             ts: Date.parse(b.date),
             open: b.open, high: b.high, low: b.low,
             close: b.adjusted_close ?? b.close, volume: b.volume,
-          }));
+          })), interval, outputsize);
           if (bars.length < SPARSE_MIN) throw new Error(`EODHD: sparse result (${bars.length}/${outputsize} bars)`);
           return bars;
         } : undefined,
         yahoo: isDaily && yahoo.isIndexSupported(symbol)
-          ? async (signal) => yahoo.getIndexDailyBars(symbol, outputsize, signal)
+          ? async (signal) => aggregateBars(await yahoo.getIndexDailyBars(symbol, Math.min(outputsize * (interval === '1day' ? 1 : interval === '1week' ? 7 : 22), 5000), signal), interval, outputsize)
           : undefined,
         twelve_data: async (signal) => {
           const bars = await td.getTimeSeries(td.normalizeTdSymbol(symbol), tdInterval, outputsize, signal);
@@ -310,10 +364,10 @@ router.get('/ohlcv/:symbol(*)', async (req, res, next) => {
         fmp: isDaily ? async (signal) => {
           const rawBars = await fmp.getHistoricalPrice(symbol, pastDate, today, outputsize, signal);
           if (!rawBars.length) throw new Error('FMP: empty response');
-          return rawBars.map((b) => ({
+          return aggregateBars(rawBars.map((b) => ({
             ts: Date.parse(b.date),
             open: b.open, high: b.high, low: b.low, close: b.adjClose ?? b.close, volume: b.volume,
-          }));
+          })), interval, outputsize);
         } : undefined,
         polygon: isDaily && !isCrossAsset ? async (signal) => {
           const aggs = await polygon.getAggs({
@@ -327,20 +381,24 @@ router.get('/ohlcv/:symbol(*)', async (req, res, next) => {
             signal,
           });
           if (!aggs.length) throw new Error('Polygon: empty response');
-          const bars = aggs.map((a) => ({
+          const bars = aggregateBars(aggs.map((a) => ({
             ts: a.t,
             open: a.o, high: a.h, low: a.l, close: a.c, volume: a.v,
-          }));
+          })), interval, outputsize);
           if (bars.length < SPARSE_MIN) throw new Error(`Polygon: sparse result (${bars.length}/${outputsize} bars)`);
           return bars;
         } : undefined,
         alpha_vantage: isDaily && !isCrossAsset && av.isConfigured() ? async (signal) => {
-          const bars = await av.getEquityDaily(symbol, outputsize, signal);
+          const requestBars = interval === '1day' ? outputsize : 5000;
+          const bars = aggregateBars(await av.getEquityDaily(symbol, requestBars, signal), interval, outputsize);
           if (bars.length < SPARSE_MIN) throw new Error(`Alpha Vantage: sparse result (${bars.length}/${outputsize} bars)`);
           return bars;
         } : undefined,
         stooq: isDaily && !isCrossAsset && stooq.isConfigured() ? async (signal) => {
-          const bars = await stooq.getDailyBars(symbol, pastDate, today, outputsize, signal);
+          const requestBars = interval === '1day'
+            ? outputsize
+            : Math.min(20_000, outputsize * (interval === '1week' ? 7 : 31));
+          const bars = aggregateBars(await stooq.getDailyBars(symbol, pastDate, today, requestBars, signal), interval, outputsize);
           if (bars.length < SPARSE_MIN) throw new Error(`Stooq: sparse result (${bars.length}/${outputsize} bars)`);
           return bars;
         } : undefined,

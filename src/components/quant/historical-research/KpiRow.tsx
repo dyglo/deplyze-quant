@@ -54,6 +54,7 @@ export const KpiRow: React.FC<{ result: ResearchResult }> = ({ result }) => {
 
 function buildKpis(r: ResearchResult): Kpi[] {
   const kpis: Kpi[] = [];
+  const macroOnly = r.assets.length > 0 && r.assets.every((a) => isMacroSeries(a.symbol));
 
   // Window coverage (always shown)
   kpis.push({
@@ -62,7 +63,31 @@ function buildKpis(r: ResearchResult): Kpi[] {
     info: `Actual coverage: ${r.dataWindow.actualStart} → ${r.dataWindow.actualEnd}. Requested ~${r.dataWindow.requestedYears}y.`,
   });
 
-  // First two assets' total return → headline KPIs
+  if (macroOnly) {
+    for (const asset of r.assets.slice(0, 2)) {
+      const latest = findObservation(r, `${asset.symbol} latest value`);
+      const change = findObservation(r, `${asset.symbol} window change`);
+      if (!latest) continue;
+      kpis.push({
+        label: `${asset.symbol} latest`,
+        value: String(latest.value),
+        delta: change ? { value: String(change.value), direction: String(change.value).startsWith('-') ? 'down' : 'up' } : undefined,
+        info: `Latest macro observation in the analysis window${latest.period ? ` (${latest.period})` : ''}.`,
+      });
+    }
+
+    const corr = r.observations.find((o) => / correlation$/.test(o.label));
+    if (corr && kpis.length < 4) {
+      kpis.push({
+        label: corr.label.replace(' level correlation', ' corr').replace(' change correlation', ' change corr'),
+        value: String(corr.value),
+        info: corr.period ? `Computed over ${corr.period}.` : 'Macro correlation computed on aligned observations.',
+      });
+    }
+    return kpis.slice(0, 4);
+  }
+
+  // First two market assets' total return → headline KPIs
   for (const t of r.totals.slice(0, 2)) {
     kpis.push({
       label: `${t.symbol} total return`,
@@ -97,6 +122,20 @@ function buildKpis(r: ResearchResult): Kpi[] {
 }
 
 function pct(x: number): string { return `${(x * 100).toFixed(1)}%`; }
+
+const MACRO_SERIES_IDS = new Set([
+  'CPI', 'INFLATION', 'FEDFUNDS', 'DGS2', 'DGS3M', 'DGS5', 'DGS10',
+  'DGS20', 'DGS30', 'T10Y2Y', 'DFII10', 'T5YIE', 'UNRATE', 'UNEMP',
+  'GDP', 'RETAILSALES',
+]);
+
+function isMacroSeries(symbol: string): boolean {
+  return MACRO_SERIES_IDS.has(symbol.toUpperCase());
+}
+
+function findObservation(r: ResearchResult, label: string): { value: string | number; period?: string } | undefined {
+  return r.observations.find((o) => o.label === label);
+}
 
 // ─── styles ──────────────────────────────────────────────────────────────
 

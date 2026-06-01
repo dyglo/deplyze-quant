@@ -18,7 +18,7 @@ const router = Router();
 // Resolve { query } -> structured ResearchPlan JSON.
 
 const PlanBody = z.object({
-  query: z.string().min(2).max(500),
+  query: z.string().trim().min(2).max(4000),
 });
 
 const PLAN_SYSTEM = `
@@ -30,17 +30,18 @@ Output requirements:
 - Reply with ONE JSON object only. No prose, no markdown fences, no commentary.
 - All fields must be present even if empty arrays.
 - Use uppercase US tickers ("SPY", "QQQ", "GLD", "TLT", "UUP" for DXY proxy, "USO" for oil,
-  "IEF" for 10Y, "VIX"). Never invent tickers.
+  "IEF" for 10Y, "VIX") OR supported macro series IDs ("INFLATION", "GDP", "CPI",
+  "FEDFUNDS", "UNRATE", "DGS10", "DGS2", "T10Y2Y"). Never invent tickers or macro IDs.
 
 ResearchPlan schema:
 {
   "intent": "compare" | "regime_behavior" | "relationship" | "single_asset_history" | "anomaly_search",
-  "assets":        string[],            // 1..5 tickers, primary first
+  "assets":        string[],            // 1..8 tickers or macro IDs, primary first
   "benchmark":     string | null,       // null unless the user EXPLICITLY asks to compare against a reference
   "timeframe": {
     "start":       "YYYY-MM-DD" | null, // null = use lookbackYears
     "end":         "YYYY-MM-DD" | null,
-    "lookbackYears": number              // fallback when start/end null; 1..30
+    "lookbackYears": number              // fallback when start/end null; 1..50
   },
   "comparisons":   ("normalized" | "rolling_correlation" | "relative_strength" | "drawdown")[],
   "overlays":      ("inflation_regime" | "rate_cycle" | "recession" | "volatility_regime")[],
@@ -57,12 +58,15 @@ ResearchPlan schema:
 
 Heuristics:
 - "compare A and B" -> intent="compare", assets=[A,B], comparisons includes "normalized".
+- "inflation", "CPI", "consumer prices" -> use "INFLATION" unless the user explicitly asks for CPI level.
+- "GDP", "real GDP", "economic growth" -> use "GDP".
+- Macro-only questions should use macro series IDs directly, not ETF proxies.
 - ANY time assets.length >= 2 -> comparisons MUST include both "normalized" and "rolling_correlation".
 - "behave" or "behavior" + multiple assets -> intent="compare", comparisons=["normalized","rolling_correlation"].
 - "behave during inflation" -> overlays includes "inflation_regime".
 - "correlation" / "relationship" -> intent="relationship", comparisons includes "rolling_correlation".
 - Date ranges in the query ("between 1960 and 2025", "from 2000 to 2020") -> set timeframe.start and timeframe.end explicitly to "YYYY-01-01" / "YYYY-12-31".
-- "decades" or wide horizon language -> lookbackYears>=20.
+- "decades" or wide horizon language -> lookbackYears>=20; "5 decades" -> lookbackYears=50.
 - If user names no horizon -> lookbackYears=10.
 - benchmark: set ONLY when the user explicitly asks to compare/benchmark against a specific reference
   (e.g. "relative to the S&P 500", "benchmarked against QQQ", "vs the market"). Otherwise benchmark=null.
@@ -91,12 +95,19 @@ Provider note (do NOT include in output, just use it to set timeframe):
   clamp and surface a data-window note. Do not invent shorter ranges to "fix" availability.
 `.trim();
 
-router.post('/plan', async (req, res, next) => {
-  // Validate first — a bad body is a 400, not a 500.
-  let query: string;
-  try {
-    ({ query } = PlanBody.parse(req.body));
-  } catch (err) { next(err); return; }
+router.post('/plan', async (req, res) => {
+  // Validate first. Natural-language research prompts can be long, but a bad
+  // body should still be a clear 400 instead of falling into the global 500.
+  const parsed = PlanBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({
+      error: 'Bad Request',
+      code: 'VALIDATION_ERROR',
+      issues: parsed.error.issues,
+    });
+    return;
+  }
+  const { query } = parsed.data;
 
   const t0 = Date.now();
   try {
@@ -114,7 +125,7 @@ router.post('/plan', async (req, res, next) => {
       // resolved no tradeable assets (common for flow/macro phrasings like
       // "retail inflows in the US stock market"). Rather than 502 / dead-end the
       // investigation, backfill assets from the deterministic keyword planner.
-      const fallback = buildFallbackPlan(query);
+      const fallback = safeFallbackPlan(query);
       const reason = !plan ? 'planner_unparseable' : 'planner_no_assets';
       // If the LLM produced a usable plan body, keep its structure and only
       // graft the resolved assets onto it; otherwise use the fallback wholesale.
@@ -138,7 +149,7 @@ router.post('/plan', async (req, res, next) => {
     // Gemini unavailable (quota / key / model error / timeout). Degrade to the
     // deterministic planner so the workspace stays usable instead of 500ing.
     const reason = err instanceof Error ? err.message : String(err);
-    const fallback = buildFallbackPlan(query);
+    const fallback = safeFallbackPlan(query);
     log.warn({
       event: 'historical_research.plan.degraded', ...reqContext(req),
       freshness: 'degraded', reason, assets: fallback.assets, latencyMs: Date.now() - t0,
@@ -153,7 +164,7 @@ router.post('/plan', async (req, res, next) => {
 // regime tags) and passes them in — the model NEVER invents numbers.
 
 const ReasonBody = z.object({
-  query: z.string().min(2).max(500),
+  query: z.string().min(2).max(4000),
   plan: z.unknown(),
   observations: z.array(z.object({
     label: z.string(),
@@ -221,8 +232,8 @@ router.post('/reason', async (req, res, next) => {
 // same as /reason: only the observation list may be cited.
 
 const FollowupAskBody = z.object({
-  question: z.string().min(2).max(500),
-  query: z.string().min(2).max(500),
+  question: z.string().min(2).max(4000),
+  query: z.string().min(2).max(4000),
   plan: z.unknown(),
   observations: z.array(z.object({
     label: z.string(),
@@ -289,8 +300,8 @@ router.post('/followup-ask', async (req, res, next) => {
 // existing plan with the new ask. The frontend then re-runs the pipeline.
 
 const FollowupRefineBody = z.object({
-  question: z.string().min(2).max(500),
-  query: z.string().min(2).max(500),
+  question: z.string().min(2).max(4000),
+  query: z.string().min(2).max(4000),
   plan: z.unknown(),
 });
 
@@ -354,7 +365,61 @@ function planAssets(plan: unknown): string[] {
   if (!plan || typeof plan !== 'object') return [];
   const a = (plan as Record<string, unknown>).assets;
   if (!Array.isArray(a)) return [];
-  return a.map((x) => String(x).trim()).filter(Boolean);
+  return a.map(normalizeAssetId).filter(Boolean);
+}
+
+function normalizeAssetId(raw: unknown): string {
+  const s = String(raw ?? '').trim().toUpperCase().replace(/[\s-]+/g, '_');
+  const aliases: Record<string, string> = {
+    REAL_GDP: 'GDP',
+    REALGDP: 'GDP',
+    GDPC1: 'GDP',
+    GDP_GROWTH: 'GDP',
+    INFLATION_RATE: 'INFLATION',
+    CPI_YOY: 'INFLATION',
+    CPIAUCSL: 'CPI',
+    UNEMPLOYMENT: 'UNRATE',
+    UNEMPLOYMENT_RATE: 'UNRATE',
+    FEDERAL_FUNDS_RATE: 'FEDFUNDS',
+    FED_FUNDS_RATE: 'FEDFUNDS',
+    FFR: 'FEDFUNDS',
+    FEDFUNDSRATE: 'FEDFUNDS',
+    US_DOLLAR: 'UUP',
+    DXY: 'UUP',
+    USD: 'UUP',
+    LONG_TERM_TREASURIES: 'TLT',
+    LONG_TERM_TREASURY: 'TLT',
+    LONG_TREASURIES: 'TLT',
+    LONG_BONDS: 'TLT',
+    TREASURY_BONDS: 'TLT',
+    OIL: 'USO',
+    WTI: 'USO',
+    GOLD: 'GLD',
+  };
+  return aliases[s] ?? s;
+}
+
+function safeFallbackPlan(query: string): ReturnType<typeof buildFallbackPlan> {
+  try {
+    return buildFallbackPlan(query);
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    log.error({
+      event: 'historical_research.plan.fallback_failed',
+      freshness: 'degraded',
+      reason,
+    });
+    return {
+      intent: 'single_asset_history',
+      assets: [],
+      benchmark: null,
+      timeframe: { start: null, end: null, lookbackYears: 10 },
+      comparisons: ['normalized'],
+      overlays: [],
+      reasoning_focus: 'Planner fallback failed; ask for one or more concrete assets, ETFs, or macro indicators.',
+      regimes: [],
+    };
+  }
 }
 
 function extractJson(s: string): unknown | null {

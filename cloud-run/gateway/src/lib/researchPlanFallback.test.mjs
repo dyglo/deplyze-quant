@@ -53,6 +53,11 @@ test('"last 7 years" parses the explicit lookback', () => {
   assert.equal(p.timeframe.lookbackYears, 7);
 });
 
+test('"5 decades" parses to the 50y long-range cap', () => {
+  const p = buildFallbackPlan('compare SPY and TLT over 5 decades');
+  assert.equal(p.timeframe.lookbackYears, 50);
+});
+
 test('single asset with no horizon defaults to 10y single_asset_history', () => {
   const p = buildFallbackPlan('show me AAPL history');
   assert.equal(p.intent, 'single_asset_history');
@@ -76,4 +81,18 @@ test('benchmark is never auto-injected — only the named assets are used', () =
   assert.deepEqual(goldOil.assets, ['GLD', 'USO']);
   assert.equal(buildFallbackPlan('AAPL history').benchmark, null);
   assert.equal(buildFallbackPlan('compare SPY and QQQ').benchmark, null);
+});
+
+test('macro questions resolve to FRED macro series rather than stray tickers', () => {
+  const p = buildFallbackPlan('Compare U.S. inflation and GDP trends over the last 30 years (1996-2026).');
+  assert.deepEqual(p.assets, ['INFLATION', 'GDP']);
+  assert.equal(p.timeframe.start, '1996-01-01');
+  assert.equal(p.timeframe.end, '2026-12-31');
+  assert.ok(!p.assets.includes('U'));
+  assert.ok(!p.assets.includes('S'));
+});
+
+test('mixed macro and cross-asset prompts keep all requested series', () => {
+  const p = buildFallbackPlan('Compare gold, long-term Treasuries, the U.S. dollar, oil, inflation, and real GDP from 2004 to 2026.');
+  assert.deepEqual(p.assets, ['INFLATION', 'GDP', 'GLD', 'USO', 'TLT', 'UUP']);
 });

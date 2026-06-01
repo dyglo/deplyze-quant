@@ -8,8 +8,7 @@
  * because a full regime-fit + simulation can take longer than a quote call.
  */
 
-import { auth } from '../lib/firebase';
-import { gatewayGet, gatewayPost, GatewayError, ClientTTL } from './gatewayClient';
+import { gatewayGet, gatewayPost, gatewayPostWithTimeout, GatewayError, ClientTTL } from './gatewayClient';
 
 // ─── Contract types (mirror Rust models.rs) ────────────────────────────────────
 
@@ -332,41 +331,14 @@ const RUN_TIMEOUT_MS = 150_000;
 
 /** Run a backtest. Uses a longer timeout than the shared POST helper. */
 export async function runBacktest(spec: StrategySpec): Promise<BacktestResults> {
-  const user = auth.currentUser;
-  if (!user) throw new GatewayError(401, 'Not signed in');
-  const token = await user.getIdToken();
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), RUN_TIMEOUT_MS);
   try {
-    const res = await fetch('/api/v1/backtest/run', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(spec),
-      signal: controller.signal,
-    });
-    if (!res.ok) {
-      let body: unknown;
-      try {
-        body = await res.json();
-      } catch {
-        body = await res.text();
-      }
-      const message =
-        typeof body === 'object' && body && 'message' in body
-          ? String((body as { message: unknown }).message)
-          : typeof body === 'object' && body && 'error' in body
-            ? String((body as { error: unknown }).error)
-            : res.statusText;
-      throw new GatewayError(res.status, message, body);
-    }
-    return (await res.json()) as BacktestResults;
+    return await gatewayPostWithTimeout<BacktestResults>('/backtest/run', spec, RUN_TIMEOUT_MS);
   } catch (e) {
     if (e instanceof Error && e.name === 'AbortError') {
       throw new Error('Backtest timed out. The engine may be cold-starting — please retry.');
     }
+    if (e instanceof GatewayError) throw e;
     throw e;
-  } finally {
-    clearTimeout(timer);
   }
 }
 

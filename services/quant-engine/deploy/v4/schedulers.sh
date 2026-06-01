@@ -41,7 +41,7 @@ create_or_update() {
       --uri="${SERVICE_URL}${path}" \
       --http-method=POST \
       --message-body="$body" \
-      --headers="Content-Type=application/json" \
+      --update-headers="Content-Type=application/json" \
       --oidc-service-account-email="$SA" \
       --oidc-token-audience="$SERVICE_URL" \
       "${RETRY_FLAGS[@]}"

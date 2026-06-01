@@ -1,6 +1,6 @@
 /**
  * CorrelationMatrixWidget — full pairwise correlation heatmap, only rendered
- * when the investigation has 3+ assets. Reuses the existing
+ * when the report has 3+ assets. Reuses the existing
  * `CorrelationHeatmap` component used elsewhere in the app so visuals stay
  * consistent across pages.
  */

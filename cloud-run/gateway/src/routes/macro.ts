@@ -26,14 +26,26 @@ const SeriesParam = z.object({ id: z.enum(ALL_SERIES_IDS) });
 
 /** Fetch a macro series from AV, falling back to FRED on any error. */
 async function fetchSeriesWithFallback(id: string) {
+  const upper = id.toUpperCase();
+  const preferFred = /^(CPI|INFLATION|DGS|DFII|T5YIE|FEDFUNDS|UNRATE|GDP)$/.test(upper);
+
+  if (preferFred && fred.isSupported(upper)) {
+    try {
+      return await fred.getMacroSeries(upper);
+    } catch {
+      // Fall through to Alpha Vantage below. Missing FRED keys should not make
+      // the route unusable when AV can still serve a compatible series.
+    }
+  }
+
   // Try Alpha Vantage first
   try {
-    return await av.getMacroSeries(id as av.MacroSeriesId);
+    return await av.getMacroSeries(upper as av.MacroSeriesId);
   } catch (avErr) {
     // Attempt FRED fallback if it supports this series
-    if (fred.isSupported(id)) {
+    if (fred.isSupported(upper)) {
       try {
-        return await fred.getMacroSeries(id);
+        return await fred.getMacroSeries(upper);
       } catch {
         // FRED also failed — re-throw the original AV error
       }
@@ -52,7 +64,7 @@ router.get('/series/:id', async (req, res, next) => {
 
     // T10Y2Y = 10Y Treasury minus 2Y Treasury (not available directly from AV)
     if (id === 'T10Y2Y') {
-      const data = await withCache('macro:T10Y2Y', MACRO_TTL, async () => {
+      const data = await withCache('macro:v2:T10Y2Y', MACRO_TTL, async () => {
         const [dgs10, dgs2] = await Promise.all([
           fetchSeriesWithFallback('DGS10'),
           fetchSeriesWithFallback('DGS2'),
@@ -67,7 +79,7 @@ router.get('/series/:id', async (req, res, next) => {
       return;
     }
 
-    const data = await withCache(`macro:${id}`, MACRO_TTL, () =>
+    const data = await withCache(`macro:v2:${id}`, MACRO_TTL, () =>
       fetchSeriesWithFallback(id),
     );
     res.json(data);
@@ -75,7 +87,7 @@ router.get('/series/:id', async (req, res, next) => {
 });
 
 router.get('/series', (_req, res) => {
-  res.json({ ids: av.MACRO_SERIES_IDS });
+  res.json({ ids: ALL_SERIES_IDS });
 });
 
 // FX historical daily — used by Macro Regime Desk to render DXY-related pairs.

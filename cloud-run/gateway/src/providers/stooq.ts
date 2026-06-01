@@ -10,7 +10,10 @@ import { getText } from './http';
 import type { OHLCVBar } from './twelvedata';
 
 export function isConfigured(): boolean {
-  return Boolean(process.env.STOOQ_API_KEY);
+  // Stooq's daily CSV endpoint is usable without a key. Some deployments may
+  // provide STOOQ_API_KEY, but lack of that optional key must not disable this
+  // no-key historical fallback.
+  return true;
 }
 
 function fmtDate(date: string): string {
@@ -52,9 +55,7 @@ export async function getDailyBars(
   const stooqSymbol = toStooqSymbol(symbol);
   if (!stooqSymbol) throw new Error(`Stooq: unsupported symbol ${symbol}`);
   const apiKey = process.env.STOOQ_API_KEY;
-  if (!apiKey) throw new Error('Stooq: missing STOOQ_API_KEY');
-
-  const url = `https://stooq.com/q/d/l/?s=${encodeURIComponent(stooqSymbol)}&d1=${fmtDate(from)}&d2=${fmtDate(to)}&i=d&apikey=${encodeURIComponent(apiKey)}`;
+  const url = `https://stooq.com/q/d/l/?s=${encodeURIComponent(stooqSymbol)}&d1=${fmtDate(from)}&d2=${fmtDate(to)}&i=d${apiKey ? `&apikey=${encodeURIComponent(apiKey)}` : ''}`;
   const csv = await getText('stooq', url, { signal });
   const lines = csv.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   if (lines.length < 2 || /^no data/i.test(lines[0])) throw new Error('Stooq: empty response');

@@ -6,7 +6,7 @@
  * the same pipeline (skipping the LLM /plan call) as if Refine had been
  * applied.
  *
- * Stateless re: investigation lifecycle — purely a form that produces a
+ * Stateless re: report lifecycle — purely a form that produces a
  * `ResearchPlan` and a synthesized query string.
  */
 

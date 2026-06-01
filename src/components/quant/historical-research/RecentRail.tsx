@@ -1,12 +1,12 @@
 /**
- * RecentRail — landing-page strip of recent / saved investigations.
+ * RecentRail — landing-page strip of recent / saved Deep Research reports.
  *
  * Two tabs:
  *   • Recent — sessionStorage cards (same tab; cleared on browser close).
- *   • Saved  — Firestore-persisted investigations for the active user +
+ *   • Saved  — Firestore-persisted reports for the active user +
  *              workspace; survives across devices and sessions.
  *
- * Click opens the investigation in place. For saved entries the page hydrates
+ * Click opens the report in place. For saved entries the page hydrates
  * from Firestore on route mount.
  */
 
@@ -113,10 +113,10 @@ export const RecentRail: React.FC<Props> = ({ onOpen, refreshKey }) => {
       {empty ? (
         <div style={emptyStyle}>
           {tab === 'recent'
-            ? 'No investigations yet — ask a question above.'
+            ? 'No reports yet — ask a question above.'
             : loadingSaved
-              ? 'Loading saved investigations…'
-              : 'No saved investigations yet. Use Save on a result to keep it here.'}
+              ? 'Loading saved reports…'
+              : 'No saved reports yet. Use Save on a result to keep it here.'}
         </div>
       ) : (
         <div style={grid}>

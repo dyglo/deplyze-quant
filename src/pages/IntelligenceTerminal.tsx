@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useDocumentHead } from '../lib/seo';
 import { useBatchQuotes, useHeadlines, useOHLCV } from '../hooks/useMarket';
 import { useArtifacts } from '../hooks/useArtifacts';
 import { useTimeline } from '../hooks/useTimeline';
@@ -258,6 +259,11 @@ const PulseTile: React.FC<{
 };
 
 export const IntelligenceTerminal: React.FC = () => {
+  useDocumentHead({
+    title: 'Intelligence Terminal',
+    description: 'A live market intelligence terminal — quotes, headlines, regime and risk signals, and autonomous agent observations.',
+    canonicalPath: '/terminal',
+  });
   const { currentWorkspace, currentProject } = useWorkspace();
   const drawer = useDrawer();
 

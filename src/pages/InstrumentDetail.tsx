@@ -35,6 +35,7 @@ import { createInstrumentSnapshot } from '../services/artifactService';
 import { useWorkspace } from '../components/WorkspaceContext';
 import { useAuth } from '../components/AuthProvider';
 import { useAuthGate } from '../components/auth/AuthGate';
+import { useDocumentHead } from '../lib/seo';
 import type { IntelligenceWatchlist } from '../lib/portfolio/schemas';
 import { symbolCountry } from '../components/market-home/format';
 
@@ -66,6 +67,21 @@ const InstrumentSkeleton: React.FC = () => (
 export const InstrumentDetail: React.FC = () => {
   const { symbol } = useParams<{ symbol: string }>();
   const sym = symbol ? decodeURIComponent(symbol).toUpperCase() : null;
+
+  useDocumentHead({
+    title: sym ? `${sym} — Quote, Analysis & Intelligence` : 'Instrument Intelligence',
+    description: sym
+      ? `${sym} live quote, technicals, fundamentals, analyst ratings, regime fit, and AI-driven research intelligence.`
+      : 'Institutional instrument intelligence — quotes, fundamentals, and regime-aware analysis.',
+    canonicalPath: sym ? `/instruments/${encodeURIComponent(sym)}` : '/instruments',
+    jsonLd: sym ? {
+      '@context': 'https://schema.org',
+      '@type': 'FinancialProduct',
+      name: sym,
+      category: 'Security',
+      url: `https://app.deplyze.com/instruments/${encodeURIComponent(sym)}`,
+    } : undefined,
+  });
 
   const quote = useQuote(sym);
   const ohlcv = useOHLCV(sym, '1day', 90);

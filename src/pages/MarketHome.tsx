@@ -2,6 +2,7 @@ import React from 'react';
 import { Sparkles } from 'lucide-react';
 import { useAuth } from '../components/AuthProvider';
 import { useAuthGate } from '../components/auth/AuthGate';
+import { useDocumentHead, ORGANIZATION_JSONLD } from '../lib/seo';
 import { TickerTape } from '../components/market-home/TickerTape';
 import { HeroIntelligence } from '../components/market-home/HeroIntelligence';
 import { MarketSnapshot } from '../components/market-home/MarketSnapshot';
@@ -27,6 +28,13 @@ export const MarketHome: React.FC = () => {
   const { profile, user, isGuest } = useAuth();
   const { requireAuth } = useAuthGate();
   const name = profile?.displayName || user?.displayName || user?.email?.split('@')[0] || 'there';
+
+  useDocumentHead({
+    title: 'Market Intelligence Terminal',
+    description: 'A live institutional view of global markets — regimes, cross-asset context, briefings, and AI-driven research intelligence.',
+    canonicalPath: '/',
+    jsonLd: ORGANIZATION_JSONLD,
+  });
 
   return (
     <div style={{ padding: '20px 20px 40px', maxWidth: 1480, margin: '0 auto', width: '100%' }}>

@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
+import { useDocumentHead } from '../../lib/seo';
 import { providerLabel } from '../../lib/providerLabels';
 import {
   Map, ArrowUpDown, ArrowUp, ArrowDown, RefreshCw, Search, X,
@@ -327,6 +328,11 @@ const ColHeader: React.FC<{
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export const CountriesRegionalMarkets: React.FC = () => {
+  useDocumentHead({
+    title: 'Countries & Regional Markets',
+    description: 'Country and regional equity dashboard — single-country ETF performance and cross-region context.',
+    canonicalPath: '/market/countries',
+  });
   const { data: liveQuotes, loading: quotesLoading, error, status, fetchedAt, refresh } = useCountryETFs();
 
   // Build a live quote map from fetched data

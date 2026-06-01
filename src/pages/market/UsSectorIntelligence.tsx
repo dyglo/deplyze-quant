@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { useDocumentHead } from '../../lib/seo';
 import { BarChart3, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, ReferenceLine, Cell,
@@ -159,6 +160,11 @@ const IntelligenceSummaryView: React.FC<{ quotes: DashboardQuote[] }> = ({ quote
 };
 
 export const UsSectorIntelligence: React.FC = () => {
+  useDocumentHead({
+    title: 'US Sector Intelligence',
+    description: 'US equity sector dashboard — relative performance, rotation, and regime context across GICS sectors.',
+    canonicalPath: '/market/us-sectors',
+  });
   const { data: quotes, loading, error, status, fetchedAt, refresh } = useSectorDashboard();
   const { drawerState, openDrawer, closeDrawer } = useInstrumentDrawer();
 

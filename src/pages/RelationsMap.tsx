@@ -9,6 +9,7 @@
  * Data layer is unchanged from Phase 4 Wave B.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useDocumentHead } from '../lib/seo';
 import { Search, X as XIcon, RotateCcw } from 'lucide-react';
 import { FreshnessBadge } from '../components/quant/FreshnessBadge';
 import { InstrumentSelector } from '../components/quant/InstrumentSelector';
@@ -99,6 +100,11 @@ function toConfidenceLevel(score: number): ConfidenceLevel {
 }
 
 export const RelationsMap: React.FC = () => {
+  useDocumentHead({
+    title: 'Cross-Asset Relations Map',
+    description: 'Interactive cross-asset correlation and relationship map across equities, rates, FX, commodities, and crypto.',
+    canonicalPath: '/relations-map',
+  });
   const drawer = useDrawer();
   const { currentWorkspace, currentProject } = useWorkspace();
   const artifacts = useArtifacts(currentWorkspace?.id ?? null, currentProject?.id ?? null);

@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { useDocumentHead } from '../../lib/seo';
 import { TrendingUp, TrendingDown, Minus, AlertTriangle, Info } from 'lucide-react';
 import {
   LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid,
@@ -223,6 +224,11 @@ const IntelligenceView: React.FC<{ data: YieldCurveData }> = ({ data }) => {
 };
 
 export const GlobalYields: React.FC = () => {
+  useDocumentHead({
+    title: 'Global Yields & Curves',
+    description: 'Sovereign yield curves and global rates dashboard — curve shape, spreads, and regime context.',
+    canonicalPath: '/market/global-yields',
+  });
   const { data, loading, error, status, fetchedAt, refresh } = useYieldCurve();
   const [activeTab, setActiveTab] = useState('curve');
   const [selectedSeriesId, setSelectedSeriesId] = useState<string | null>(null);

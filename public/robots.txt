@@ -1,0 +1,19 @@
+# Deplyze Quant — crawl rules
+# Public intelligence surfaces are indexable; authenticated/personal areas are not.
+
+User-agent: *
+Allow: /
+
+# Authenticated / personal surfaces (no useful content for crawlers; gated anyway)
+Disallow: /portfolio
+Disallow: /settings
+Disallow: /lab
+Disallow: /backtesting
+Disallow: /investigations
+Disallow: /library
+Disallow: /research
+Disallow: /copilot
+Disallow: /artifacts
+Disallow: /login
+
+Sitemap: https://app.deplyze.com/sitemap.xml

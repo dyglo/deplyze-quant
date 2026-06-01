@@ -69,7 +69,7 @@ import helmet from 'helmet';
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { applyCors } from './middleware/cors';
 import { requestId } from './middleware/requestId';
-import { rateLimiter, userRateLimiter } from './middleware/rateLimiter';
+import { rateLimiter, userRateLimiter, guestRateLimiter } from './middleware/rateLimiter';
 import { authenticate } from './middleware/auth';
 import { requireFullAccount } from './middleware/requireFullAccount';
 
@@ -158,7 +158,9 @@ app.get(['/health', '/api/health'], (_req, res) => {
 // All /v1 routes require a verified Firebase ID token + per-user rate limit.
 // Support both /v1 and /api/v1 (prod proxy via Firebase Hosting)
 const router = express.Router();
-router.use(authenticate, userRateLimiter);
+// authenticate sets req.uid + req.isAnonymous; userRateLimiter caps all users;
+// guestRateLimiter applies a tighter cap to anonymous sessions only.
+router.use(authenticate, userRateLimiter, guestRateLimiter);
 router.use('/market', marketRouter);
 router.use('/macro', macroRouter);
 router.use('/research', researchRouter);

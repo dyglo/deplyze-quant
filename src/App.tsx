@@ -111,7 +111,7 @@ export default function App() {
             <Route path="/models"               element={<Navigate to="/backtesting" replace />} />
             <Route path="/lab"                  element={<ProtectedRoute><QuantLab /></ProtectedRoute>} />
             <Route path="/copilot"              element={<ProtectedRoute><ResearchCopilot /></ProtectedRoute>} />
-            <Route path="/historical-intelligence" element={<ProtectedRoute><HistoricalIntelligenceTerminal /></ProtectedRoute>} />
+            <Route path="/historical-intelligence" element={<PublicRoute><HistoricalIntelligenceTerminal /></PublicRoute>} />
             <Route path="/briefings"            element={<PublicRoute><Briefings /></PublicRoute>} />
             <Route path="/briefings/:id"        element={<PublicRoute><BriefingDetail /></PublicRoute>} />
             <Route path="/library"              element={<ProtectedRoute><ResearchLibrary /></ProtectedRoute>} />

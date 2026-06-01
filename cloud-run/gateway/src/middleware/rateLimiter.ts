@@ -125,3 +125,26 @@ export const userRateLimiter = rateLimit({
   },
   skip: (req: Request) => !req.uid, // Skip if not yet authenticated
 });
+
+// ─── Guest (anonymous) limiter ─────────────────────────────────────────────
+// Layered on top of the per-user limiter for anonymous sessions only. Guests
+// can browse public surfaces but at a tighter budget than full accounts, so a
+// single anonymous token can't be used to scrape the data APIs. Keyed by uid
+// (each guest gets a distinct anonymous uid). Full accounts are skipped.
+
+export const guestRateLimiter = rateLimit({
+  windowMs: 60 * 1000,        // 1 minute
+  max: 120,                     // 120 requests per guest per minute
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  store: makeStore('rl:guest:'),
+  keyGenerator: (req: Request) => req.uid ?? req.ip ?? 'guest',
+  handler: (_req: Request, res: Response) => {
+    res.status(429).json({
+      error: 'Too Many Requests',
+      code: 'GUEST_RATE_LIMIT_EXCEEDED',
+      message: 'Guest request limit reached. Create a free workspace for a higher limit.',
+    });
+  },
+  skip: (req: Request) => !req.isAnonymous, // Only applies to anonymous guests
+});

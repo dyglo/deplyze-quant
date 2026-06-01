@@ -114,7 +114,7 @@ const FeaturedIntelligence: React.FC = () => {
       <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
         <Sparkles size={14} style={{ color: 'var(--primary)' }} />
         <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--primary)' }}>
-          Deplyze Intelligence Summary
+          Deplyze Market Summary
         </span>
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>

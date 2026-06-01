@@ -381,7 +381,7 @@ const SidebarInner: React.FC<{ signOut: () => void; user: any; profile: any }> =
                     border: 'none', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600,
                   }}
                 >
-                  <Sparkles size={12} /> Create Workspace
+                  Create Workspace
                 </button>
                 <p style={{ fontSize: '0.5625rem', lineHeight: 1.4, color: 'var(--muted-foreground)', margin: 0 }}>
                   Browsing public intelligence. Sign in to personalize.
@@ -1131,7 +1131,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                     fontSize: '0.75rem', fontWeight: 600, color: 'var(--foreground)',
                   }}>
                     <span style={{ fontSize: '0.55rem', fontWeight: 800, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Public</span>
-                    <span>Intelligence</span>
+                    <span>Market</span>
                   </div>
                 ) : (<>
                 {/* Workspace indicator chip */}
@@ -1270,7 +1270,6 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                   onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = '0.92'; }}
                   onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
                 >
-                  <Sparkles size={12} />
                   <span>Create Workspace</span>
                 </button>
               ) : (

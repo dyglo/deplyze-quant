@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
+import { useDocumentHead } from '../lib/seo';
 import { useMacroSeries } from '../hooks/useMacro';
 import { useWebResearch } from '../hooks/useResearch';
 import { useDrawer } from '../components/quant/DataDrawer';
@@ -70,6 +71,11 @@ interface LoadedSeries {
 }
 
 export const MacroRegimeDesk: React.FC = () => {
+  useDocumentHead({
+    title: 'Macro Regime Desk',
+    description: 'Live macro regime classification, growth/inflation quadrant, yield curve, and recession context.',
+    canonicalPath: '/macro',
+  });
   const drawer = useDrawer();
   const { currentWorkspace, currentProject } = useWorkspace();
   const { user } = useAuth();

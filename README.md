@@ -50,6 +50,12 @@ See [the removal report](docs/page-removal-report.md) for the file inventory, ve
 
 ## Architecture
 
+The Rust/Cloudflare/Supabase migration is in its pre-implementation audit stage.
+See [the current migration audit](docs/backend-migration-audit.md) for surviving
+data flows, proposed replacements, runtime constraints, baseline results, and
+deployment blockers. The architecture below still describes the existing
+backend; it is not a claim that the replacement has been deployed.
+
 ```
 ┌── Browser (Vite + React 18) ───────────────────────────────────────┐
 │  React Router · shadcn/Radix · Recharts · Motion  │

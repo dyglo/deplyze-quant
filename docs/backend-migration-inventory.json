@@ -1,0 +1,1258 @@
+{
+  "evidence": "Module reachability, including re-exports and dynamic imports. A reachable module does not prove every export is used. Unreachable files are deletion candidates, not deletion authorization.",
+  "routes": [
+    "/login",
+    "/",
+    "/investigations",
+    "/instruments/:symbol",
+    "/macro",
+    "/research",
+    "/research/i/:id",
+    "/positioning",
+    "/copilot",
+    "/historical-intelligence",
+    "/library",
+    "/artifacts/:id",
+    "/settings",
+    "/market/global-yields",
+    "/market/commodities",
+    "*"
+  ],
+  "routeDependencies": {
+    "src/components/Settings.tsx": [
+      "src/hooks/useProviders.ts",
+      "src/hooks/useSWR.ts",
+      "src/services/emailPreferencesService.ts",
+      "src/services/gatewayClient.ts",
+      "src/services/providerService.ts"
+    ],
+    "src/pages/MarketHome.tsx": [
+      "src/hooks/useAgentIntelligence.ts",
+      "src/hooks/useMarket.ts",
+      "src/hooks/usePortfolioWorkspace.ts",
+      "src/hooks/useSWR.ts",
+      "src/services/agentService.ts",
+      "src/services/earningsService.ts",
+      "src/services/fundamentalsService.ts",
+      "src/services/gatewayClient.ts",
+      "src/services/marketHomeService.ts",
+      "src/services/marketService.ts",
+      "src/services/portfolioService.ts",
+      "src/services/v3p2Service.ts",
+      "src/services/valuationService.ts"
+    ],
+    "src/pages/Investigations.tsx": [
+      "src/hooks/usePersonalization.ts",
+      "src/lib/telemetry/index.ts",
+      "src/lib/telemetry/sessionId.ts",
+      "src/lib/telemetry/types.ts",
+      "src/services/gatewayClient.ts",
+      "src/services/personalizationService.ts"
+    ],
+    "src/pages/InstrumentDetail.tsx": [
+      "src/hooks/useAgentIntelligence.ts",
+      "src/hooks/useAnalystRatings.ts",
+      "src/hooks/useArtifacts.ts",
+      "src/hooks/useInstrument.ts",
+      "src/hooks/useInstrumentFinancials.ts",
+      "src/hooks/useInstrumentRegime.ts",
+      "src/hooks/useMacro.ts",
+      "src/hooks/useMarket.ts",
+      "src/hooks/useOwnership.ts",
+      "src/hooks/useSWR.ts",
+      "src/lib/quant/analog.ts",
+      "src/lib/quant/anomalies.ts",
+      "src/lib/quant/artifacts.ts",
+      "src/lib/quant/benchmark.ts",
+      "src/lib/quant/benchmarkIntel.ts",
+      "src/lib/quant/contextualAnalog.ts",
+      "src/lib/quant/copilotContext.ts",
+      "src/lib/quant/correlation.ts",
+      "src/lib/quant/crossAsset.ts",
+      "src/lib/quant/extremes.ts",
+      "src/lib/quant/forwardReturns.ts",
+      "src/lib/quant/index.ts",
+      "src/lib/quant/momentum.ts",
+      "src/lib/quant/primitives.ts",
+      "src/lib/quant/regimes.ts",
+      "src/lib/quant/returns.ts",
+      "src/lib/quant/reversion.ts",
+      "src/lib/quant/risk.ts",
+      "src/lib/quant/scenario.ts",
+      "src/lib/quant/seasonality.ts",
+      "src/lib/quant/technicals.ts",
+      "src/lib/quant/volatility.ts",
+      "src/services/agentService.ts",
+      "src/services/artifactService.ts",
+      "src/services/earningsService.ts",
+      "src/services/edgarService.ts",
+      "src/services/gatewayClient.ts",
+      "src/services/instrumentService.ts",
+      "src/services/macroService.ts",
+      "src/services/marketService.ts",
+      "src/services/portfolioService.ts",
+      "src/services/quantArtifactService.ts",
+      "src/services/v3p2Service.ts"
+    ],
+    "src/pages/MacroRegimeDesk.tsx": [
+      "src/hooks/useAgentIntelligence.ts",
+      "src/hooks/useAgentReasoning.ts",
+      "src/hooks/useArtifacts.ts",
+      "src/hooks/useMacro.ts",
+      "src/hooks/usePins.ts",
+      "src/hooks/usePortfolioWorkspace.ts",
+      "src/hooks/useResearch.ts",
+      "src/hooks/useSWR.ts",
+      "src/lib/quant/analog.ts",
+      "src/lib/quant/anomalies.ts",
+      "src/lib/quant/artifacts.ts",
+      "src/lib/quant/benchmark.ts",
+      "src/lib/quant/benchmarkIntel.ts",
+      "src/lib/quant/contextualAnalog.ts",
+      "src/lib/quant/copilotContext.ts",
+      "src/lib/quant/correlation.ts",
+      "src/lib/quant/crossAsset.ts",
+      "src/lib/quant/extremes.ts",
+      "src/lib/quant/forwardReturns.ts",
+      "src/lib/quant/index.ts",
+      "src/lib/quant/momentum.ts",
+      "src/lib/quant/primitives.ts",
+      "src/lib/quant/regimes.ts",
+      "src/lib/quant/returns.ts",
+      "src/lib/quant/reversion.ts",
+      "src/lib/quant/risk.ts",
+      "src/lib/quant/scenario.ts",
+      "src/lib/quant/seasonality.ts",
+      "src/lib/quant/technicals.ts",
+      "src/lib/quant/volatility.ts",
+      "src/services/agentService.ts",
+      "src/services/artifactService.ts",
+      "src/services/gatewayClient.ts",
+      "src/services/macroService.ts",
+      "src/services/pinService.ts",
+      "src/services/portfolioService.ts",
+      "src/services/reasoningService.ts",
+      "src/services/researchService.ts",
+      "src/services/v3p2Service.ts"
+    ],
+    "src/pages/HistoricalResearch.tsx": [
+      "src/hooks/useHistoricalResearch.ts",
+      "src/lib/quant/correlation.ts",
+      "src/lib/quant/primitives.ts",
+      "src/lib/quant/returns.ts",
+      "src/services/gatewayClient.ts",
+      "src/services/historicalResearchService.ts",
+      "src/services/macroService.ts",
+      "src/services/marketService.ts",
+      "src/services/savedHistoricalResearchService.ts"
+    ],
+    "src/pages/ResearchCopilot.tsx": [
+      "src/hooks/useAgentIntelligence.ts",
+      "src/hooks/useArtifacts.ts",
+      "src/hooks/useCopilotSession.ts",
+      "src/hooks/useInsights.ts",
+      "src/hooks/useMacro.ts",
+      "src/hooks/useMarket.ts",
+      "src/hooks/usePersonalization.ts",
+      "src/hooks/usePins.ts",
+      "src/hooks/useQuantCopilotContext.ts",
+      "src/hooks/useResearchContext.ts",
+      "src/hooks/useSWR.ts",
+      "src/lib/quant/analog.ts",
+      "src/lib/quant/anomalies.ts",
+      "src/lib/quant/artifacts.ts",
+      "src/lib/quant/benchmark.ts",
+      "src/lib/quant/benchmarkIntel.ts",
+      "src/lib/quant/contextualAnalog.ts",
+      "src/lib/quant/copilotContext.ts",
+      "src/lib/quant/correlation.ts",
+      "src/lib/quant/crossAsset.ts",
+      "src/lib/quant/extremes.ts",
+      "src/lib/quant/forwardReturns.ts",
+      "src/lib/quant/index.ts",
+      "src/lib/quant/momentum.ts",
+      "src/lib/quant/primitives.ts",
+      "src/lib/quant/regimes.ts",
+      "src/lib/quant/returns.ts",
+      "src/lib/quant/reversion.ts",
+      "src/lib/quant/risk.ts",
+      "src/lib/quant/scenario.ts",
+      "src/lib/quant/seasonality.ts",
+      "src/lib/quant/technicals.ts",
+      "src/lib/quant/volatility.ts",
+      "src/services/agentService.ts",
+      "src/services/artifactService.ts",
+      "src/services/copilotService.ts",
+      "src/services/gatewayClient.ts",
+      "src/services/insightService.ts",
+      "src/services/macroService.ts",
+      "src/services/marketService.ts",
+      "src/services/personalizationService.ts",
+      "src/services/pinService.ts"
+    ],
+    "src/pages/HistoricalIntelligenceTerminal.tsx": [
+      "src/hooks/useArtifacts.ts",
+      "src/hooks/useMarket.ts",
+      "src/hooks/useSWR.ts",
+      "src/lib/quant/analog.ts",
+      "src/lib/quant/anomalies.ts",
+      "src/lib/quant/artifacts.ts",
+      "src/lib/quant/benchmark.ts",
+      "src/lib/quant/benchmarkIntel.ts",
+      "src/lib/quant/contextualAnalog.ts",
+      "src/lib/quant/copilotContext.ts",
+      "src/lib/quant/correlation.ts",
+      "src/lib/quant/crossAsset.ts",
+      "src/lib/quant/extremes.ts",
+      "src/lib/quant/forwardReturns.ts",
+      "src/lib/quant/index.ts",
+      "src/lib/quant/momentum.ts",
+      "src/lib/quant/primitives.ts",
+      "src/lib/quant/regimes.ts",
+      "src/lib/quant/returns.ts",
+      "src/lib/quant/reversion.ts",
+      "src/lib/quant/risk.ts",
+      "src/lib/quant/scenario.ts",
+      "src/lib/quant/seasonality.ts",
+      "src/lib/quant/technicals.ts",
+      "src/lib/quant/volatility.ts",
+      "src/services/artifactService.ts",
+      "src/services/gatewayClient.ts",
+      "src/services/marketService.ts"
+    ],
+    "src/pages/ResearchLibrary.tsx": [
+      "src/hooks/useAgentIntelligence.ts",
+      "src/hooks/useArtifacts.ts",
+      "src/hooks/useLibraryStats.ts",
+      "src/hooks/usePins.ts",
+      "src/services/agentService.ts",
+      "src/services/artifactService.ts",
+      "src/services/gatewayClient.ts",
+      "src/services/pinService.ts",
+      "src/services/v3p2Service.ts"
+    ],
+    "src/pages/ArtifactPage.tsx": [
+      "src/hooks/useArtifacts.ts",
+      "src/hooks/usePins.ts",
+      "src/services/artifactService.ts",
+      "src/services/pinService.ts"
+    ],
+    "src/pages/market/GlobalYields.tsx": [
+      "src/hooks/useArtifacts.ts",
+      "src/hooks/useDashboard.ts",
+      "src/hooks/useDashboardArtifacts.ts",
+      "src/hooks/useDashboardNarratives.ts",
+      "src/hooks/useSWR.ts",
+      "src/hooks/useScreener.ts",
+      "src/services/artifactService.ts",
+      "src/services/dashboardService.ts",
+      "src/services/gatewayClient.ts",
+      "src/services/macroService.ts",
+      "src/services/marketService.ts",
+      "src/services/screenerService.ts",
+      "src/services/v3p2Service.ts"
+    ],
+    "src/pages/market/CommoditiesIntelligence.tsx": [
+      "src/hooks/useAgentIntelligence.ts",
+      "src/hooks/useArtifacts.ts",
+      "src/hooks/useDashboard.ts",
+      "src/hooks/useDashboardArtifacts.ts",
+      "src/hooks/useDashboardNarratives.ts",
+      "src/hooks/useInstrumentRegime.ts",
+      "src/hooks/useMarket.ts",
+      "src/hooks/useSWR.ts",
+      "src/hooks/useScreener.ts",
+      "src/lib/quant/analog.ts",
+      "src/lib/quant/anomalies.ts",
+      "src/lib/quant/artifacts.ts",
+      "src/lib/quant/benchmark.ts",
+      "src/lib/quant/benchmarkIntel.ts",
+      "src/lib/quant/contextualAnalog.ts",
+      "src/lib/quant/copilotContext.ts",
+      "src/lib/quant/correlation.ts",
+      "src/lib/quant/crossAsset.ts",
+      "src/lib/quant/extremes.ts",
+      "src/lib/quant/forwardReturns.ts",
+      "src/lib/quant/index.ts",
+      "src/lib/quant/momentum.ts",
+      "src/lib/quant/primitives.ts",
+      "src/lib/quant/regimes.ts",
+      "src/lib/quant/returns.ts",
+      "src/lib/quant/reversion.ts",
+      "src/lib/quant/risk.ts",
+      "src/lib/quant/scenario.ts",
+      "src/lib/quant/seasonality.ts",
+      "src/lib/quant/technicals.ts",
+      "src/lib/quant/volatility.ts",
+      "src/services/agentService.ts",
+      "src/services/artifactService.ts",
+      "src/services/dashboardService.ts",
+      "src/services/gatewayClient.ts",
+      "src/services/macroService.ts",
+      "src/services/marketService.ts",
+      "src/services/screenerService.ts",
+      "src/services/v3p2Service.ts"
+    ]
+  },
+  "reachableServices": [
+    "src/services/agentService.ts",
+    "src/services/artifactService.ts",
+    "src/services/copilotService.ts",
+    "src/services/dashboardService.ts",
+    "src/services/earningsService.ts",
+    "src/services/edgarService.ts",
+    "src/services/emailPreferencesService.ts",
+    "src/services/fundamentalsService.ts",
+    "src/services/gatewayClient.ts",
+    "src/services/historicalResearchService.ts",
+    "src/services/insightService.ts",
+    "src/services/instrumentService.ts",
+    "src/services/macroService.ts",
+    "src/services/marketHomeService.ts",
+    "src/services/marketService.ts",
+    "src/services/personalizationService.ts",
+    "src/services/pinService.ts",
+    "src/services/portfolioService.ts",
+    "src/services/providerService.ts",
+    "src/services/quantArtifactService.ts",
+    "src/services/reasoningService.ts",
+    "src/services/researchService.ts",
+    "src/services/savedHistoricalResearchService.ts",
+    "src/services/screenerService.ts",
+    "src/services/v3p2Service.ts",
+    "src/services/valuationService.ts"
+  ],
+  "unreachableCandidates": [
+    "src/services/firestoreService.ts",
+    "src/services/projectService.ts",
+    "src/services/workspaceService.ts",
+    "src/hooks/use-mobile.ts",
+    "src/hooks/useAsync.ts",
+    "src/hooks/useHistoricalIntelligence.ts",
+    "src/hooks/usePanelLayout.ts",
+    "src/hooks/usePeers.ts"
+  ],
+  "browserContracts": [
+    {
+      "file": "src/lib/telemetry/index.ts",
+      "line": 51,
+      "client": "gatewayBeacon",
+      "pathExpression": "'/personalization/events'",
+      "responseType": null
+    },
+    {
+      "file": "src/lib/telemetry/index.ts",
+      "line": 205,
+      "client": "gatewayBeacon",
+      "pathExpression": "'/personalization/feedback'",
+      "responseType": null
+    },
+    {
+      "file": "src/services/agentService.ts",
+      "line": 36,
+      "client": "gatewayGet",
+      "pathExpression": "'/agents/outputs'",
+      "responseType": "{ outputs: AgentOutput[]; count: number }"
+    },
+    {
+      "file": "src/services/agentService.ts",
+      "line": 56,
+      "client": "gatewayGet",
+      "pathExpression": "`/agents/outputs/${domain}`",
+      "responseType": "{ outputs: AgentOutput[]; domain: string; count: number }"
+    },
+    {
+      "file": "src/services/agentService.ts",
+      "line": 70,
+      "client": "gatewayGet",
+      "pathExpression": "`/agents/portfolio/${portfolioId}`",
+      "responseType": "{ outputs: AgentOutput[]; portfolio_id: string; count: number }"
+    },
+    {
+      "file": "src/services/agentService.ts",
+      "line": 81,
+      "client": "gatewayGet",
+      "pathExpression": "'/agents/registry'",
+      "responseType": "{ agents: AgentRegistryEntry[]; count: number }"
+    },
+    {
+      "file": "src/services/agentService.ts",
+      "line": 92,
+      "client": "gatewayGet",
+      "pathExpression": "'/agents/status'",
+      "responseType": "{ status: AgentStatusEntry[]; date: string }"
+    },
+    {
+      "file": "src/services/agentService.ts",
+      "line": 103,
+      "client": "gatewayGet",
+      "pathExpression": "'/agents/regime'",
+      "responseType": "{ regime: AgentOutput | null }"
+    },
+    {
+      "file": "src/services/agentService.ts",
+      "line": 114,
+      "client": "gatewayGet",
+      "pathExpression": "'/agents/risk'",
+      "responseType": "{ risk: AgentOutput | null }"
+    },
+    {
+      "file": "src/services/copilotService.ts",
+      "line": 20,
+      "client": "gatewayPost",
+      "pathExpression": "'/copilot/chat'",
+      "responseType": "{ reply: string }"
+    },
+    {
+      "file": "src/services/earningsService.ts",
+      "line": 21,
+      "client": "gatewayGet",
+      "pathExpression": "`/earnings/${encodeURIComponent(symbol)}/surprises`",
+      "responseType": "EarningsSurprisesResponse"
+    },
+    {
+      "file": "src/services/earningsService.ts",
+      "line": 38,
+      "client": "gatewayGet",
+      "pathExpression": "'/earnings/calendar'",
+      "responseType": "{\n    from: string; to: string;\n    events: EarningsEvent[];\n    providerId: string;\n    degraded?: boolean;\n  }"
+    },
+    {
+      "file": "src/services/edgarService.ts",
+      "line": 31,
+      "client": "gatewayGet",
+      "pathExpression": "`/edgar/${encodeURIComponent(symbol)}/filings`",
+      "responseType": "FilingsResponse"
+    },
+    {
+      "file": "src/services/edgarService.ts",
+      "line": 48,
+      "client": "gatewayGet",
+      "pathExpression": "`/edgar/${encodeURIComponent(symbol)}/snapshot`",
+      "responseType": "EdgarFundamentalsSnapshot"
+    },
+    {
+      "file": "src/services/edgarService.ts",
+      "line": 69,
+      "client": "gatewayGet",
+      "pathExpression": "`/edgar/${encodeURIComponent(symbol)}/cik`",
+      "responseType": "CikLookup"
+    },
+    {
+      "file": "src/services/edgarService.ts",
+      "line": 112,
+      "client": "gatewayGet",
+      "pathExpression": "'/edgar/search'",
+      "responseType": "FilingSearchResponse"
+    },
+    {
+      "file": "src/services/emailPreferencesService.ts",
+      "line": 11,
+      "client": "gatewayGet",
+      "pathExpression": "'/email/preferences'",
+      "responseType": "{ preferences: EmailPreferences }"
+    },
+    {
+      "file": "src/services/emailPreferencesService.ts",
+      "line": 18,
+      "client": "gatewayPatch",
+      "pathExpression": "'/email/preferences'",
+      "responseType": "{ preferences: EmailPreferences }"
+    },
+    {
+      "file": "src/services/fundamentalsService.ts",
+      "line": 12,
+      "client": "gatewayGet",
+      "pathExpression": "`/fundamentals/${encodeURIComponent(symbol)}/profile`",
+      "responseType": "CompanyProfileContract"
+    },
+    {
+      "file": "src/services/fundamentalsService.ts",
+      "line": 30,
+      "client": "gatewayGet",
+      "pathExpression": "`/fundamentals/${encodeURIComponent(symbol)}/metrics`",
+      "responseType": "MetricsResponse"
+    },
+    {
+      "file": "src/services/fundamentalsService.ts",
+      "line": 40,
+      "client": "gatewayGet",
+      "pathExpression": "`/fundamentals/${encodeURIComponent(symbol)}/edgar`",
+      "responseType": "EdgarFundamentalsSnapshot"
+    },
+    {
+      "file": "src/services/gatewayClient.ts",
+      "line": 149,
+      "client": "gatewayGetMeta",
+      "pathExpression": "path",
+      "responseType": "T"
+    },
+    {
+      "file": "src/services/gatewayClient.ts",
+      "line": 217,
+      "client": "gatewayPostWithTimeout",
+      "pathExpression": "path",
+      "responseType": "T"
+    },
+    {
+      "file": "src/services/historicalResearchService.ts",
+      "line": 73,
+      "client": "gatewayPost",
+      "pathExpression": "'/historical-research/plan'",
+      "responseType": "{ plan: ResearchPlan; degraded?: boolean }"
+    },
+    {
+      "file": "src/services/historicalResearchService.ts",
+      "line": 85,
+      "client": "gatewayPost",
+      "pathExpression": "'/historical-research/reason'",
+      "responseType": "{ narrative: string }"
+    },
+    {
+      "file": "src/services/historicalResearchService.ts",
+      "line": 102,
+      "client": "gatewayPost",
+      "pathExpression": "'/historical-research/followup-ask'",
+      "responseType": "{ answer: string }"
+    },
+    {
+      "file": "src/services/historicalResearchService.ts",
+      "line": 116,
+      "client": "gatewayPost",
+      "pathExpression": "'/historical-research/followup-refine'",
+      "responseType": "{ plan: ResearchPlan }"
+    },
+    {
+      "file": "src/services/instrumentService.ts",
+      "line": 75,
+      "client": "gatewayGet",
+      "pathExpression": "`/instruments/${encodeURIComponent(symbol)}/intelligence`",
+      "responseType": "InstrumentIntelligence"
+    },
+    {
+      "file": "src/services/instrumentService.ts",
+      "line": 95,
+      "client": "gatewayGet",
+      "pathExpression": "`/fundamentals/${encodeURIComponent(symbol)}/financials?period=${period}`",
+      "responseType": "{ series: FinancialPeriod[] }"
+    },
+    {
+      "file": "src/services/instrumentService.ts",
+      "line": 127,
+      "client": "gatewayGet",
+      "pathExpression": "`/fundamentals/${encodeURIComponent(symbol)}/analyst`",
+      "responseType": "AnalystRatings"
+    },
+    {
+      "file": "src/services/instrumentService.ts",
+      "line": 143,
+      "client": "gatewayGet",
+      "pathExpression": "`/fundamentals/${encodeURIComponent(symbol)}/peers`",
+      "responseType": "{ peers: PeerQuote[] }"
+    },
+    {
+      "file": "src/services/instrumentService.ts",
+      "line": 161,
+      "client": "gatewayGet",
+      "pathExpression": "`/fundamentals/${encodeURIComponent(symbol)}/ownership`",
+      "responseType": "OwnershipData"
+    },
+    {
+      "file": "src/services/macroService.ts",
+      "line": 5,
+      "client": "gatewayGet",
+      "pathExpression": "`/macro/series/${encodeURIComponent(id)}`",
+      "responseType": "{\n    id: string; name: string; unit: string; frequency: string;\n    points: Array<{ ts: number; value: number }>;\n  }"
+    },
+    {
+      "file": "src/services/macroService.ts",
+      "line": 13,
+      "client": "gatewayGet",
+      "pathExpression": "'/macro/series'",
+      "responseType": "{ ids: string[] }"
+    },
+    {
+      "file": "src/services/macroService.ts",
+      "line": 18,
+      "client": "gatewayGet",
+      "pathExpression": "'/macro/fx'",
+      "responseType": "{ from: string; to: string; bars: Array<{\n    ts: number; open: number; high: number; low: number; close: number;\n  }> }"
+    },
+    {
+      "file": "src/services/marketService.ts",
+      "line": 5,
+      "client": "gatewayGet",
+      "pathExpression": "`/market/quote/${encodeURIComponent(symbol)}`",
+      "responseType": "Quote"
+    },
+    {
+      "file": "src/services/marketService.ts",
+      "line": 15,
+      "client": "gatewayGet",
+      "pathExpression": "'/market/quotes'",
+      "responseType": "{ quotes: BatchQuoteRow[] }"
+    },
+    {
+      "file": "src/services/marketService.ts",
+      "line": 30,
+      "client": "gatewayGet",
+      "pathExpression": "`/market/ohlcv/${encodeURIComponent(symbol)}`",
+      "responseType": null
+    },
+    {
+      "file": "src/services/marketService.ts",
+      "line": 48,
+      "client": "gatewayGet",
+      "pathExpression": "'/market/news'",
+      "responseType": "{ items?: GatewayNewsItem[] | null }"
+    },
+    {
+      "file": "src/services/marketService.ts",
+      "line": 61,
+      "client": "gatewayGet",
+      "pathExpression": "'/market/search'",
+      "responseType": "{ matches: SymbolMatch[] }"
+    },
+    {
+      "file": "src/services/marketService.ts",
+      "line": 79,
+      "client": "gatewayGet",
+      "pathExpression": "'/market/movers'",
+      "responseType": "{ type: string; movers: MarketMoverItem[] }"
+    },
+    {
+      "file": "src/services/personalizationService.ts",
+      "line": 90,
+      "client": "gatewayGet",
+      "pathExpression": "'/personalization/feed'",
+      "responseType": "{ items: RankedItem[]; ranker_version?: string }"
+    },
+    {
+      "file": "src/services/personalizationService.ts",
+      "line": 106,
+      "client": "gatewayGet",
+      "pathExpression": "'/personalization/copilot-context'",
+      "responseType": "CopilotContext"
+    },
+    {
+      "file": "src/services/personalizationService.ts",
+      "line": 116,
+      "client": "gatewayGet",
+      "pathExpression": "'/personalization/watchlist'",
+      "responseType": "{ items: RankedItem[]; note?: string }"
+    },
+    {
+      "file": "src/services/personalizationService.ts",
+      "line": 132,
+      "client": "gatewayGet",
+      "pathExpression": "'/personalization/investigation'",
+      "responseType": "{ investigations: Investigation[] }"
+    },
+    {
+      "file": "src/services/personalizationService.ts",
+      "line": 153,
+      "client": "gatewayPost",
+      "pathExpression": "'/personalization/investigation'",
+      "responseType": "Investigation"
+    },
+    {
+      "file": "src/services/personalizationService.ts",
+      "line": 173,
+      "client": "gatewayPatch",
+      "pathExpression": "`/personalization/investigation/${encodeURIComponent(id)}`",
+      "responseType": "Investigation"
+    },
+    {
+      "file": "src/services/providerService.ts",
+      "line": 16,
+      "client": "gatewayGet",
+      "pathExpression": "'/providers/health'",
+      "responseType": "unknown"
+    },
+    {
+      "file": "src/services/providerService.ts",
+      "line": 42,
+      "client": "gatewayGet",
+      "pathExpression": "'/providers/health'",
+      "responseType": "{\n    providers: ProviderStatus[];\n    routing?: Record<string, string[]>;\n  }"
+    },
+    {
+      "file": "src/services/reasoningService.ts",
+      "line": 20,
+      "client": "gatewayGet",
+      "pathExpression": "'/agents/reasoning'",
+      "responseType": "{ reasoning: AgentOutput[]; count: number }"
+    },
+    {
+      "file": "src/services/reasoningService.ts",
+      "line": 61,
+      "client": "gatewayGet",
+      "pathExpression": "'/agents/analog'",
+      "responseType": "AnalogResult"
+    },
+    {
+      "file": "src/services/reasoningService.ts",
+      "line": 108,
+      "client": "gatewayPost",
+      "pathExpression": "'/agents/vulnerability'",
+      "responseType": "VulnerabilityResult"
+    },
+    {
+      "file": "src/services/researchService.ts",
+      "line": 21,
+      "client": "gatewayGet",
+      "pathExpression": "'/research/web'",
+      "responseType": "WebResearch"
+    },
+    {
+      "file": "src/services/researchService.ts",
+      "line": 25,
+      "client": "gatewayGet",
+      "pathExpression": "'/research/web/google'",
+      "responseType": "{\n    organic: Array<{ title: string; link: string; snippet: string; position: number; date?: string }>;\n    answer?: string;\n  }"
+    },
+    {
+      "file": "src/services/researchService.ts",
+      "line": 36,
+      "client": "gatewayPost",
+      "pathExpression": "'/research/synthesize'",
+      "responseType": "{ narrative: string }"
+    },
+    {
+      "file": "src/services/v3p2Service.ts",
+      "line": 30,
+      "client": "gatewayGet",
+      "pathExpression": "'/macro/regimes'",
+      "responseType": "{ regimes: MacroRegimeRow[]; count: number }"
+    },
+    {
+      "file": "src/services/v3p2Service.ts",
+      "line": 48,
+      "client": "gatewayGet",
+      "pathExpression": "'/macro/observations'",
+      "responseType": "{ items: MacroObservationRow[]; count: number }"
+    },
+    {
+      "file": "src/services/v3p2Service.ts",
+      "line": 97,
+      "client": "gatewayGet",
+      "pathExpression": "'/macro/global-indicators'",
+      "responseType": "{ items: GlobalIndicatorRow[]; count: number }"
+    },
+    {
+      "file": "src/services/v3p2Service.ts",
+      "line": 113,
+      "client": "gatewayGet",
+      "pathExpression": "'/macro/country-regimes'",
+      "responseType": "{ items: CountryRegimeRow[]; count: number }"
+    },
+    {
+      "file": "src/services/v3p2Service.ts",
+      "line": 144,
+      "client": "gatewayGet",
+      "pathExpression": "'/filings/recent'",
+      "responseType": "{ items: FilingRow[]; count: number }"
+    },
+    {
+      "file": "src/services/v3p2Service.ts",
+      "line": 157,
+      "client": "gatewayGet",
+      "pathExpression": "`/filings/symbol/${encodeURIComponent(symbol.toUpperCase())}`",
+      "responseType": "{ symbol: string; items: FilingRow[]; count: number }"
+    },
+    {
+      "file": "src/services/v3p2Service.ts",
+      "line": 184,
+      "client": "gatewayGet",
+      "pathExpression": "'/narratives/emerging'",
+      "responseType": "{ items: NarrativeEmergenceRow[]; count: number }"
+    },
+    {
+      "file": "src/services/v3p2Service.ts",
+      "line": 213,
+      "client": "gatewayGet",
+      "pathExpression": "'/narratives/memory'",
+      "responseType": "{ items: NarrativeMemoryRow[]; count: number }"
+    },
+    {
+      "file": "src/services/v3p2Service.ts",
+      "line": 245,
+      "client": "gatewayGet",
+      "pathExpression": "'/relations/context'",
+      "responseType": "RelationsContextPayload"
+    },
+    {
+      "file": "src/services/v3p2Service.ts",
+      "line": 273,
+      "client": "gatewayGet",
+      "pathExpression": "'/briefings/latest'",
+      "responseType": "{ items: BriefingLatestRow[]; count: number }"
+    }
+  ],
+  "gatewayHandlers": [
+    {
+      "file": "cloud-run/gateway/src/routes/agents.ts",
+      "line": 93,
+      "method": "GET",
+      "routerPath": "/outputs"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/agents.ts",
+      "line": 131,
+      "method": "GET",
+      "routerPath": "/outputs/:domain"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/agents.ts",
+      "line": 164,
+      "method": "GET",
+      "routerPath": "/portfolio/:portfolioId"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/agents.ts",
+      "line": 210,
+      "method": "GET",
+      "routerPath": "/registry"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/agents.ts",
+      "line": 216,
+      "method": "GET",
+      "routerPath": "/status"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/agents.ts",
+      "line": 249,
+      "method": "GET",
+      "routerPath": "/runs"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/agents.ts",
+      "line": 285,
+      "method": "GET",
+      "routerPath": "/regime"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/agents.ts",
+      "line": 310,
+      "method": "GET",
+      "routerPath": "/risk"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/agents.ts",
+      "line": 335,
+      "method": "GET",
+      "routerPath": "/reasoning"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/agents.ts",
+      "line": 377,
+      "method": "GET",
+      "routerPath": "/analog"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/agents.ts",
+      "line": 400,
+      "method": "POST",
+      "routerPath": "/vulnerability"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/agents.ts",
+      "line": 423,
+      "method": "GET",
+      "routerPath": "/narrative-exposure"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/copilot.ts",
+      "line": 56,
+      "method": "POST",
+      "routerPath": "/chat"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/earnings.ts",
+      "line": 39,
+      "method": "GET",
+      "routerPath": "/:symbol/surprises"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/earnings.ts",
+      "line": 98,
+      "method": "GET",
+      "routerPath": "/calendar"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/edgar.ts",
+      "line": 39,
+      "method": "GET",
+      "routerPath": "/:symbol/filings"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/edgar.ts",
+      "line": 54,
+      "method": "GET",
+      "routerPath": "/:symbol/snapshot"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/edgar.ts",
+      "line": 66,
+      "method": "GET",
+      "routerPath": "/:symbol/cik"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/edgar.ts",
+      "line": 86,
+      "method": "GET",
+      "routerPath": "/search"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/email.ts",
+      "line": 15,
+      "method": "GET",
+      "routerPath": "/preferences"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/email.ts",
+      "line": 24,
+      "method": "PATCH",
+      "routerPath": "/preferences"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/email.ts",
+      "line": 40,
+      "method": "GET",
+      "routerPath": "/unsubscribe"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/email.ts",
+      "line": 57,
+      "method": "POST",
+      "routerPath": "/unsubscribe"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/fundamentals.ts",
+      "line": 17,
+      "method": "GET",
+      "routerPath": "/:symbol/profile"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/fundamentals.ts",
+      "line": 73,
+      "method": "GET",
+      "routerPath": "/:symbol/metrics"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/fundamentals.ts",
+      "line": 156,
+      "method": "GET",
+      "routerPath": "/:symbol/financials"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/fundamentals.ts",
+      "line": 184,
+      "method": "GET",
+      "routerPath": "/:symbol/analyst"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/fundamentals.ts",
+      "line": 249,
+      "method": "GET",
+      "routerPath": "/:symbol/peers"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/fundamentals.ts",
+      "line": 273,
+      "method": "GET",
+      "routerPath": "/:symbol/ownership"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/fundamentals.ts",
+      "line": 285,
+      "method": "GET",
+      "routerPath": "/:symbol/edgar"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/historicalResearch.ts",
+      "line": 98,
+      "method": "POST",
+      "routerPath": "/plan"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/historicalResearch.ts",
+      "line": 197,
+      "method": "POST",
+      "routerPath": "/reason"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/historicalResearch.ts",
+      "line": 262,
+      "method": "POST",
+      "routerPath": "/followup-ask"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/historicalResearch.ts",
+      "line": 315,
+      "method": "POST",
+      "routerPath": "/followup-refine"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/instruments.ts",
+      "line": 213,
+      "method": "GET",
+      "routerPath": "/:symbol/intelligence"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/intelligence.ts",
+      "line": 59,
+      "method": "GET",
+      "routerPath": "/timeline"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/intelligence.ts",
+      "line": 95,
+      "method": "GET",
+      "routerPath": "/artifacts"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/intelligence.ts",
+      "line": 124,
+      "method": "GET",
+      "routerPath": "/artifacts/:id"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/intelligence.ts",
+      "line": 147,
+      "method": "GET",
+      "routerPath": "/features/:symbol"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/intelligence.ts",
+      "line": 179,
+      "method": "GET",
+      "routerPath": "/pipeline/runs"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/intelligence.ts",
+      "line": 206,
+      "method": "GET",
+      "routerPath": "/relations"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/intelligence.ts",
+      "line": 235,
+      "method": "GET",
+      "routerPath": "/warehouse/status"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/macro.ts",
+      "line": 61,
+      "method": "GET",
+      "routerPath": "/series/:id"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/macro.ts",
+      "line": 89,
+      "method": "GET",
+      "routerPath": "/series"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/macro.ts",
+      "line": 95,
+      "method": "GET",
+      "routerPath": "/fx"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/market.ts",
+      "line": 142,
+      "method": "GET",
+      "routerPath": "/quote/:symbol(*)"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/market.ts",
+      "line": 195,
+      "method": "GET",
+      "routerPath": "/quotes"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/market.ts",
+      "line": 285,
+      "method": "GET",
+      "routerPath": "/ohlcv/:symbol(*)"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/market.ts",
+      "line": 473,
+      "method": "GET",
+      "routerPath": "/news"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/market.ts",
+      "line": 534,
+      "method": "GET",
+      "routerPath": "/search"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/market.ts",
+      "line": 545,
+      "method": "GET",
+      "routerPath": "/movers"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/personalization.ts",
+      "line": 235,
+      "method": "POST",
+      "routerPath": "/events"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/personalization.ts",
+      "line": 258,
+      "method": "POST",
+      "routerPath": "/feedback"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/personalization.ts",
+      "line": 298,
+      "method": "GET",
+      "routerPath": "/profile"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/personalization.ts",
+      "line": 512,
+      "method": "GET",
+      "routerPath": "/briefing"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/personalization.ts",
+      "line": 595,
+      "method": "GET",
+      "routerPath": "/feed"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/personalization.ts",
+      "line": 629,
+      "method": "GET",
+      "routerPath": "/copilot-context"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/personalization.ts",
+      "line": 680,
+      "method": "GET",
+      "routerPath": "/watchlist"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/personalization.ts",
+      "line": 717,
+      "method": "POST",
+      "routerPath": "/investigation"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/personalization.ts",
+      "line": 735,
+      "method": "GET",
+      "routerPath": "/investigation"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/personalization.ts",
+      "line": 753,
+      "method": "PATCH",
+      "routerPath": "/investigation/:id"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/providers.ts",
+      "line": 36,
+      "method": "GET",
+      "routerPath": "/health"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/research.ts",
+      "line": 22,
+      "method": "GET",
+      "routerPath": "/web"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/research.ts",
+      "line": 40,
+      "method": "GET",
+      "routerPath": "/web/google"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/research.ts",
+      "line": 68,
+      "method": "POST",
+      "routerPath": "/synthesize"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/v3p2.ts",
+      "line": 55,
+      "method": "GET",
+      "routerPath": "/macro/regimes"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/v3p2.ts",
+      "line": 97,
+      "method": "GET",
+      "routerPath": "/macro/global-indicators"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/v3p2.ts",
+      "line": 140,
+      "method": "GET",
+      "routerPath": "/macro/country-regimes"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/v3p2.ts",
+      "line": 175,
+      "method": "GET",
+      "routerPath": "/macro/observations"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/v3p2.ts",
+      "line": 207,
+      "method": "GET",
+      "routerPath": "/filings/recent"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/v3p2.ts",
+      "line": 238,
+      "method": "GET",
+      "routerPath": "/filings/symbol/:symbol"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/v3p2.ts",
+      "line": 265,
+      "method": "GET",
+      "routerPath": "/narratives/emerging"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/v3p2.ts",
+      "line": 289,
+      "method": "GET",
+      "routerPath": "/narratives/memory"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/v3p2.ts",
+      "line": 315,
+      "method": "GET",
+      "routerPath": "/research/macro-observations"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/v3p2.ts",
+      "line": 350,
+      "method": "GET",
+      "routerPath": "/relations/context"
+    },
+    {
+      "file": "cloud-run/gateway/src/routes/v3p2.ts",
+      "line": 452,
+      "method": "GET",
+      "routerPath": "/briefings/latest"
+    }
+  ],
+  "firebaseConsumers": [
+    "src/lib/firebase.ts",
+    "src/services/artifactService.ts",
+    "src/services/insightService.ts",
+    "src/services/pinService.ts",
+    "src/services/portfolioService.ts",
+    "src/services/savedHistoricalResearchService.ts"
+  ]
+}

@@ -12,7 +12,7 @@ import {
   addDoc, updateDoc, deleteDoc, doc, serverTimestamp, getDocs, getDoc, where,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import type { IntelligenceArtifact, Briefing, LabSession, CopilotInsight, Quote } from '../types';
+import type { IntelligenceArtifact, Briefing, CopilotInsight, Quote } from '../types';
 
 function normalizeTimestamps(obj: Record<string, unknown>): Record<string, unknown> {
   // Firestore Timestamps → unix ms so the UI can treat them uniformly.
@@ -169,35 +169,6 @@ export function createArtifactFromBriefing(
     completenessScore: briefing.dataCompleteness ?? 0.5,
     significance: 0.5,
     evidence: [],
-    createdBy: uid,
-  });
-}
-
-export function createArtifactFromQuantLab(
-  workspaceId: string,
-  projectId: string,
-  session: LabSession,
-  uid: string,
-): Promise<string> {
-  const summaryLines = Object.entries(session.summary)
-    .map(([k, v]) => `| ${k} | ${v} |`)
-    .join('\n');
-  const body = `## Quant Lab Session: ${session.name}\n\n**Panel:** ${session.panel} · **Symbols:** ${session.symbols.join(', ')} · **Timeframe:** ${session.timeframe}\n\n| Metric | Value |\n|--------|-------|\n${summaryLines}`;
-  return createArtifact(workspaceId, projectId, {
-    workspaceId,
-    projectId,
-    artifactType: 'quant_lab_analysis',
-    category: 'risk',
-    title: session.name,
-    narrative: Object.entries(session.summary).slice(0, 3).map(([k, v]) => `${k}: ${v}`).join(' · '),
-    body,
-    symbols: session.symbols,
-    tags: [session.panel],
-    confidence: 0.9,
-    confidenceScore: 0.9,
-    completenessScore: 1,
-    significance: 0.6,
-    evidence: Object.entries(session.summary).map(([k, v]) => ({ label: k, value: v, source: 'derived' as const })),
     createdBy: uid,
   });
 }

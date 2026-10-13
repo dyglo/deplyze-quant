@@ -191,7 +191,7 @@ export const ResearchLibrary: React.FC = () => {
           <Library size={32} style={{ color: 'var(--muted-foreground)', marginBottom: 12 }} />
           <p className="ds-heading">Your library is empty</p>
           <p className="ds-caption" style={{ maxWidth: 360, textAlign: 'center' }}>
-            Save briefings, instrument snapshots, Quant Lab sessions, and Copilot insights from any page to build your research library.
+            Save instrument snapshots and Copilot insights from their research pages to build your research library.
           </p>
         </div>
       ) : (

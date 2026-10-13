@@ -14,7 +14,6 @@ import { Investigations } from './pages/Investigations';
 import { InstrumentDetail } from './pages/InstrumentDetail';
 import { MacroRegimeDesk } from './pages/MacroRegimeDesk';
 import { HistoricalResearch } from './pages/HistoricalResearch';
-import { QuantLab } from './pages/QuantLab';
 import { ResearchCopilot } from './pages/ResearchCopilot';
 import { HistoricalIntelligenceTerminal } from './pages/HistoricalIntelligenceTerminal';
 import { Briefings } from './pages/Briefings';
@@ -90,7 +89,6 @@ export default function App() {
             <Route path="/research"             element={<ProtectedRoute><HistoricalResearch /></ProtectedRoute>} />
             <Route path="/research/i/:id"       element={<ProtectedRoute><HistoricalResearch /></ProtectedRoute>} />
             <Route path="/positioning"          element={<Navigate to="/research" replace />} />
-            <Route path="/lab"                  element={<ProtectedRoute><QuantLab /></ProtectedRoute>} />
             <Route path="/copilot"              element={<ProtectedRoute><ResearchCopilot /></ProtectedRoute>} />
             <Route path="/historical-intelligence" element={<PublicRoute><HistoricalIntelligenceTerminal /></PublicRoute>} />
             <Route path="/briefings"            element={<PublicRoute><Briefings /></PublicRoute>} />

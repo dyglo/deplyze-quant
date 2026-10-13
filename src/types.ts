@@ -364,50 +364,6 @@ export interface CopilotInsight {
   createdAt: number;   // unix ms
 }
 
-// ─── V2: Quant Lab Sessions ───────────────────────────────────────────────────
-
-export type LabPanel = 'risk' | 'alpha' | 'portfolio';
-
-export interface LabSessionAssetSnapshot {
-  symbol: string;
-  weight?: number;        // portfolio weight 0-1
-  annVol: number;
-  annReturn: number;
-  sharpe: number;
-  beta?: number;
-  alpha?: number;
-  infoRatio?: number;
-  trackingError?: number;
-  equityCurve?: number[]; // rebased to 100, max 252 points
-}
-
-export interface LabSession {
-  id: string;
-  workspaceId: string;
-  projectId: string;
-  name: string;
-  panel: LabPanel;
-  savedBy: string;     // uid
-  createdAt: number;   // unix ms
-  symbols: string[];   // symbol(s) analysed
-  timeframe: string;   // e.g. '1day'
-  summary: Record<string, string | number>; // key scalars
-  // V1.0: rich snapshot for session cards + Restore
-  rawSnapshot?: {
-    basket?: LabSessionAssetSnapshot[];
-    riskMetrics?: {
-      annVol: number; mdd: number; sharpe: number; sortino: number;
-      hVar95: number; hVar99: number; annReturn: number;
-      equityCurve?: number[];
-    };
-    alphaMetrics?: LabSessionAssetSnapshot[];
-    portfolioMetrics?: {
-      portVol: number; portReturn: number; portSharpe: number; portMdd: number;
-      diversification: number; equityCurve?: number[];
-    };
-  };
-}
-
 // ─── Copilot ────────────────────────────────────────────────────────────────
 
 export interface CopilotMessage {

@@ -131,7 +131,6 @@ service cloud.firestore {
         match /briefings/{briefingId} { allow read: if canAccessOrg(wid); }
         match /agentRuns/{runId} { allow read: if canAccessOrg(wid); }
         match /pins/{pinId} { allow read, write: if canAccessOrg(wid); }
-        match /labSessions/{sessionId} { allow read, write: if canAccessOrg(wid); }
         match /copilotInsights/{insightId} { allow read, write: if canAccessOrg(wid); }
       }
 

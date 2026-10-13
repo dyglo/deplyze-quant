@@ -12,7 +12,6 @@
  *   risk          — drawdown / VaR / Sharpe / Sortino / rolling beta
  *   correlation   — Pearson / rolling / matrices / dependency drift
  *   benchmark     — beta / alpha / tracking error / info ratio / capture
- *   portfolio     — variance / vol / risk contributions / Monte Carlo / frontier
  *   seasonality   — monthly / weekday tendencies / significance ranking
  *   artifacts     — structured quant event records + timeline projection
  *
@@ -29,7 +28,6 @@ export * from './momentum';
 export * from './risk';
 export * from './correlation';
 export * from './benchmark';
-export * from './portfolio';
 export * from './seasonality';
 export * from './artifacts';
 export * from './regimes';

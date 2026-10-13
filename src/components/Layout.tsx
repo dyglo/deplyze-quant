@@ -72,7 +72,7 @@ interface LayoutProps {
 
 /*
  * Main navigation, grouped into cognitive sections (Discover / Research /
- * Library / Data). Portfolio and Market Dashboards remain their own
+ * Library / Data). Market Dashboards retain their own
  * collapsible groups rendered inline. Section grouping is presentation-only —
  * routes are unchanged. `menuItems` is derived below to preserve the existing
  * active-tab / breadcrumb lookups.
@@ -106,18 +106,6 @@ const bottomItems = [
 const MARKET_DASHBOARD_ITEMS = [
   { id: 'global-yields', label: 'Global Yields',              icon: TrendingUp,     path: '/market/global-yields' },
   { id: 'commodities',   label: 'Commodities',                icon: Flame,          path: '/market/commodities' },
-];
-
-const PORTFOLIO_INTELLIGENCE_ITEMS = [
-  { id: 'portfolio-overview',   label: 'Portfolio Overview',        icon: LayoutDashboard, path: '/portfolio/overview' },
-  { id: 'portfolio-holdings',   label: 'Holdings & Watchlist',      icon: ListTree,        path: '/portfolio/holdings' },
-  { id: 'portfolio-exposure',   label: 'Exposure Analysis',         icon: PieChart,        path: '/portfolio/exposure' },
-  { id: 'portfolio-attribution',label: 'Performance Attribution',   icon: TrendingUp,      path: '/portfolio/attribution' },
-  { id: 'portfolio-risk',       label: 'Risk & Regime Fit',         icon: ShieldAlert,     path: '/portfolio/risk' },
-  { id: 'portfolio-scenario',   label: 'Scenario & Stress View',    icon: Zap,             path: '/portfolio/scenario' },
-  // Awareness is portfolio-scoped (/portfolio/:id/awareness). The `path` here is
-  // a sentinel; the real link is resolved at render from the active portfolio id.
-  { id: 'portfolio-awareness',  label: 'Awareness',                 icon: Radar,           path: '/portfolio/awareness' },
 ];
 
 /* ─── Section label for grouped main nav (presentation-only) ───── */
@@ -188,28 +176,7 @@ const SidebarInner: React.FC<{ signOut: () => void; user: any; profile: any }> =
     localStorage.setItem('market-dashboards-expanded', String(next));
   };
 
-  const isPortfolioRoute = location.pathname.startsWith('/portfolio/');
-  const [piOpen, setPiOpen] = useState(() => {
-    const stored = localStorage.getItem('portfolio-intelligence-expanded');
-    return stored === null ? false : stored === 'true';
-  });
-
-  useEffect(() => {
-    if (isPortfolioRoute && !piOpen) {
-      setPiOpen(true);
-      localStorage.setItem('portfolio-intelligence-expanded', 'true');
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPortfolioRoute]);
-
-  const togglePi = () => {
-    const next = !piOpen;
-    setPiOpen(next);
-    localStorage.setItem('portfolio-intelligence-expanded', String(next));
-  };
-
-  // Group gating for guests. Portfolio Intelligence is always a full-account
-  // feature; Market Dashboards become public in a later PR (driven by access.ts).
+  // Group gating for guests is driven by access.ts.
   const marketPublic = isPublicPath('/market/global-yields');
   const marketGatedForGuest = isGuest && !marketPublic;
   const onMarketClick = () => {
@@ -219,29 +186,15 @@ const SidebarInner: React.FC<{ signOut: () => void; user: any; profile: any }> =
     }
     toggleMd();
   };
-  const onPortfolioClick = () => {
-    if (isGuest) {
-      requireAuth({ title: 'Portfolio Intelligence is a workspace feature', description: 'Create a free workspace to build and analyze portfolios.' });
-      return;
-    }
-    togglePi();
-  };
   // Never reveal gated group children to a guest, even if a prior session left
   // the group expanded in localStorage.
   const mdExpanded = mdOpen && !marketGatedForGuest;
-  const piExpanded = piOpen && !isGuest;
 
   const currentTab = menuItems.find(item =>
     item.path === '/' ? location.pathname === '/' : location.pathname.startsWith(item.path)
   )?.id || (location.pathname.startsWith('/settings') ? 'settings' : 'dashboard');
 
   const initials = (profile?.displayName?.charAt(0) || user?.email?.charAt(0) || 'U').toUpperCase();
-
-  // Active portfolio (persisted by usePortfolioWorkspace). Read synchronously so
-  // the sidebar can deep-link Awareness without opening its own Firestore
-  // subscriptions; falls back to the Portfolio overview when none is selected.
-  const activePortfolioId = typeof window !== 'undefined' ? localStorage.getItem('deplyze_active_portfolio_id') : null;
-  const awarenessPath = activePortfolioId ? `/portfolio/${activePortfolioId}/awareness` : '/portfolio/overview';
 
   // Shared renderer for a flat (non-collapsible) main-nav item.
   const renderNavItem = (item: typeof menuItems[number]) => {
@@ -366,7 +319,7 @@ const SidebarInner: React.FC<{ signOut: () => void; user: any; profile: any }> =
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <p style={{ fontSize: '0.55rem', fontWeight: 600, color: 'var(--muted-foreground)', letterSpacing: '0.06em', textTransform: 'uppercase', margin: 0 }}>Guest session</p>
                 <button
-                  onClick={() => requireAuth({ title: 'Create your workspace', description: 'Save research, build portfolios, and personalize your intelligence feed. Your current session carries over.' })}
+                  onClick={() => requireAuth({ title: 'Create your workspace', description: 'Save research and personalize your intelligence feed. Your current session carries over.' })}
                   className="ds-transition-fast"
                   style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
@@ -742,157 +695,6 @@ const SidebarInner: React.FC<{ signOut: () => void; user: any; profile: any }> =
           {RESEARCH_ITEMS.map(renderNavItem)}
         </SidebarMenu>
 
-        {/* ── Portfolio Intelligence expandable group ────────────── */}
-        <div style={{ marginTop: 4 }}>
-          <div style={{ height: 1, background: 'var(--sidebar-border)', margin: '4px 4px 6px' }} />
-
-          {collapsed ? (
-            <div
-              title="Portfolio Intelligence"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: '0.4375rem',
-                borderRadius: '0.375rem',
-                cursor: 'pointer',
-                background: isPortfolioRoute ? 'var(--sidebar-accent)' : 'transparent',
-                border: isPortfolioRoute ? '1px solid var(--sidebar-border)' : '1px solid transparent',
-              }}
-              onClick={onPortfolioClick}
-            >
-              <Briefcase
-                size={15}
-                style={{
-                  color: isPortfolioRoute ? 'var(--sidebar-primary)' : 'var(--sidebar-foreground)',
-                  opacity: isPortfolioRoute ? 1 : 0.6,
-                }}
-              />
-            </div>
-          ) : (
-            <>
-              <button
-                onClick={onPortfolioClick}
-                aria-expanded={piOpen}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                  width: '100%',
-                  padding: '0.4rem 0.625rem',
-                  borderRadius: '0.375rem',
-                  border: 'none',
-                  background: isPortfolioRoute ? 'var(--sidebar-accent)' : 'transparent',
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                }}
-                onMouseEnter={(e) => {
-                  if (!isPortfolioRoute) (e.currentTarget as HTMLElement).style.background = 'var(--sidebar-accent)';
-                }}
-                onMouseLeave={(e) => {
-                  if (!isPortfolioRoute) (e.currentTarget as HTMLElement).style.background = 'transparent';
-                }}
-              >
-                <Briefcase
-                  size={15}
-                  style={{
-                    color: isPortfolioRoute ? 'var(--sidebar-primary)' : 'var(--sidebar-foreground)',
-                    opacity: isPortfolioRoute ? 1 : 0.6,
-                    flexShrink: 0,
-                  }}
-                />
-                <span style={{
-                  flex: 1,
-                  fontSize: '0.8125rem',
-                  fontWeight: isPortfolioRoute ? 500 : 400,
-                  color: isPortfolioRoute ? 'var(--sidebar-accent-foreground)' : 'var(--sidebar-foreground)',
-                  opacity: isPortfolioRoute ? 1 : 0.8,
-                  letterSpacing: '-0.01em',
-                }}>
-                  Portfolio Intelligence
-                </span>
-                {isPortfolioRoute && !piOpen && (
-                  <span style={{
-                    width: 5, height: 5, borderRadius: '50%',
-                    background: 'var(--sidebar-primary)',
-                    flexShrink: 0,
-                  }} />
-                )}
-                <span style={{
-                  display: 'flex',
-                  transition: 'transform 200ms ease',
-                  transform: piOpen ? 'rotate(90deg)' : 'rotate(0deg)',
-                  color: 'var(--muted-foreground)',
-                  flexShrink: 0,
-                }}>
-                  <ChevronRight size={13} />
-                </span>
-              </button>
-
-              {piExpanded && (
-                <div style={{ marginTop: 2, paddingLeft: 8 }}>
-                  {PORTFOLIO_INTELLIGENCE_ITEMS.map((item) => {
-                    const isAwareness = item.id === 'portfolio-awareness';
-                    const to = isAwareness ? awarenessPath : item.path;
-                    const active = isAwareness
-                      ? location.pathname.endsWith('/awareness')
-                      : location.pathname === item.path || location.pathname.startsWith(item.path + '/');
-                    return (
-                      <SidebarMenuItem key={item.id}>
-                        <SidebarMenuButton
-                          render={(props) => <Link {...props} to={to} />}
-                          isActive={active}
-                          tooltip={undefined}
-                          className="ds-transition-fast"
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.5rem',
-                            padding: '0.375rem 0.5rem',
-                            borderRadius: '0.375rem',
-                            fontSize: '0.75rem',
-                            fontWeight: active ? 500 : 400,
-                            color: active ? 'var(--sidebar-accent-foreground)' : 'var(--sidebar-foreground)',
-                            opacity: active ? 1 : 0.75,
-                            background: active ? 'var(--sidebar-accent)' : 'transparent',
-                            border: active ? '1px solid var(--sidebar-border)' : '1px solid transparent',
-                            width: '100%',
-                            textDecoration: 'none',
-                          }}
-                          onMouseEnter={(e) => {
-                            if (!active) {
-                              (e.currentTarget as HTMLElement).style.background = 'var(--sidebar-accent)';
-                              (e.currentTarget as HTMLElement).style.color = 'var(--sidebar-accent-foreground)';
-                              (e.currentTarget as HTMLElement).style.opacity = '1';
-                            }
-                          }}
-                          onMouseLeave={(e) => {
-                            if (!active) {
-                              (e.currentTarget as HTMLElement).style.background = 'transparent';
-                              (e.currentTarget as HTMLElement).style.color = 'var(--sidebar-foreground)';
-                              (e.currentTarget as HTMLElement).style.opacity = '0.75';
-                            }
-                          }}
-                        >
-                          <item.icon
-                            size={13}
-                            style={{
-                              color: active ? 'var(--sidebar-primary)' : 'var(--sidebar-foreground)',
-                              opacity: active ? 1 : 0.5,
-                              flexShrink: 0,
-                            }}
-                          />
-                          <span style={{ lineHeight: 1.2 }}>{item.label}</span>
-                        </SidebarMenuButton>
-                      </SidebarMenuItem>
-                    );
-                  })}
-                </div>
-              )}
-            </>
-          )}
-        </div>
-
         {/* ── Library ──────────────────────────────────────── */}
         <NavSectionLabel collapsed={collapsed}>Library</NavSectionLabel>
         <SidebarMenu className="gap-0.5">
@@ -1074,7 +876,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
     localStorage.setItem('theme', theme);
   }, [theme]);
 
-  const currentPage = [...menuItems, ...bottomItems, ...MARKET_DASHBOARD_ITEMS, ...PORTFOLIO_INTELLIGENCE_ITEMS].find(item =>
+  const currentPage = [...menuItems, ...bottomItems, ...MARKET_DASHBOARD_ITEMS].find(item =>
     item.path === '/' ? location.pathname === '/' : location.pathname.startsWith(item.path)
   );
 
@@ -1252,7 +1054,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                   keep the live system indicator. */}
               {isGuest ? (
                 <button
-                  onClick={() => requireAuth({ title: 'Create your workspace', description: 'Save research, build portfolios, and personalize your intelligence feed. Your current session carries over.' })}
+                  onClick={() => requireAuth({ title: 'Create your workspace', description: 'Save research and personalize your intelligence feed. Your current session carries over.' })}
                   className="ds-transition-fast"
                   style={{
                     display: 'inline-flex', alignItems: 'center', gap: '0.375rem',

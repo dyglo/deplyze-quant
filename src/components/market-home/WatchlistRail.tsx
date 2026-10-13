@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Star, ArrowUpRight } from 'lucide-react';
+import { Star } from 'lucide-react';
 import { useAuth } from '../../components/AuthProvider';
 import { useWorkspace } from '../../components/WorkspaceContext';
 import { subscribeToWatchlists } from '../../services/portfolioService';
@@ -21,7 +21,7 @@ const Header: React.FC<{ children: React.ReactNode; action?: React.ReactNode }> 
   </header>
 );
 
-interface WatchSource { title: string; label?: string; symbols: string[]; href: string }
+interface WatchSource { title: string; label?: string; symbols: string[] }
 
 const WatchlistQuotes: React.FC<{ symbols: string[] }> = ({ symbols }) => {
   const navigate = useNavigate();
@@ -72,7 +72,6 @@ const WatchlistQuotes: React.FC<{ symbols: string[] }> = ({ symbols }) => {
 };
 
 export const WatchlistRail: React.FC = () => {
-  const navigate = useNavigate();
   const { user } = useAuth();
   const { currentWorkspace } = useWorkspace();
   const [watchlists, setWatchlists] = useState<IntelligenceWatchlist[]>([]);
@@ -99,40 +98,21 @@ export const WatchlistRail: React.FC = () => {
 
   let source: WatchSource | null = null;
   if (activeWatchlist) {
-    source = { title: 'My Watchlist', label: activeWatchlist.name, symbols: activeWatchlist.symbols, href: '/portfolio/holdings' };
+    source = { title: 'My Watchlist', label: activeWatchlist.name, symbols: activeWatchlist.symbols };
   } else if (holdingSymbols.length > 0) {
-    source = { title: 'My Holdings', label: selectedPortfolio?.name, symbols: holdingSymbols, href: '/portfolio/holdings' };
+    source = { title: 'My Holdings', label: selectedPortfolio?.name, symbols: holdingSymbols };
   } else if (portfolios.length > 0) {
     // Has a portfolio but no holdings/watchlist yet.
-    source = { title: 'My Holdings', label: selectedPortfolio?.name, symbols: [], href: '/portfolio/holdings' };
+    source = { title: 'My Holdings', label: selectedPortfolio?.name, symbols: [] };
   }
 
-  if (!source) {
-    return (
-      <section>
-        <Header>My Watchlist</Header>
-        <button
-          type="button"
-          onClick={() => navigate('/portfolio/holdings')}
-          className="ds-transition-fast"
-          style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', padding: '11px 12px', borderRadius: 7, border: '1px dashed var(--border)', background: 'transparent', cursor: 'pointer' }}
-        >
-          <Star size={15} style={{ color: 'var(--primary)' }} />
-          <span style={{ fontSize: 11.5, color: 'var(--muted-foreground)' }}>Add holdings or a watchlist to track symbols here.</span>
-        </button>
-      </section>
-    );
-  }
+  if (!source) return null;
 
   return (
     <section>
-      <Header action={
-        <button onClick={() => navigate(source.href)} className="ds-transition-fast" style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 10.5, fontWeight: 600, color: 'var(--primary)', background: 'transparent', border: 'none', cursor: 'pointer' }}>
-          {source.label ?? 'Open'} <ArrowUpRight size={11} />
-        </button>
-      }>{source.title}</Header>
+      <Header>{source.title}</Header>
       {source.symbols.length === 0 ? (
-        <p className="ds-caption" style={{ color: 'var(--muted-foreground)', padding: '8px 2px' }}>No symbols yet — add holdings in the portfolio workspace.</p>
+        <p className="ds-caption" style={{ color: 'var(--muted-foreground)', padding: '8px 2px' }}>No symbols yet.</p>
       ) : (
         <WatchlistQuotes symbols={source.symbols} />
       )}

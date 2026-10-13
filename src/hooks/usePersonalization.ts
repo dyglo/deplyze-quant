@@ -19,7 +19,6 @@ import {
   fetchBriefing,
   fetchCopilotContext,
   fetchFeed,
-  fetchProfile,
   fetchStructuredBriefing,
   fetchWatchlistIntelligence,
   listInvestigations,
@@ -30,7 +29,6 @@ import {
   type PersonalizedBriefing,
   type RankedItem,
   type StructuredBriefing,
-  type UserProfile,
 } from '../services/personalizationService';
 
 interface AsyncState<T> {
@@ -79,13 +77,6 @@ function useAsyncResource<T>(loader: () => Promise<T>, deps: unknown[] = []): As
   }, deps);
 
   return { data, loading, error, refetch: run };
-}
-
-export function useUserProfile(): AsyncState<UserProfile> {
-  return useAsyncResource<UserProfile>(async () => {
-    const p = await fetchProfile();
-    return p as UserProfile;
-  }, []);
 }
 
 export function useMorningBriefing(): AsyncState<PersonalizedBriefing> {

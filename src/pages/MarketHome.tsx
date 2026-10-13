@@ -1,6 +1,5 @@
 import React from 'react';
 import { useAuth } from '../components/AuthProvider';
-import { useAuthGate } from '../components/auth/AuthGate';
 import { useDocumentHead, ORGANIZATION_JSONLD } from '../lib/seo';
 import { TickerTape } from '../components/market-home/TickerTape';
 import { HeroIntelligence } from '../components/market-home/HeroIntelligence';
@@ -25,7 +24,6 @@ function greeting(): string {
 
 export const MarketHome: React.FC = () => {
   const { profile, user, isGuest } = useAuth();
-  const { requireAuth } = useAuthGate();
   const name = profile?.displayName || user?.displayName || user?.email?.split('@')[0] || 'there';
 
   useDocumentHead({
@@ -74,37 +72,7 @@ export const MarketHome: React.FC = () => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 24, minWidth: 0 }}>
             <SectionBoundary label="Market performance"><FeaturedChart /></SectionBoundary>
             <SectionBoundary label="Market snapshot"><MarketSnapshot /></SectionBoundary>
-            {isGuest ? (
-              <SectionBoundary label="Your portfolio">
-                <div style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16,
-                  padding: '18px 20px', borderRadius: 12,
-                  background: 'color-mix(in srgb, var(--primary) 6%, var(--card))',
-                  border: '1px dashed var(--border)',
-                }}>
-                  <div style={{ minWidth: 0 }}>
-                    <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'var(--foreground)' }}>Build your portfolio intelligence</p>
-                    <p style={{ margin: '4px 0 0', fontSize: 12.5, lineHeight: 1.5, color: 'var(--muted-foreground)' }}>
-                      Track holdings, exposure, regime fit, and per-position agent analysis. Create a free workspace to get started — your session carries over.
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => requireAuth({ title: 'Build your portfolio intelligence', description: 'Track holdings, exposure, and regime fit with autonomous agent analysis.' })}
-                    className="ds-transition-fast"
-                    style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0,
-                      height: 34, padding: '0 14px', borderRadius: 8, border: 'none',
-                      background: 'var(--primary)', color: 'var(--primary-foreground)',
-                      fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
-                    }}
-                  >
-                    Create Workspace
-                  </button>
-                </div>
-              </SectionBoundary>
-            ) : (
-              <SectionBoundary label="Your portfolio"><PortfolioInsights /></SectionBoundary>
-            )}
+            {!isGuest && <SectionBoundary label="Your portfolio"><PortfolioInsights /></SectionBoundary>}
             <SectionBoundary label="Relative valuation"><ValuationTable /></SectionBoundary>
             <SectionBoundary label="Calendar"><CalendarSection /></SectionBoundary>
             <SectionBoundary label="Intelligence spotlight"><IntelligenceSpotlight /></SectionBoundary>

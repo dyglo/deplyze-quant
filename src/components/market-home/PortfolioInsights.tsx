@@ -1,6 +1,5 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Briefcase, ArrowUpRight } from 'lucide-react';
 import { usePortfolioWorkspace } from '../../hooks/usePortfolioWorkspace';
 import { usePortfolioAgentOutputs } from '../../hooks/useAgentIntelligence';
 import { useSWR } from '../../hooks/useSWR';
@@ -55,27 +54,7 @@ export const PortfolioInsights: React.FC = () => {
   // Don't render the section at all while we don't yet know if a portfolio exists.
   if (loading) return null;
 
-  if (portfolios.length === 0) {
-    return (
-      <SectionCard title="Your Portfolio" subtitle="Personalised intelligence">
-        <button
-          type="button"
-          onClick={() => navigate('/portfolio')}
-          className="ds-transition-fast"
-          style={{
-            display: 'flex', alignItems: 'center', gap: 12, width: '100%', textAlign: 'left',
-            padding: '16px', borderRadius: 8, border: '1px dashed var(--border)', background: 'transparent', cursor: 'pointer',
-          }}
-        >
-          <Briefcase size={20} style={{ color: 'var(--primary)' }} />
-          <span>
-            <span style={{ display: 'block', fontSize: 13, fontWeight: 700, color: 'var(--foreground)' }}>Build a portfolio to unlock personalised intelligence</span>
-            <span style={{ display: 'block', fontSize: 11.5, color: 'var(--muted-foreground)', marginTop: 2 }}>Track holdings and get exposure, risk-fit, and agent insights tailored to you.</span>
-          </span>
-        </button>
-      </SectionCard>
-    );
-  }
+  if (portfolios.length === 0) return null;
 
   const symbols = holdings.map((h) => h.symbol);
 
@@ -83,11 +62,6 @@ export const PortfolioInsights: React.FC = () => {
     <SectionCard
       title="Your Portfolio"
       subtitle={selectedPortfolio?.name}
-      action={
-        <button onClick={() => navigate('/portfolio/overview')} className="ds-transition-fast" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 600, color: 'var(--primary)', background: 'transparent', border: 'none', cursor: 'pointer' }}>
-          Open workspace <ArrowUpRight size={12} />
-        </button>
-      }
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         {symbols.length > 0 ? (
@@ -96,7 +70,7 @@ export const PortfolioInsights: React.FC = () => {
             <HoldingsStrip symbols={symbols} />
           </div>
         ) : (
-          <p className="ds-caption" style={{ color: 'var(--muted-foreground)' }}>No holdings yet — add positions in the portfolio workspace.</p>
+          <p className="ds-caption" style={{ color: 'var(--muted-foreground)' }}>No holdings yet.</p>
         )}
 
         {(agentOutputs?.length ?? 0) > 0 && (

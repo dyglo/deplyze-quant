@@ -5,15 +5,13 @@
  * and narrative exposure. All hooks are visibility-aware and cache data.
  */
 
-import { useEffect, useCallback, useState, useMemo } from 'react';
+import { useEffect, useCallback, useState } from 'react';
 import {
   fetchReasoningOutputs,
   fetchHistoricalAnalog,
   fetchPortfolioVulnerability,
-  fetchNarrativeExposure,
   type AnalogResult,
   type VulnerabilityResult,
-  type NarrativeExposureResult,
   type HoldingInput,
 } from '../services/reasoningService';
 import type { AgentOutput } from '../types/agents';
@@ -114,40 +112,4 @@ export function usePortfolioVulnerability(
   useEffect(() => { fetch(); }, [fetch]);
 
   return { data, loading, error, refetch: fetch };
-}
-
-// ─── Narrative exposure ───────────────────────────────────────────────────────
-
-export function useNarrativeExposure(
-  symbols: string[],
-  weights?: Record<string, number>,
-) {
-  const [data, setData] = useState<NarrativeExposureResult | null>(null);
-  const [loading, setLoading] = useState(symbols.length > 0);
-  const [error, setError] = useState<string | null>(null);
-  const symKey = symbols.slice().sort().join(',');
-
-  const fetch = useCallback(async () => {
-    if (!symbols.length) { setLoading(false); return; }
-    try {
-      const result = await fetchNarrativeExposure(symbols, weights);
-      setData(result);
-      setError(null);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [symKey]);
-
-  useEffect(() => { fetch(); }, [fetch]);
-
-  // Top theme by portfolio weight
-  const topTheme = useMemo(
-    () => data?.exposures?.[0] ?? null,
-    [data],
-  );
-
-  return { data, topTheme, loading, error, refetch: fetch };
 }

@@ -400,7 +400,7 @@ _CTA_MAP = {
     "regime":        ("/macro",                     "Explore regime"),
     "narrative":     ("/instruments/narratives",    "View narratives"),
     "analog":        ("/historical-intelligence",   "Explore analogs"),
-    "risk":          ("/portfolio/risk",             "View risk"),
+    "risk":          ("/macro",                      "View risk"),
     "opportunity":   ("/instruments",               "Browse instruments"),
     "agent_output":  ("/briefings",                 "View briefings"),
 }

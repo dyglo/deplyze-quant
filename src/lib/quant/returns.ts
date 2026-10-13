@@ -31,14 +31,6 @@ export function logReturns(values: number[]): number[] {
   return out;
 }
 
-/** Cumulative log-return series (each element = sum of log returns up to t). */
-export function cumulativeLogReturns(lr: number[]): number[] {
-  const out: number[] = [];
-  let s = 0;
-  for (const r of lr) { s += r; out.push(s); }
-  return out;
-}
-
 /** Cumulative simple-return series (compounded). */
 export function cumulativeReturns(simple: number[]): number[] {
   const out: number[] = [];

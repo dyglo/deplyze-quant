@@ -88,7 +88,6 @@ import v3p2Router from './routes/v3p2';
 import agentsRouter from './routes/agents';
 import backtestRouter from './routes/backtest';
 import personalizationRouter from './routes/personalization';
-import portfolioAwarenessRouter from './routes/portfolioAwareness';
 import historicalResearchRouter from './routes/historicalResearch';
 import { authenticatedEmailRouter, publicEmailRouter } from './routes/email';
 import { resendWebhookHandler } from './email/webhook';
@@ -181,7 +180,6 @@ router.use('/agents', agentsRouter);
 // write split is finalized in a later PR.)
 router.use('/backtest', requireFullAccount, backtestRouter);
 router.use('/personalization', requireFullAccount, personalizationRouter);
-router.use('/portfolio-awareness', requireFullAccount, portfolioAwarenessRouter);
 router.use('/historical-research', requireFullAccount, historicalResearchRouter);
 router.use('/email', requireFullAccount, authenticatedEmailRouter);
 // V3 Phase 2 routes — multi-prefix (/macro/regimes, /filings/*, /narratives/*,

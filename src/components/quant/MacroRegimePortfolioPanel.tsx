@@ -14,7 +14,6 @@
  */
 
 import React, { useMemo } from 'react';
-import { Link } from 'react-router-dom';
 import { Briefcase, RefreshCw } from 'lucide-react';
 import { usePortfolioWorkspace } from '../../hooks/usePortfolioWorkspace';
 import { usePortfolioVulnerability } from '../../hooks/useAgentReasoning';
@@ -65,15 +64,8 @@ export const MacroRegimePortfolioPanel: React.FC = () => {
             No active portfolio holdings.
           </p>
           <p className="ds-caption" style={{ margin: '0 0 12px', color: 'var(--muted-foreground)' }}>
-            Create or select a portfolio with positions to see which regime dimensions stress it and which holdings drive that exposure.
+            Portfolio regime analysis requires active holdings.
           </p>
-          <Link
-            to="/portfolio"
-            className="ds-btn-secondary"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, textDecoration: 'none' }}
-          >
-            Go to Portfolio
-          </Link>
         </div>
       ) : vuln.loading ? (
         <PortfolioVulnerabilityPanel result={null} loading holdingsCount={activeHoldings.length} />

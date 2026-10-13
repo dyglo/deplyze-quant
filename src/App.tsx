@@ -24,13 +24,6 @@ import { ResearchLibrary } from './pages/ResearchLibrary';
 import { ArtifactPage } from './pages/ArtifactPage';
 import { GlobalYields } from './pages/market/GlobalYields';
 import { CommoditiesIntelligence } from './pages/market/CommoditiesIntelligence';
-import { PortfolioOverview } from './pages/portfolio/PortfolioOverview';
-import { HoldingsWatchlist } from './pages/portfolio/HoldingsWatchlist';
-import { ExposureAnalysis } from './pages/portfolio/ExposureAnalysis';
-import { PerformanceAttribution } from './pages/portfolio/PerformanceAttribution';
-import { RiskRegimeFit } from './pages/portfolio/RiskRegimeFit';
-import { ScenarioStress } from './pages/portfolio/ScenarioStress';
-import { PortfolioAwareness } from './pages/portfolio/PortfolioAwareness';
 
 const LoadingScreen: React.FC = () => (
   <div className="ds-loading-screen" style={{
@@ -111,15 +104,6 @@ export default function App() {
             {/* Market Dashboards — Phase 1 + 2 (public discovery) */}
             <Route path="/market/global-yields" element={<PublicRoute><GlobalYields /></PublicRoute>} />
             <Route path="/market/commodities"   element={<PublicRoute><CommoditiesIntelligence /></PublicRoute>} />
-            {/* Portfolio Intelligence Workspace */}
-            <Route path="/portfolio/overview"     element={<ProtectedRoute><PortfolioOverview /></ProtectedRoute>} />
-            <Route path="/portfolio/holdings"     element={<ProtectedRoute><HoldingsWatchlist /></ProtectedRoute>} />
-            <Route path="/portfolio/exposure"     element={<ProtectedRoute><ExposureAnalysis /></ProtectedRoute>} />
-            <Route path="/portfolio/attribution"  element={<ProtectedRoute><PerformanceAttribution /></ProtectedRoute>} />
-            <Route path="/portfolio/risk"         element={<ProtectedRoute><RiskRegimeFit /></ProtectedRoute>} />
-            <Route path="/portfolio/scenario"     element={<ProtectedRoute><ScenarioStress /></ProtectedRoute>} />
-            <Route path="/portfolio/:portfolioId/awareness" element={<ProtectedRoute><PortfolioAwareness /></ProtectedRoute>} />
-            <Route path="/portfolio"              element={<Navigate to="/portfolio/overview" replace />} />
             <Route path="*"                       element={<Navigate to="/" replace />} />
           </Routes>
           <Toaster />

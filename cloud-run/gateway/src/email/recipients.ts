@@ -251,7 +251,7 @@ export async function buildDailyContext(recipient: EmailRecipient, sendDate: str
       : observations.filter((o) => o.kind?.includes('narrative') || o.kind?.includes('macro')).map((o) => `${o.title}: ${o.narrative}`).slice(0, 3),
     watchlistIntelligence: watchlist.slice(0, 6).map((symbol) => `${symbol}: remains on the watchlist intelligence rail for context monitoring.`),
     aiContext: 'The brief emphasizes portfolio-aware context, regime fit, concentration, volatility, and narrative drift. It is informational and avoids directional pressure.',
-    ctaUrl: `${appBaseUrl()}/portfolio`,
+    ctaUrl: appBaseUrl(),
     unsubscribeUrl: unsubscribeUrl(recipient.uid, recipient.email, 'daily_portfolio_brief'),
     preferenceUrl: preferencesUrl(),
     generatedAt: sendDate,
@@ -279,7 +279,7 @@ export async function buildRiskRegimeAlertContext(recipient: EmailRecipient): Pr
     alertTitle: `${portfolio.name} context change detected`,
     summary: material[0]?.narrative || 'A portfolio-aware risk or regime change has been detected in the latest intelligence snapshot.',
     observations: material.map((o) => `${o.title}: ${o.narrative}`),
-    ctaUrl: `${appBaseUrl()}/portfolio/risk-regime-fit`,
+    ctaUrl: `${appBaseUrl()}/macro`,
     unsubscribeUrl: unsubscribeUrl(recipient.uid, recipient.email, 'risk_regime_alert'),
     preferenceUrl: preferencesUrl(),
   };

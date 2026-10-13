@@ -141,25 +141,6 @@ export function logPageView(placement: string, properties?: Record<string, unkno
   });
 }
 
-export function logOpen(opts: {
-  category: EventCategory;
-  placement: string;
-  artifact_id?: string;
-  entity_id?: string;
-  symbol?: string;
-  properties?: Record<string, unknown>;
-}): void {
-  logEvent({
-    event_type: 'open',
-    event_category: opts.category,
-    placement: opts.placement,
-    artifact_id: opts.artifact_id,
-    entity_id: opts.entity_id,
-    symbol: opts.symbol,
-    properties: opts.properties,
-  });
-}
-
 // Value-action event types — must stay aligned with the server-side
 // authoritative list (gateway/lib/personalization.ts::ALWAYS_VALUE and
 // quant-engine sessionizer.VALUE_EVENT_TYPES). The client only emits the

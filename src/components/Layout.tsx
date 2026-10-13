@@ -82,7 +82,6 @@ interface LayoutProps {
 const HOME_ITEM = { id: 'home', label: 'Home', icon: Home, path: '/' };
 
 const DISCOVER_ITEMS = [
-  { id: 'terminal',    label: 'Intelligence Terminal',  icon: Activity,        path: '/terminal' },
   { id: 'macro',       label: 'Macro Regime Desk',      icon: TrendingUp,      path: '/macro' },
   { id: 'relations-map', label: 'Relations Map',        icon: Network,         path: '/relations-map' },
 ];

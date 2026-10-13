@@ -408,14 +408,6 @@ export interface LabSession {
   };
 }
 
-// ─── V2: Research Timeline ────────────────────────────────────────────────────
-
-export type TimelineEvent =
-  | { kind: 'artifact';   id: string; createdAt: number; data: IntelligenceArtifact }
-  | { kind: 'briefing';   id: string; createdAt: number; data: Briefing }
-  | { kind: 'labSession'; id: string; createdAt: number; data: LabSession }
-  | { kind: 'insight';    id: string; createdAt: number; data: CopilotInsight };
-
 // ─── Copilot ────────────────────────────────────────────────────────────────
 
 export interface CopilotMessage {

@@ -10,7 +10,6 @@ import { Toaster } from './components/ui/sonner';
 import { DrawerProvider } from './components/quant/DataDrawer';
 import { Activity } from 'lucide-react';
 import { MarketHome } from './pages/MarketHome';
-import { IntelligenceTerminal } from './pages/IntelligenceTerminal';
 import { Investigations } from './pages/Investigations';
 import { InstrumentDetail } from './pages/InstrumentDetail';
 import { MacroRegimeDesk } from './pages/MacroRegimeDesk';
@@ -97,7 +96,6 @@ export default function App() {
             <Route path="/login"                element={<Login />} />
             {/* ── Public surfaces (guests + full accounts) ── */}
             <Route path="/"                     element={<PublicRoute><MarketHome /></PublicRoute>} />
-            <Route path="/terminal"             element={<PublicRoute><IntelligenceTerminal /></PublicRoute>} />
             <Route path="/investigations"       element={<ProtectedRoute><Investigations /></ProtectedRoute>} />
             {/* Single-asset research (public discovery) */}
             <Route path="/instruments/:symbol"     element={<PublicRoute><InstrumentDetail /></PublicRoute>} />

@@ -10,7 +10,8 @@ working replacement. No live resources or existing records have been deleted.
 `618177e08ea5a7d026c0d377871da3b68148e7b7`, then the repository was cloned at that
 commit and `feat/rust-cloudflare-supabase` was created. No `AGENTS.md` was found
 in the checkout or workspace. The installed cloud-environment, Supabase,
-Vercel CLI, and plugin-management skills were read.
+Vercel CLI, plugin-management, and Supabase PostgreSQL best-practices skills
+were read, including RLS, foreign-key indexing, and connection-pooling guidance.
 
 The current source takes precedence over the earlier page-removal documents.
 The repeatable, read-only inventory is:
@@ -211,8 +212,11 @@ as successes while waiting for the decision.
 - Supabase: sole organization `Tafar`, ID `afwkalnaplqvoblbpmzj`, Free. Existing
   `MindFlow-Routines` is healthy and `smartmoney-book` inactive; neither is a
   dedicated Deplyze project. The user approved organization Tafar. The
-  connected server rejects `get_cost` as unavailable (`MCP tool get_cost was
-  not returned by tools/list`), preventing the listed project-creation flow.
+  connected server rejects both `get_cost` and `confirm_cost` as unavailable
+  (`MCP tool ... was not returned by tools/list`), preventing the listed
+  project-creation flow. A supported Supabase management connection or secure
+  CLI credential binding is needed for provisioning; no tokens should be
+  pasted into chat.
   No project, schema, bucket, or data import has been created.
 - Vercel: confirmed `deplyze-quant`, project
   `prj_driGsM8ftyGdbSyBPIqbtxdxqzB7`, team

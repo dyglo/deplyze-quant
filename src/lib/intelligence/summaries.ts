@@ -18,7 +18,6 @@ import {
   classifyCommodities,
   classifyFX,
   classifySectors,
-  classifyWorldEquity,
   classifyYieldCurve,
   type IntelligenceSummary,
   type DashboardQuote,
@@ -46,34 +45,6 @@ function toPayload(summary: IntelligenceSummary, body?: string): SummaryPayload 
     signals: summary.signals,
     tone: regimeTone(summary.regime),
   };
-}
-
-// ─── World Equity ─────────────────────────────────────────────────────────────
-
-export function worldEquitySummary(quotes: DashboardQuote[]): SummaryPayload {
-  const summary = classifyWorldEquity(quotes);
-  const ok = quotes.filter((q) => q.ok);
-  if (!ok.length) return toPayload(summary);
-
-  const adv = ok.filter((q) => q.changePercent > 0).length;
-  const breadthPct = Math.round((adv / ok.length) * 100);
-  const avg = ok.reduce((s, q) => s + q.changePercent, 0) / ok.length;
-
-  const us = ok.filter((q) => ['SPY', 'QQQ', 'IWM', 'DIA'].includes(q.symbol));
-  const usAvg = us.length ? us.reduce((s, q) => s + q.changePercent, 0) / us.length : null;
-  const emAvg = (() => {
-    const em = ok.filter((q) => ['EEM', 'VWO', 'FXI', 'EWZ', 'INDA'].includes(q.symbol));
-    return em.length ? em.reduce((s, q) => s + q.changePercent, 0) / em.length : null;
-  })();
-
-  const body = [
-    `Breadth ${breadthPct}% advancing across ${ok.length} indices · avg ${avg >= 0 ? '+' : ''}${avg.toFixed(2)}%`,
-    usAvg != null && emAvg != null
-      ? `US ${usAvg >= 0 ? '+' : ''}${usAvg.toFixed(2)}% vs EM ${emAvg >= 0 ? '+' : ''}${emAvg.toFixed(2)}%`
-      : null,
-  ].filter(Boolean).join(' · ');
-
-  return toPayload(summary, body);
 }
 
 // ─── US Sectors ───────────────────────────────────────────────────────────────

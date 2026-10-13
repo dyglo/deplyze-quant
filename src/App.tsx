@@ -22,7 +22,6 @@ import { Briefings } from './pages/Briefings';
 import { BriefingDetail } from './pages/BriefingDetail';
 import { ResearchLibrary } from './pages/ResearchLibrary';
 import { ArtifactPage } from './pages/ArtifactPage';
-import { WorldEquityIntelligence } from './pages/market/WorldEquityIntelligence';
 import { UsSectorIntelligence } from './pages/market/UsSectorIntelligence';
 import { GlobalYields } from './pages/market/GlobalYields';
 import { CountriesRegionalMarkets } from './pages/market/CountriesRegionalMarkets';
@@ -113,7 +112,6 @@ export default function App() {
             <Route path="/artifacts/:id"        element={<ProtectedRoute><ArtifactPage /></ProtectedRoute>} />
             <Route path="/settings"             element={<ProtectedRoute><Settings /></ProtectedRoute>} />
             {/* Market Dashboards — Phase 1 + 2 (public discovery) */}
-            <Route path="/market/world-equity"  element={<PublicRoute><WorldEquityIntelligence /></PublicRoute>} />
             <Route path="/market/us-sectors"    element={<PublicRoute><UsSectorIntelligence /></PublicRoute>} />
             <Route path="/market/global-yields" element={<PublicRoute><GlobalYields /></PublicRoute>} />
             <Route path="/market/countries"     element={<PublicRoute><CountriesRegionalMarkets /></PublicRoute>} />

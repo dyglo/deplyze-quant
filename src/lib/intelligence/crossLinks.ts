@@ -21,7 +21,6 @@ type AssetClass = 'equity' | 'etf' | 'index' | 'fx' | 'commodity' | 'crypto' | '
 
 /** All known intelligence dashboards. */
 const ROUTES = {
-  worldEquity: '/market/world-equity',
   sectors: '/market/us-sectors',
   yields: '/market/global-yields',
   countries: '/market/countries',
@@ -143,15 +142,6 @@ export function buildLinksForSymbol({ symbol, assetClass }: CrossLinkInput): Lin
       to: ROUTES.commodities,
       state: { fromSymbol: sym, fromDashboard: 'fx' },
     });
-    if (sym === 'UUP' || symbol.includes('USD')) {
-      links.push({
-        label: 'World Equity',
-        description: 'Dollar strength typically pressures EM equity.',
-        to: ROUTES.worldEquity,
-        state: { fromSymbol: sym, fromDashboard: 'fx' },
-        filter: 'emerging',
-      });
-    }
     return links;
   }
 
@@ -173,12 +163,6 @@ export function buildLinksForSymbol({ symbol, assetClass }: CrossLinkInput): Lin
         filter: commodityLink.commodity,
       });
     }
-    links.push({
-      label: 'World Equity',
-      description: 'Compare against regional peers.',
-      to: ROUTES.worldEquity,
-      state: { fromSymbol: sym, fromDashboard: 'countries' },
-    });
     return links;
   }
 

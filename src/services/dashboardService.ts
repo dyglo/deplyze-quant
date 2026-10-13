@@ -57,27 +57,6 @@ export interface IntelligenceSummary {
   caution?: string;
 }
 
-// ─── Symbol universes ─────────────────────────────────────────────────────────
-
-export const WORLD_EQUITY_SYMBOLS: Array<{ symbol: string; name: string; group: 'us' | 'global' | 'developed' | 'emerging' }> = [
-  { symbol: 'SPY',  name: 'S&P 500',          group: 'us' },
-  { symbol: 'QQQ',  name: 'Nasdaq 100',        group: 'us' },
-  { symbol: 'IWM',  name: 'Russell 2000',      group: 'us' },
-  { symbol: 'DIA',  name: 'Dow Jones',         group: 'us' },
-  { symbol: 'ACWI', name: 'All-World',         group: 'global' },
-  { symbol: 'VT',   name: 'World Total',       group: 'global' },
-  { symbol: 'EFA',  name: 'Developed ex-US',   group: 'developed' },
-  { symbol: 'VEA',  name: 'Developed Mkts',    group: 'developed' },
-  { symbol: 'EEM',  name: 'Emerging Markets',  group: 'emerging' },
-  { symbol: 'VWO',  name: 'EM Vanguard',       group: 'emerging' },
-  { symbol: 'EWJ',  name: 'Japan',             group: 'developed' },
-  { symbol: 'EWG',  name: 'Germany',           group: 'developed' },
-  { symbol: 'EWU',  name: 'UK',                group: 'developed' },
-  { symbol: 'EWC',  name: 'Canada',            group: 'developed' },
-  { symbol: 'FXI',  name: 'China',             group: 'emerging' },
-  { symbol: 'EWZ',  name: 'Brazil',            group: 'emerging' },
-];
-
 export const SECTOR_ETF_SYMBOLS: Array<{ symbol: string; name: string; sector: string }> = [
   { symbol: 'XLK',  name: 'Technology',           sector: 'Technology' },
   { symbol: 'XLF',  name: 'Financials',            sector: 'Financials' },
@@ -163,15 +142,6 @@ function normalizeRow(row: BatchQuoteRow, nameMap?: Record<string, string>): Das
   };
 }
 
-// ─── Fetch helpers ────────────────────────────────────────────────────────────
-
-export async function fetchWorldEquityQuotes(): Promise<DashboardQuote[]> {
-  const symbols = WORLD_EQUITY_SYMBOLS.map((s) => s.symbol);
-  const nameMap = Object.fromEntries(WORLD_EQUITY_SYMBOLS.map((s) => [s.symbol, s.name]));
-  const rows = await fetchQuotes(symbols);
-  return rows.map((r) => normalizeRow(r, nameMap));
-}
-
 export async function fetchSectorQuotes(): Promise<DashboardQuote[]> {
   const symbols = SECTOR_ETF_SYMBOLS.map((s) => s.symbol);
   const nameMap = Object.fromEntries(SECTOR_ETF_SYMBOLS.map((s) => [s.symbol, s.name]));
@@ -247,50 +217,6 @@ export async function fetchYieldCurve(): Promise<YieldCurveData> {
   }
 
   return { points, history, spread10y2y: spread, curveState };
-}
-
-// ─── Intelligence classifiers ─────────────────────────────────────────────────
-
-export function classifyWorldEquity(quotes: DashboardQuote[]): IntelligenceSummary {
-  const ok = quotes.filter((q) => q.ok);
-  if (!ok.length) return { regime: 'neutral', headline: 'Insufficient data', note: 'Provider data unavailable.', signals: [] };
-
-  const avgChange = ok.reduce((s, q) => s + q.changePercent, 0) / ok.length;
-  const spy = quotes.find((q) => q.symbol === 'SPY');
-  const eem = quotes.find((q) => q.symbol === 'EEM');
-  const efa = quotes.find((q) => q.symbol === 'EFA');
-
-  const signals: string[] = [];
-  let regime: RegimeClassification = 'neutral';
-
-  if (avgChange > 0.5) {
-    regime = 'risk-on';
-    signals.push('Broad advance across global equity indices');
-  } else if (avgChange < -0.5) {
-    regime = 'risk-off';
-    signals.push('Broad decline across global equity indices');
-  }
-
-  if (spy && spy.changePercent > 0.5) signals.push('US large-cap leading');
-  if (eem && eem.changePercent < -1) signals.push('Emerging market pressure elevated');
-  if (efa && efa.changePercent > spy!.changePercent + 0.5) signals.push('International outperforming US');
-
-  const gainers = ok.filter((q) => q.changePercent > 0).length;
-  const breadthPct = Math.round((gainers / ok.length) * 100);
-  signals.push(`${breadthPct}% of tracked indices advancing`);
-
-  const headline = regime === 'risk-on'
-    ? 'Global Risk-On — Broad Equity Advance'
-    : regime === 'risk-off'
-    ? 'Global Risk-Off — Broad Equity Decline'
-    : 'Global Equities Mixed — Selective Leadership';
-
-  return {
-    regime,
-    headline,
-    note: `Avg change across ${ok.length} tracked indices: ${avgChange >= 0 ? '+' : ''}${avgChange.toFixed(2)}%`,
-    signals,
-  };
 }
 
 export function classifySectors(quotes: DashboardQuote[]): IntelligenceSummary {

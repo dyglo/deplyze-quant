@@ -23,7 +23,6 @@ const STATIC_ROUTES = [
   { path: '/macro', changefreq: 'hourly', priority: '0.9' },
   { path: '/historical-intelligence', changefreq: 'daily', priority: '0.8' },
   { path: '/briefings', changefreq: 'hourly', priority: '0.8' },
-  { path: '/market/world-equity', changefreq: 'hourly', priority: '0.7' },
   { path: '/market/us-sectors', changefreq: 'hourly', priority: '0.7' },
   { path: '/market/global-yields', changefreq: 'hourly', priority: '0.7' },
   { path: '/market/countries', changefreq: 'hourly', priority: '0.7' },

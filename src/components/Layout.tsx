@@ -104,7 +104,6 @@ const bottomItems = [
 ];
 
 const MARKET_DASHBOARD_ITEMS = [
-  { id: 'world-equity',  label: 'World Equity',               icon: Globe,          path: '/market/world-equity' },
   { id: 'us-sectors',    label: 'US Sectors',                 icon: BarChart3,      path: '/market/us-sectors' },
   { id: 'global-yields', label: 'Global Yields',              icon: TrendingUp,     path: '/market/global-yields' },
   { id: 'countries',     label: 'Countries & Regional',       icon: Map,            path: '/market/countries' },
@@ -214,7 +213,7 @@ const SidebarInner: React.FC<{ signOut: () => void; user: any; profile: any }> =
 
   // Group gating for guests. Portfolio Intelligence is always a full-account
   // feature; Market Dashboards become public in a later PR (driven by access.ts).
-  const marketPublic = isPublicPath('/market/world-equity');
+  const marketPublic = isPublicPath('/market/global-yields');
   const marketGatedForGuest = isGuest && !marketPublic;
   const onMarketClick = () => {
     if (marketGatedForGuest) {

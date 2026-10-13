@@ -21,7 +21,6 @@ const SITE = 'https://app.deplyze.com';
 const STATIC_ROUTES = [
   { path: '/', changefreq: 'hourly', priority: '1.0' },
   { path: '/macro', changefreq: 'hourly', priority: '0.9' },
-  { path: '/relations-map', changefreq: 'daily', priority: '0.8' },
   { path: '/historical-intelligence', changefreq: 'daily', priority: '0.8' },
   { path: '/briefings', changefreq: 'hourly', priority: '0.8' },
   { path: '/market/world-equity', changefreq: 'hourly', priority: '0.7' },

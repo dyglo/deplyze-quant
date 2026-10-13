@@ -13,7 +13,6 @@ import { MarketHome } from './pages/MarketHome';
 import { Investigations } from './pages/Investigations';
 import { InstrumentDetail } from './pages/InstrumentDetail';
 import { MacroRegimeDesk } from './pages/MacroRegimeDesk';
-import { RelationsMap } from './pages/RelationsMap';
 import { HistoricalResearch } from './pages/HistoricalResearch';
 import { Backtesting } from './pages/Backtesting';
 import { QuantLab } from './pages/QuantLab';
@@ -100,8 +99,6 @@ export default function App() {
             {/* Single-asset research (public discovery) */}
             <Route path="/instruments/:symbol"     element={<PublicRoute><InstrumentDetail /></PublicRoute>} />
             <Route path="/macro"                element={<PublicRoute><MacroRegimeDesk /></PublicRoute>} />
-            <Route path="/relations-map"        element={<PublicRoute><RelationsMap /></PublicRoute>} />
-            <Route path="/cross-asset"          element={<Navigate to="/relations-map" replace />} />
             <Route path="/research"             element={<ProtectedRoute><HistoricalResearch /></ProtectedRoute>} />
             <Route path="/research/i/:id"       element={<ProtectedRoute><HistoricalResearch /></ProtectedRoute>} />
             <Route path="/positioning"          element={<Navigate to="/research" replace />} />

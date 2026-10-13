@@ -16,7 +16,6 @@ const prefix = (p: string): PathMatcher => (path) => path === p || path.startsWi
 const PUBLIC_MATCHERS: PathMatcher[] = [
   exact('/'),
   prefix('/macro'),
-  prefix('/relations-map'),
   prefix('/instruments'),
   prefix('/market'),
   prefix('/briefings'),

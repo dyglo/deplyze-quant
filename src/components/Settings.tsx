@@ -1,15 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth } from './AuthProvider';
 import { useWorkspace } from './WorkspaceContext';
 import { useProviderHealth } from '../hooks/useProviders';
-import { Sun, Moon, Monitor, Check, LogOut } from 'lucide-react';
+import { Sun, Moon, Monitor, Check } from 'lucide-react';
 import {
   fetchEmailPreferences,
   updateEmailPreferences,
   type EmailPreferences,
 } from '../services/emailPreferencesService';
 
-type TabId = 'profile' | 'workspace' | 'providers' | 'email' | 'appearance';
+type TabId = 'workspace' | 'providers' | 'email' | 'appearance';
 
 const PROVIDERS = [
   { id: 'polygon',       label: 'Real-time Quotes',   hint: 'Equities quotes, snapshots, market data' },
@@ -25,10 +24,9 @@ const PROVIDERS = [
 ] as const;
 
 export const Settings: React.FC = () => {
-  const { user, profile, signOut } = useAuth();
   const { currentWorkspace, currentProject } = useWorkspace();
   const { data: providers, loading: providersLoading, refresh: refreshProviders } = useProviderHealth();
-  const [tab, setTab] = useState<TabId>('profile');
+  const [tab, setTab] = useState<TabId>('appearance');
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>(
     () => (localStorage.getItem('deplyze_theme') as 'light' | 'dark' | 'system') ?? 'system',
   );
@@ -50,7 +48,6 @@ export const Settings: React.FC = () => {
   }, [theme]);
 
   const tabs: Array<{ id: TabId; label: string }> = [
-    { id: 'profile',    label: 'Profile' },
     { id: 'workspace',  label: 'Workspace' },
     { id: 'providers',  label: 'Data Providers' },
     { id: 'email',      label: 'Email' },
@@ -81,7 +78,7 @@ export const Settings: React.FC = () => {
       <header style={{ padding: '24px 0 12px', borderBottom: '1px solid var(--border)' }}>
         <h1 className="ds-title" style={{ margin: 0 }}>Settings</h1>
         <p className="ds-caption" style={{ marginTop: 6, color: 'var(--muted-foreground)' }}>
-          Manage your profile, research workspace, and connected data providers.
+          Manage your research workspace, appearance, and connected data providers.
         </p>
       </header>
 
@@ -104,24 +101,6 @@ export const Settings: React.FC = () => {
       </nav>
 
       <section style={{ marginTop: 22 }}>
-        {tab === 'profile' && (
-          <div className="ds-surface" style={{ padding: 20, borderRadius: 12, display: 'grid', gap: 16 }}>
-            <h2 className="ds-heading">Account</h2>
-            <Field label="Display name" value={profile?.displayName ?? user?.displayName ?? '—'} />
-            <Field label="Email" value={user?.email ?? '—'} />
-            <Field label="User ID" value={user?.uid ?? '—'} mono />
-            <button onClick={signOut} style={{
-              justifySelf: 'start',
-              padding: '8px 14px', background: 'transparent',
-              border: '1px solid var(--border)', borderRadius: 8,
-              fontSize: 12, fontWeight: 500, color: 'var(--foreground)',
-              cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6,
-            }}>
-              <LogOut size={13} /> Sign out
-            </button>
-          </div>
-        )}
-
         {tab === 'workspace' && (
           <div className="ds-surface" style={{ padding: 20, borderRadius: 12, display: 'grid', gap: 16 }}>
             <h2 className="ds-heading">Workspace (Research Desk)</h2>

@@ -32,13 +32,13 @@ The page removal on 2026-10-13 retires Intelligent Terminal, Relation Maps, Worl
 | Historical Intelligence | `/historical-intelligence` | Public |
 | Global Yields | `/market/global-yields` | Public |
 | Commodities | `/market/commodities` | Public |
-| Investigations | `/investigations` | Full account |
-| Deep Research | `/research`, `/research/i/:id` | Full account |
-| Research Copilot | `/copilot` | Full account |
-| Research Library | `/library` | Full account |
-| Artifact detail | `/artifacts/:id` | Full account |
-| Settings | `/settings` | Full account |
-| Login | `/login` | Sign-in surface |
+| Investigations | `/investigations` | Public |
+| Deep Research | `/research`, `/research/i/:id` | Public |
+| Research Copilot | `/copilot` | Public |
+| Research Library | `/library` | Public |
+| Artifact detail | `/artifacts/:id` | Public |
+| Settings | `/settings` | Public |
+| Legacy login link | `/login` | Redirects to Home |
 
 The `/positioning` alias still redirects to `/research`. Unknown and retired routes use the existing Home fallback. Navigation and the public sitemap contain only supported routes.
 
@@ -52,9 +52,9 @@ See [the removal report](docs/page-removal-report.md) for the file inventory, ve
 
 ```
 ┌── Browser (Vite + React 18) ───────────────────────────────────────┐
-│  Firebase Auth · React Router · shadcn/Radix · Recharts · Motion  │
+│  React Router · shadcn/Radix · Recharts · Motion  │
 └────────────────────────────────────────────────────────────────────┘
-                              │ Bearer ID token & telemetry events
+                              │ API requests & telemetry events
                               ▼
 ┌── cloud-run/gateway (Node + Express + Firebase Admin + Gemini) ───┐
 │  /v1/market     /v1/macro          /v1/research                   │
@@ -82,6 +82,18 @@ See [the removal report](docs/page-removal-report.md) for the file inventory, ve
 API keys and secrets live securely in Google Secret Manager. The frontend interacts directly with the gateway, which coordinates data gathering from external APIs and delegates heavy personalization tasks to the Python-based quant engine.
 
 ---
+
+## Authentication
+
+All frontend routes are public, including Deep Research and Research Library.
+Login, registration, sign-out, account prompts, anonymous sign-in, and Firebase
+Auth token attachment have been removed. `/login` redirects to Home.
+
+Account-owned Firebase workspaces and saved research remain private and are not
+loaded without an identity. Deep Research retains its existing session report
+cache; cross-device saves and private library data await the backend replacement.
+The existing Cloud Run gateway remains unavailable and still enforces its server
+authorization rules. No database rules or backend access controls were loosened.
 
 ## Vercel frontend hosting
 

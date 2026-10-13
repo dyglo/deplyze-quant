@@ -33,8 +33,6 @@ import { fetchRelationsContext, type RelationsContextPayload } from '../services
 import { closes, logReturns, annualisedVol, maxDrawdown, trendLabel } from '../lib/quant';
 import { createInstrumentSnapshot } from '../services/artifactService';
 import { useWorkspace } from '../components/WorkspaceContext';
-import { useAuth } from '../components/AuthProvider';
-import { useAuthGate } from '../components/auth/AuthGate';
 import { useDocumentHead } from '../lib/seo';
 import type { IntelligenceWatchlist } from '../lib/portfolio/schemas';
 import { symbolCountry } from '../components/market-home/format';
@@ -87,9 +85,7 @@ export const InstrumentDetail: React.FC = () => {
   const ohlcv = useOHLCV(sym, '1day', 90);
   const intel = useInstrumentIntelligence(sym);
 
-  const { currentWorkspace, currentProject } = useWorkspace();
-  const { user } = useAuth();
-  const { requireAuth } = useAuthGate();
+  const { currentWorkspace, currentProject, userId } = useWorkspace();
   const artifacts = useArtifacts(currentWorkspace?.id ?? null, currentProject?.id ?? null);
   const briefings = useBriefings(currentWorkspace?.id ?? null, currentProject?.id ?? null);
 
@@ -114,12 +110,12 @@ export const InstrumentDetail: React.FC = () => {
 
   // 2. Fetch Watchlists
   useEffect(() => {
-    if (!user || !currentWorkspace) return;
-    const unsub = subscribeToWatchlists(user.uid, currentWorkspace.id, (wl) => {
+    if (!userId || !currentWorkspace) return;
+    const unsub = subscribeToWatchlists(userId, currentWorkspace.id, (wl) => {
       setWatchlists(wl);
     });
     return unsub;
-  }, [user, currentWorkspace]);
+  }, [userId, currentWorkspace]);
 
   // 3. Fetch Movers
   const [moverTab, setMoverTab] = useState<MoverType>('gainers');
@@ -156,7 +152,6 @@ export const InstrumentDetail: React.FC = () => {
 
   // Watchlist handlers
   const handleAddToWatchlist = async (wl: IntelligenceWatchlist) => {
-    if (!requireAuth({ title: 'Save to a watchlist', description: 'Create a free workspace to track instruments across your watchlists.' })) return;
     if (!sym) return;
     if (wl.symbols.includes(sym)) {
       toast.error(`Already in watchlist "${wl.name}"`);
@@ -171,7 +166,6 @@ export const InstrumentDetail: React.FC = () => {
   };
 
   const handleRemoveFromWatchlist = async (wl: IntelligenceWatchlist) => {
-    if (!requireAuth()) return;
     if (!sym) return;
     try {
       await updateWatchlist(wl.id, { symbols: wl.symbols.filter(s => s !== sym) });
@@ -182,10 +176,9 @@ export const InstrumentDetail: React.FC = () => {
   };
 
   const handleCreateWatchlist = async () => {
-    if (!requireAuth({ title: 'Create a watchlist', description: 'Create a free workspace to build and track watchlists.' })) return;
-    if (!newWlName.trim() || !user || !currentWorkspace || !sym) return;
+    if (!newWlName.trim() || !userId || !currentWorkspace || !sym) return;
     try {
-      await createWatchlist(user.uid, currentWorkspace.id, {
+      await createWatchlist(userId, currentWorkspace.id, {
         name: newWlName.trim(),
         symbols: [sym],
       });
@@ -197,11 +190,10 @@ export const InstrumentDetail: React.FC = () => {
   };
 
   const handleSaveSnapshot = async () => {
-    if (!requireAuth({ title: 'Save a research snapshot', description: 'Create a free workspace to save snapshots to your research timeline.' })) return;
-    if (!sym || !q || !analytics || !currentWorkspace?.id || !currentProject?.id || !user) return;
+    if (!sym || !q || !analytics || !currentWorkspace?.id || !currentProject?.id || !userId) return;
     setSavingSnap(true);
     try {
-      await createInstrumentSnapshot(currentWorkspace.id, currentProject.id, sym, q, analytics, intel.data?.narrative ?? '', user.uid);
+      await createInstrumentSnapshot(currentWorkspace.id, currentProject.id, sym, q, analytics, intel.data?.narrative ?? '', userId);
       toast.success('Snapshot saved to Research Timeline');
     } catch { toast.error('Failed to save snapshot'); }
     finally { setSavingSnap(false); }

@@ -1,10 +1,10 @@
+import { useWorkspace } from '../components/WorkspaceContext';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { subscribeToPins, pinArtifact, unpinArtifact } from '../services/pinService';
-import { useAuth } from '../components/AuthProvider';
 import type { ArtifactPin } from '../types';
 
 export function usePins(workspaceId: string | null, projectId: string | null) {
-  const { user } = useAuth();
+  const { userId } = useWorkspace();
   const [pins, setPins] = useState<ArtifactPin[]>([]);
 
   useEffect(() => {
@@ -19,10 +19,10 @@ export function usePins(workspaceId: string | null, projectId: string | null) {
 
   const pin = useCallback(
     (artifactId: string, tags?: string[], note?: string) => {
-      if (!workspaceId || !projectId || !user) return Promise.resolve();
-      return pinArtifact(workspaceId, projectId, artifactId, user.uid, tags, note);
+      if (!workspaceId || !projectId || !userId) return Promise.resolve();
+      return pinArtifact(workspaceId, projectId, artifactId, userId, tags, note);
     },
-    [workspaceId, projectId, user],
+    [workspaceId, projectId, userId],
   );
 
   const unpin = useCallback(

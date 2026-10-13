@@ -16,7 +16,7 @@
  *   logEvent(event)       — queue one behavioral event
  *   logImpression(...)    — convenience for the most common case
  *   logFeedback(payload)  — explicit feedback (relevance / mute)
- *   flush()               — force a flush; awaited by signOut handlers
+ *   flush()               — force a flush
  */
 
 import { gatewayBeacon } from '../../services/gatewayClient';

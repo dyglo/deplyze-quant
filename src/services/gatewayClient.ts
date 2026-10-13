@@ -1,8 +1,7 @@
 /**
  * gatewayClient.ts — typed JSON client for the Deplyze Quant gateway.
  *
- * Every request automatically attaches the current Firebase ID token as a
- * Bearer credential. In dev the call goes to `/api/v1/...` which Vite proxies
+ * Requests do not create an authenticated session or attach credentials. In dev the call goes to `/api/v1/...` which Vite proxies
  * to a locally-running gateway (see vite.config.ts). In prod the same `/api`
  * path is mapped to the deployed gateway by Firebase Hosting rewrites or a
  * Cloud Run reverse proxy.
@@ -13,8 +12,6 @@
  *   - Freshness metadata via gatewayGetMeta()
  */
 
-import { onAuthStateChanged } from 'firebase/auth';
-import { auth } from '../lib/firebase';
 
 const PREFIX = '/api/v1';
 const FETCH_TIMEOUT_MS = 30_000;
@@ -29,33 +26,6 @@ export class GatewayError extends Error {
       this.code = String((body as { code: unknown }).code);
     }
   }
-}
-
-// Resolves once a usable identity is established. Two things race on first load:
-// Firebase restoring a persisted session (~100–400ms), and AuthProvider kicking
-// off a silent anonymous (guest) sign-in. The first onAuthStateChanged callback
-// fires `null` *before* the anonymous sign-in completes — resolving then made
-// every guest's first fetch throw 401 (and useSWR does not retry), leaving the
-// public pages permanently empty. So we resolve on the first NON-null user
-// (anonymous or full), with a timeout safety-valve so a genuinely signed-out
-// state (or anonymous auth being disabled in the Firebase project) can't hang
-// requests forever — it falls through to the 401 path instead.
-const AUTH_READY_TIMEOUT_MS = 8_000;
-const authReady: Promise<void> = new Promise((resolve) => {
-  let done = false;
-  const finish = () => { if (!done) { done = true; resolve(); } };
-  const unsub = onAuthStateChanged(auth, (user) => {
-    if (user) { finish(); try { unsub(); } catch { /* noop */ } }
-  });
-  setTimeout(finish, AUTH_READY_TIMEOUT_MS);
-});
-
-async function authHeader(): Promise<HeadersInit> {
-  await authReady;
-  const user = auth.currentUser;
-  if (!user) throw new GatewayError(401, 'Not signed in');
-  const token = await user.getIdToken();
-  return { Authorization: `Bearer ${token}` };
 }
 
 function stripHtml(input: string): string {
@@ -73,7 +43,7 @@ function sanitizeGatewayMessage(status: number, message: string, body?: unknown)
     ? String((body as { message: unknown }).message)
     : raw;
   const cleaned = stripHtml(fromBody || raw);
-  if (status === 401) return 'Your session is not authorized. Please sign in again.';
+  if (status === 401) return 'The data service requires authorization.';
   if (status === 403) return 'You do not have permission to access this data.';
   if (status === 404) return 'The requested data endpoint was not found.';
   if (status === 429) return 'The data service is rate limited. Retrying later may succeed.';
@@ -206,12 +176,10 @@ export async function gatewayGetMeta<T>(
   }
 
   const exec = (async (): Promise<T> => {
-    const headers = await authHeader();
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
     try {
       const res = await fetch(`${PREFIX}${path}${buildQuery(params)}`, {
-        headers,
         signal: controller.signal,
       });
       const data = await handle<T>(res);
@@ -254,13 +222,12 @@ export async function gatewayPostWithTimeout<T>(
   body: unknown,
   timeoutMs: number,
 ): Promise<T> {
-  const headers = await authHeader();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(`${PREFIX}${path}`, {
       method: 'POST',
-      headers: { ...headers, 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
       signal: controller.signal,
     });
@@ -276,13 +243,12 @@ export async function gatewayPostWithTimeout<T>(
 }
 
 export async function gatewayPatch<T>(path: string, body: unknown): Promise<T> {
-  const headers = await authHeader();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
     const res = await fetch(`${PREFIX}${path}`, {
       method: 'PATCH',
-      headers: { ...headers, 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
       signal: controller.signal,
     });
@@ -303,10 +269,9 @@ export async function gatewayPatch<T>(path: string, body: unknown): Promise<T> {
  */
 export async function gatewayBeacon(path: string, body: unknown): Promise<void> {
   try {
-    const headers = await authHeader();
     await fetch(`${PREFIX}${path}`, {
       method: 'POST',
-      headers: { ...headers, 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
       keepalive: true,
     });

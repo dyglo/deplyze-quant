@@ -15,9 +15,13 @@ import { fileURLToPath } from 'node:url';
 
 const SITE = 'https://app.deplyze.com';
 
-// Stable public entry points (keep in sync with src/lib/access.ts).
+// Stable public entry points (keep in sync with src/App.tsx).
 const STATIC_ROUTES = [
   { path: '/', changefreq: 'hourly', priority: '1.0' },
+  { path: '/research', changefreq: 'daily', priority: '0.8' },
+  { path: '/library', changefreq: 'daily', priority: '0.8' },
+  { path: '/investigations', changefreq: 'daily', priority: '0.7' },
+  { path: '/copilot', changefreq: 'daily', priority: '0.7' },
   { path: '/macro', changefreq: 'hourly', priority: '0.9' },
   { path: '/historical-intelligence', changefreq: 'daily', priority: '0.8' },
   { path: '/market/global-yields', changefreq: 'hourly', priority: '0.7' },

@@ -1,3 +1,4 @@
+import { useWorkspace } from '../components/WorkspaceContext';
 /**
  * Historical Research — query-driven institutional research workspace.
  *
@@ -50,7 +51,6 @@ import type { ResearchPlan } from '../services/historicalResearchService';
 import { askFollowup } from '../services/historicalResearchService';
 import { saveInvestigation, loadInvestigation } from '../services/savedHistoricalResearchService';
 import { exportPdf, exportMarkdown, exportJson, exportPrint } from '../lib/historicalResearchExport';
-import { useAuth } from '../components/AuthProvider';
 
 const STORAGE_PREFIX = 'hr:';
 
@@ -99,7 +99,7 @@ export const HistoricalResearch: React.FC = () => {
   const params = useParams<{ id?: string }>();
   const routeId = params.id ?? null;
 
-  const { user } = useAuth();
+  const { userId } = useWorkspace();
 
   const { steps, busy, result, error, run, reset, hydrate } = useHistoricalResearch();
 
@@ -143,9 +143,9 @@ export const HistoricalResearch: React.FC = () => {
       return;
     }
     // Not in sessionStorage — try Firestore (saved reports).
-    if (user?.uid) {
+    if (userId) {
       let cancelled = false;
-      loadInvestigation(user.uid, routeId)
+      loadInvestigation(userId, routeId)
         .then((r) => {
           if (cancelled) return;
           if (r) {
@@ -173,11 +173,11 @@ export const HistoricalResearch: React.FC = () => {
     } else if (!busyRef.current) {
       navigate('/research', {
         replace: true,
-        state: { routeError: 'Sign in again to open that saved Deep Research report.' },
+        state: { routeError: 'That saved Deep Research report is not available in this session.' },
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [routeId, user?.uid]);
+  }, [routeId, userId]);
 
   useEffect(() => {
     if (!routeId || !error || busy || result) return;
@@ -268,18 +268,18 @@ export const HistoricalResearch: React.FC = () => {
 
   // ── Save to Firestore ─────────────────────────────────────────────────
   const handleSave = useCallback(async () => {
-    if (!routeId || !result || !user?.uid) return;
+    if (!routeId || !result || !userId) return;
     setSavedState('saving');
     try {
       const enriched: ResearchResult = { ...result, followups };
-      await saveInvestigation(user.uid, routeId, enriched);
+      await saveInvestigation(userId, routeId, enriched);
       setSavedState('saved');
       setRecentTick((t) => t + 1);
     } catch (e) {
       console.error('[historical-research] save failed', e);
       setSavedState('error');
     }
-  }, [routeId, result, user?.uid, followups]);
+  }, [routeId, result, userId, followups]);
 
   // ── Follow-up Q&A ─────────────────────────────────────────────────────
   const handleAskFollowup = useCallback(async (question: string) => {
@@ -306,8 +306,8 @@ export const HistoricalResearch: React.FC = () => {
       if (routeId) {
         const enriched: ResearchResult = { ...result, followups: next };
         writeReport(routeId, enriched);
-        if (savedState === 'saved' && user?.uid) {
-          saveInvestigation(user.uid, routeId, enriched).catch(() => {});
+        if (savedState === 'saved' && userId) {
+          saveInvestigation(userId, routeId, enriched).catch(() => {});
         }
       }
     } catch (e) {
@@ -316,7 +316,7 @@ export const HistoricalResearch: React.FC = () => {
     } finally {
       setFollowupBusy(false);
     }
-  }, [result, followups, routeId, savedState, user?.uid]);
+  }, [result, followups, routeId, savedState, userId]);
 
   // ── Widget visibility ─────────────────────────────────────────────────
   // Only surface widgets that have data on this run.
@@ -383,7 +383,7 @@ export const HistoricalResearch: React.FC = () => {
       onEditQuery={edit}
       onNew={newReport}
       onSave={handleSave}
-      saveDisabled={!user?.uid || savedState === 'saving'}
+      saveDisabled={!userId || savedState === 'saving'}
       saveState={savedState}
       onExportPdf={() => result && exportPdf({ ...result, followups })}
       onExportMarkdown={() => result && exportMarkdown({ ...result, followups })}

@@ -1,14 +1,9 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './components/AuthProvider';
-import { WorkspaceProvider, useWorkspace } from './components/WorkspaceContext';
-import { AuthGateProvider } from './components/auth/AuthGate';
 import { Layout } from './components/Layout';
-import { Login } from './components/Login';
 import { Settings } from './components/Settings';
 import { Toaster } from './components/ui/sonner';
 import { DrawerProvider } from './components/quant/DataDrawer';
-import { Activity } from 'lucide-react';
 import { MarketHome } from './pages/MarketHome';
 import { Investigations } from './pages/Investigations';
 import { InstrumentDetail } from './pages/InstrumentDetail';
@@ -21,87 +16,33 @@ import { ArtifactPage } from './pages/ArtifactPage';
 import { GlobalYields } from './pages/market/GlobalYields';
 import { CommoditiesIntelligence } from './pages/market/CommoditiesIntelligence';
 
-const LoadingScreen: React.FC = () => (
-  <div className="ds-loading-screen" style={{
-    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-    gap: '0.875rem', height: '100vh', background: 'var(--background)',
-  }}>
-    <div style={{
-      width: '2.5rem', height: '2.5rem',
-      background: 'var(--primary)', borderRadius: '0.625rem',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-    }}>
-      <Activity size={18} style={{ color: 'var(--primary-foreground)' }} />
-    </div>
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem' }}>
-      <p style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--foreground)', letterSpacing: '-0.01em' }}>Deplyze Quant</p>
-      <p className="ds-caption" style={{ fontSize: '0.625rem', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-        Loading research workspace…
-      </p>
-    </div>
-  </div>
-);
-
-const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, isGuest, loading: authLoading } = useAuth();
-  const { loading: workspaceLoading } = useWorkspace();
-  if (authLoading) return <LoadingScreen />;
-  // Anonymous guests carry a token but are not full users — gated routes still
-  // present the sign-in surface. (Public routes, added in a later PR, render for
-  // guests without this gate.)
-  if (!user || isGuest) return <Login />;
-  if (workspaceLoading) return <LoadingScreen />;
-  return <Layout>{children}</Layout>;
-};
-
-/**
- * PublicRoute — open to guests AND full accounts. Renders the same Layout as a
- * gated route (the Layout itself adapts to guest sessions: institutional CTA,
- * no workspace selectors). Full accounts still wait for their workspace to load
- * so the workspace chrome is correct; guests have an inert workspace context
- * (loading resolves immediately), so they fall straight through.
- */
-const PublicRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { loading: authLoading } = useAuth();
-  const { loading: workspaceLoading } = useWorkspace();
-  if (authLoading || workspaceLoading) return <LoadingScreen />;
-  return <Layout>{children}</Layout>;
-};
-
 export default function App() {
   return (
-    <AuthProvider>
-      <WorkspaceProvider>
-        <BrowserRouter>
-          <AuthGateProvider>
+    <BrowserRouter>
           <DrawerProvider>
           <Routes>
-            <Route path="/login"                element={<Login />} />
-            {/* ── Public surfaces (guests + full accounts) ── */}
-            <Route path="/"                     element={<PublicRoute><MarketHome /></PublicRoute>} />
-            <Route path="/investigations"       element={<ProtectedRoute><Investigations /></ProtectedRoute>} />
+            <Route path="/login"                element={<Navigate to="/" replace />} />
+            {/* ── Public research surfaces ── */}
+            <Route path="/"                     element={<Layout><MarketHome /></Layout>} />
+            <Route path="/investigations"       element={<Layout><Investigations /></Layout>} />
             {/* Single-asset research (public discovery) */}
-            <Route path="/instruments/:symbol"     element={<PublicRoute><InstrumentDetail /></PublicRoute>} />
-            <Route path="/macro"                element={<PublicRoute><MacroRegimeDesk /></PublicRoute>} />
-            <Route path="/research"             element={<ProtectedRoute><HistoricalResearch /></ProtectedRoute>} />
-            <Route path="/research/i/:id"       element={<ProtectedRoute><HistoricalResearch /></ProtectedRoute>} />
+            <Route path="/instruments/:symbol"     element={<Layout><InstrumentDetail /></Layout>} />
+            <Route path="/macro"                element={<Layout><MacroRegimeDesk /></Layout>} />
+            <Route path="/research"             element={<Layout><HistoricalResearch /></Layout>} />
+            <Route path="/research/i/:id"       element={<Layout><HistoricalResearch /></Layout>} />
             <Route path="/positioning"          element={<Navigate to="/research" replace />} />
-            <Route path="/copilot"              element={<ProtectedRoute><ResearchCopilot /></ProtectedRoute>} />
-            <Route path="/historical-intelligence" element={<PublicRoute><HistoricalIntelligenceTerminal /></PublicRoute>} />
-            <Route path="/library"              element={<ProtectedRoute><ResearchLibrary /></ProtectedRoute>} />
-            <Route path="/artifacts/:id"        element={<ProtectedRoute><ArtifactPage /></ProtectedRoute>} />
-            <Route path="/settings"             element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+            <Route path="/copilot"              element={<Layout><ResearchCopilot /></Layout>} />
+            <Route path="/historical-intelligence" element={<Layout><HistoricalIntelligenceTerminal /></Layout>} />
+            <Route path="/library"              element={<Layout><ResearchLibrary /></Layout>} />
+            <Route path="/artifacts/:id"        element={<Layout><ArtifactPage /></Layout>} />
+            <Route path="/settings"             element={<Layout><Settings /></Layout>} />
             {/* Market Dashboards — Phase 1 + 2 (public discovery) */}
-            <Route path="/market/global-yields" element={<PublicRoute><GlobalYields /></PublicRoute>} />
-            <Route path="/market/commodities"   element={<PublicRoute><CommoditiesIntelligence /></PublicRoute>} />
+            <Route path="/market/global-yields" element={<Layout><GlobalYields /></Layout>} />
+            <Route path="/market/commodities"   element={<Layout><CommoditiesIntelligence /></Layout>} />
             <Route path="*"                       element={<Navigate to="/" replace />} />
           </Routes>
           <Toaster />
           </DrawerProvider>
-          </AuthGateProvider>
-        </BrowserRouter>
-      </WorkspaceProvider>
-    </AuthProvider>
+    </BrowserRouter>
   );
 }

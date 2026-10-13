@@ -3,7 +3,7 @@
  *
  * Scope: users, organizations (≡ workspaces in PRD vocabulary), and sites
  * (≡ projects in PRD vocabulary). The legacy collection names are kept for
- * backwards-compatibility with the existing AuthProvider/WorkspaceContext
+ * backwards-compatibility with the existing workspace data consumers
  * code paths; the PRD-aligned `workspaces/{wid}/projects/{pid}/...`
  * subcollections (artifacts, briefings, watchlists, agentRuns) are written
  * by the gateway via Admin SDK and read here through dedicated services.

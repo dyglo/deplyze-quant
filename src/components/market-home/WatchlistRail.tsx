@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Star } from 'lucide-react';
-import { useAuth } from '../../components/AuthProvider';
 import { useWorkspace } from '../../components/WorkspaceContext';
 import { subscribeToWatchlists } from '../../services/portfolioService';
 import { usePortfolioWorkspace } from '../../hooks/usePortfolioWorkspace';
@@ -72,7 +71,7 @@ const WatchlistQuotes: React.FC<{ symbols: string[] }> = ({ symbols }) => {
 };
 
 export const WatchlistRail: React.FC = () => {
-  const { user } = useAuth();
+  const { userId } = useWorkspace();
   const { currentWorkspace } = useWorkspace();
   const [watchlists, setWatchlists] = useState<IntelligenceWatchlist[]>([]);
   const [wlLoading, setWlLoading] = useState(true);
@@ -82,14 +81,14 @@ export const WatchlistRail: React.FC = () => {
   const { portfolios, selectedPortfolio, holdings, loading: pfLoading } = usePortfolioWorkspace();
 
   useEffect(() => {
-    if (!user || !currentWorkspace) { setWatchlists([]); setWlLoading(false); return; }
+    if (!userId || !currentWorkspace) { setWatchlists([]); setWlLoading(false); return; }
     setWlLoading(true);
-    const unsub = subscribeToWatchlists(user.uid, currentWorkspace.id, (wl) => {
+    const unsub = subscribeToWatchlists(userId, currentWorkspace.id, (wl) => {
       setWatchlists(wl);
       setWlLoading(false);
     });
     return unsub;
-  }, [user, currentWorkspace]);
+  }, [userId, currentWorkspace]);
 
   if (wlLoading || pfLoading) return null;
 

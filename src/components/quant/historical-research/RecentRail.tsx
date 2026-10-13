@@ -1,3 +1,4 @@
+import { useWorkspace } from '../../WorkspaceContext';
 /**
  * RecentRail — landing-page strip of recent / saved Deep Research reports.
  *
@@ -13,7 +14,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Clock, ArrowRight, Bookmark, MoreVertical, FileType2, FileText, FileJson } from 'lucide-react';
 import type { ResearchResult } from '../../../hooks/useHistoricalResearch';
-import { useAuth } from '../../AuthProvider';
 import { listSavedInvestigations, loadInvestigation, type SavedInvestigationMeta } from '../../../services/savedHistoricalResearchService';
 import { exportPdf, exportMarkdown, exportJson } from '../../../lib/historicalResearchExport';
 
@@ -64,7 +64,7 @@ interface Props {
 }
 
 export const RecentRail: React.FC<Props> = ({ onOpen, refreshKey }) => {
-  const { user } = useAuth();
+  const { userId } = useWorkspace();
   const [tab, setTab] = useState<Tab>('recent');
   const [savedItems, setSavedItems] = useState<SavedInvestigationMeta[]>([]);
   const [loadingSaved, setLoadingSaved] = useState(false);
@@ -73,15 +73,15 @@ export const RecentRail: React.FC<Props> = ({ onOpen, refreshKey }) => {
 
   useEffect(() => {
     if (tab !== 'saved') return;
-    if (!user?.uid) { setSavedItems([]); return; }
+    if (!userId) { setSavedItems([]); return; }
     let cancelled = false;
     setLoadingSaved(true);
-    listSavedInvestigations(user.uid, 12)
+    listSavedInvestigations(userId, 12)
       .then((items) => { if (!cancelled) setSavedItems(items); })
       .catch(() => { if (!cancelled) setSavedItems([]); })
       .finally(() => { if (!cancelled) setLoadingSaved(false); });
     return () => { cancelled = true; };
-  }, [tab, user?.uid, refreshKey]);
+  }, [tab, userId, refreshKey]);
 
   const recentEntries: RecentEntry[] = recent;
   const savedEntries: RecentEntry[] = savedItems.map((s) => ({
@@ -120,7 +120,7 @@ export const RecentRail: React.FC<Props> = ({ onOpen, refreshKey }) => {
         </div>
       ) : (
         <div style={grid}>
-          {entries.map((e) => <Card key={e.id} entry={e} onOpen={onOpen} uid={user?.uid} />)}
+          {entries.map((e) => <Card key={e.id} entry={e} onOpen={onOpen} uid={userId ?? undefined} />)}
         </div>
       )}
     </section>

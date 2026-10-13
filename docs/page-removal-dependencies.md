@@ -1,3 +1,5 @@
+> Subsequent change: frontend authentication was removed on `chore/vercel-frontend`; all surviving routes are public. This document records the earlier page-removal snapshot. See [current authentication and deployment status](vercel-deployment.md#authentication-removal).
+
 > Pre-edit map recorded during Phase 1. Both C items were explicitly approved by the user. Final decisions and inventories are in [page-removal-report.md](page-removal-report.md). Awareness Python API/writer/recompute/scheduler/tests and its BigQuery table were subsequently reclassified B because daily emails and Copilot tools consume their data; they remain. The following snapshot preserves the original mapping evidence, not a pending approval request.
 
 # Phase 1 removal and dependency map

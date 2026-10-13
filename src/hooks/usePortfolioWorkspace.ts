@@ -4,7 +4,6 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { useAuth } from '../components/AuthProvider';
 import { useWorkspace } from '../components/WorkspaceContext';
 import {
   subscribeToPortfolios,
@@ -65,8 +64,7 @@ interface UsePortfolioWorkspaceReturn {
 }
 
 export function usePortfolioWorkspace(): UsePortfolioWorkspaceReturn {
-  const { user } = useAuth();
-  const { currentWorkspace } = useWorkspace();
+  const { currentWorkspace, userId } = useWorkspace();
 
   const [portfolios, setPortfolios] = useState<Portfolio[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(() =>
@@ -79,13 +77,13 @@ export function usePortfolioWorkspace(): UsePortfolioWorkspaceReturn {
 
   // Subscribe to portfolios
   useEffect(() => {
-    if (!user || !currentWorkspace) {
+    if (!userId || !currentWorkspace) {
       setPortfolios([]);
       setLoading(false);
       return;
     }
     setLoading(true);
-    const unsub = subscribeToPortfolios(user.uid, currentWorkspace.id, (ps) => {
+    const unsub = subscribeToPortfolios(userId, currentWorkspace.id, (ps) => {
       setPortfolios(ps);
       setLoading(false);
       // Auto-select first portfolio if none selected
@@ -97,11 +95,11 @@ export function usePortfolioWorkspace(): UsePortfolioWorkspaceReturn {
       });
     });
     return unsub;
-  }, [user, currentWorkspace]);
+  }, [userId, currentWorkspace]);
 
   // Subscribe to holdings of selected portfolio
   useEffect(() => {
-    if (!selectedId) {
+    if (!selectedId || !currentWorkspace || !userId) {
       setHoldings([]);
       setObservations([]);
       return;
@@ -113,7 +111,7 @@ export function usePortfolioWorkspace(): UsePortfolioWorkspaceReturn {
     });
     const unsubO = subscribeToPortfolioObservations(selectedId, setObservations);
     return () => { unsubH(); unsubO(); };
-  }, [selectedId]);
+  }, [selectedId, currentWorkspace, userId]);
 
   const selectedPortfolio = portfolios.find(p => p.id === selectedId) ?? null;
 
@@ -141,12 +139,12 @@ export function usePortfolioWorkspace(): UsePortfolioWorkspaceReturn {
   }, []);
 
   const createNew = useCallback(async (params: Parameters<typeof createPortfolio>[2]) => {
-    if (!user || !currentWorkspace) throw new Error('No active session');
-    const id = await createPortfolio(user.uid, currentWorkspace.id, params);
+    if (!userId || !currentWorkspace) throw new Error('No active session');
+    const id = await createPortfolio(userId, currentWorkspace.id, params);
     selectPortfolio(id);
     toast.success(`Portfolio "${params.name}" created`);
     return id;
-  }, [user, currentWorkspace, selectPortfolio]);
+  }, [userId, currentWorkspace, selectPortfolio]);
 
   const updateSelected = useCallback(async (updates: Parameters<typeof updatePortfolio>[1]) => {
     if (!selectedId) return;
@@ -180,46 +178,46 @@ export function usePortfolioWorkspace(): UsePortfolioWorkspaceReturn {
   }, [selectedId, holdings]);
 
   const buyHolding = useCallback(async (params: ActionParams) => {
-    if (!selectedId || !currentWorkspace || !user) throw new Error('No active portfolio');
-    const res = await recordBuy(selectedId, currentWorkspace.id, user.uid, params);
+    if (!selectedId || !currentWorkspace || !userId) throw new Error('No active portfolio');
+    const res = await recordBuy(selectedId, currentWorkspace.id, userId, params);
     toast.success(`Bought ${params.symbol.toUpperCase()}`);
     return res;
-  }, [selectedId, currentWorkspace, user]);
+  }, [selectedId, currentWorkspace, userId]);
 
   const addToHolding = useCallback(async (params: ActionParams) => {
-    if (!selectedId || !currentWorkspace || !user) throw new Error('No active portfolio');
-    const res = await recordAdd(selectedId, currentWorkspace.id, user.uid, params);
+    if (!selectedId || !currentWorkspace || !userId) throw new Error('No active portfolio');
+    const res = await recordAdd(selectedId, currentWorkspace.id, userId, params);
     toast.success(`Added to ${params.symbol.toUpperCase()}`);
     return res;
-  }, [selectedId, currentWorkspace, user]);
+  }, [selectedId, currentWorkspace, userId]);
 
   const trimHolding = useCallback(async (params: ActionParams) => {
-    if (!selectedId || !currentWorkspace || !user) throw new Error('No active portfolio');
-    const res = await recordTrim(selectedId, currentWorkspace.id, user.uid, params);
+    if (!selectedId || !currentWorkspace || !userId) throw new Error('No active portfolio');
+    const res = await recordTrim(selectedId, currentWorkspace.id, userId, params);
     toast.success(`Trimmed ${params.symbol.toUpperCase()}`);
     return res;
-  }, [selectedId, currentWorkspace, user]);
+  }, [selectedId, currentWorkspace, userId]);
 
   const sellHolding = useCallback(async (params: ActionParams) => {
-    if (!selectedId || !currentWorkspace || !user) throw new Error('No active portfolio');
-    const res = await recordSell(selectedId, currentWorkspace.id, user.uid, params);
+    if (!selectedId || !currentWorkspace || !userId) throw new Error('No active portfolio');
+    const res = await recordSell(selectedId, currentWorkspace.id, userId, params);
     toast.success(`Sold ${params.symbol.toUpperCase()}`);
     return res;
-  }, [selectedId, currentWorkspace, user]);
+  }, [selectedId, currentWorkspace, userId]);
 
   const closeHolding = useCallback(async (params: ActionParams) => {
-    if (!selectedId || !currentWorkspace || !user) throw new Error('No active portfolio');
-    const res = await recordClose(selectedId, currentWorkspace.id, user.uid, params);
+    if (!selectedId || !currentWorkspace || !userId) throw new Error('No active portfolio');
+    const res = await recordClose(selectedId, currentWorkspace.id, userId, params);
     toast.info(`Closed ${params.symbol.toUpperCase()}`);
     return res;
-  }, [selectedId, currentWorkspace, user]);
+  }, [selectedId, currentWorkspace, userId]);
 
   const adjustCashBalance = useCallback(async (amount: number, note?: string) => {
-    if (!selectedId || !currentWorkspace || !user) throw new Error('No active portfolio');
-    const res = await adjustCash(selectedId, currentWorkspace.id, user.uid, amount, note);
+    if (!selectedId || !currentWorkspace || !userId) throw new Error('No active portfolio');
+    const res = await adjustCash(selectedId, currentWorkspace.id, userId, amount, note);
     toast.success(`Cash ${amount >= 0 ? 'added' : 'withdrawn'}`);
     return res;
-  }, [selectedId, currentWorkspace, user]);
+  }, [selectedId, currentWorkspace, userId]);
 
   return {
     portfolios,

@@ -22,13 +22,6 @@ export interface UserProfile {
   createdAt?: string;
 }
 
-// AuthProvider state shape (kept compatible with the existing provider).
-export interface AuthState {
-  user: import('firebase/auth').User | null;
-  profile: UserProfile | null;
-  loading: boolean;
-}
-
 export interface Workspace {
   id: string;
   name: string;
@@ -58,7 +51,7 @@ export interface Project {
 }
 
 // ─── Legacy tenancy aliases ─────────────────────────────────────────────────
-// The existing AuthProvider, WorkspaceContext, and WorkspaceModals still
+// The existing workspace services still
 // reference these names. Pre-Quant Sentinel code wrote/read `organizations`
 // and `sites` collections; new Quant code writes/reads `workspaces/{wid}/
 // projects/{pid}/...`. Both vocabularies share the same shapes.

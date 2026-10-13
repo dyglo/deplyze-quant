@@ -1,5 +1,4 @@
 import React from 'react';
-import { useAuth } from '../components/AuthProvider';
 import { useDocumentHead, ORGANIZATION_JSONLD } from '../lib/seo';
 import { TickerTape } from '../components/market-home/TickerTape';
 import { HeroIntelligence } from '../components/market-home/HeroIntelligence';
@@ -10,21 +9,11 @@ import { CalendarSection } from '../components/market-home/CalendarSection';
 import { IntelligenceSpotlight } from '../components/market-home/IntelligenceSpotlight';
 import { AnalysisOpinion } from '../components/market-home/AnalysisOpinion';
 import { MarketDataGrid } from '../components/market-home/MarketDataGrid';
-import { PortfolioInsights } from '../components/market-home/PortfolioInsights';
 import { RightRail } from '../components/market-home/RightRail';
 import { SectionBoundary } from '../components/market-home/SectionBoundary';
 import { Disclaimer } from '../components/quant/Disclaimer';
 
-function greeting(): string {
-  const h = new Date().getHours();
-  if (h < 12) return 'Good morning';
-  if (h < 18) return 'Good afternoon';
-  return 'Good evening';
-}
-
 export const MarketHome: React.FC = () => {
-  const { profile, user, isGuest } = useAuth();
-  const name = profile?.displayName || user?.displayName || user?.email?.split('@')[0] || 'there';
 
   useDocumentHead({
     title: 'Market',
@@ -53,12 +42,10 @@ export const MarketHome: React.FC = () => {
 
       <header style={{ marginBottom: 18 }}>
         <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--foreground)' }}>
-          {isGuest ? 'Market' : `${greeting()}, ${name}`}
+          Market
         </h1>
         <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--muted-foreground)' }}>
-          {isGuest
-            ? 'A live institutional view of global markets — sign in to personalize your feed and save research.'
-            : 'Your market overview, made fast to read.'}
+          A live institutional view of global markets — regimes, cross-asset context, and research.
         </p>
       </header>
 
@@ -72,7 +59,7 @@ export const MarketHome: React.FC = () => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 24, minWidth: 0 }}>
             <SectionBoundary label="Market performance"><FeaturedChart /></SectionBoundary>
             <SectionBoundary label="Market snapshot"><MarketSnapshot /></SectionBoundary>
-            {!isGuest && <SectionBoundary label="Your portfolio"><PortfolioInsights /></SectionBoundary>}
+
             <SectionBoundary label="Relative valuation"><ValuationTable /></SectionBoundary>
             <SectionBoundary label="Calendar"><CalendarSection /></SectionBoundary>
             <SectionBoundary label="Intelligence spotlight"><IntelligenceSpotlight /></SectionBoundary>

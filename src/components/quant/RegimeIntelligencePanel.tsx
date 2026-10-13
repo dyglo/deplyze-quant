@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { toast } from 'sonner';
 import { useInstrumentRegime } from '../../hooks/useInstrumentRegime';
 import { useWorkspace } from '../WorkspaceContext';
-import { useAuth } from '../AuthProvider';
 import {
   describeVolPercentile,
   makeVolatilityEvent,
@@ -110,11 +109,10 @@ const RegimeSummary: React.FC<{ regime: MarketRegime }> = ({ regime }) => {
 
 export const RegimeIntelligencePanel: React.FC<{ symbol: string; flat?: boolean }> = ({ symbol, flat }) => {
   const intel = useInstrumentRegime(symbol);
-  const { currentWorkspace, currentProject } = useWorkspace();
-  const { user } = useAuth();
+  const { currentWorkspace, currentProject, userId } = useWorkspace();
   const [persisting, setPersisting] = useState(false);
 
-  const canPersist = !!(currentWorkspace?.id && currentProject?.id && user && intel.regime);
+  const canPersist = !!(currentWorkspace?.id && currentProject?.id && userId && intel.regime);
 
   const handlePersist = async () => {
     if (!canPersist || !intel.regime) return;
@@ -135,7 +133,7 @@ export const RegimeIntelligencePanel: React.FC<{ symbol: string; flat?: boolean 
         currentWorkspace!.id,
         currentProject!.id,
         artifacts,
-        user!.uid,
+        userId!,
       );
       toast.success(`Persisted ${ids.length} artifact${ids.length === 1 ? '' : 's'} to archive`);
     } catch (e: unknown) {

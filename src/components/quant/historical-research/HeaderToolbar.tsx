@@ -117,7 +117,7 @@ export const ResultToolbar: React.FC<ResultToolbarProps> = ({
         onClick={() => { if (!saveDisabled) onSave?.(); }}
         disabled={saveDisabled}
         style={{ ...pillStyle(saveState === 'saved'), opacity: saveDisabled ? 0.55 : 1 }}
-        title={saveDisabled && saveState === 'idle' ? 'Sign in to save' : saveLabel}
+        title={saveDisabled && saveState === 'idle' ? 'Saving is unavailable until the data service is connected' : saveLabel}
       >
         <Bookmark size={12} />
         <span>{saveLabel}</span>

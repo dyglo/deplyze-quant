@@ -15,7 +15,6 @@ import { useAgentOutputs, useCompositeRegime, useRiskEnvironment } from '../hook
 import { useCopilotContext as useV5CopilotContext } from '../hooks/usePersonalization';
 import { extractRegimeLabel, extractRiskLevel } from '../services/agentService';
 import { RegimeStatusChip, RiskLevelChip } from '../components/quant/SystemAnalyzingState';
-import { useAuth } from '../components/AuthProvider';
 import { PageHeader } from '../components/quant/PageHeader';
 import { Disclaimer } from '../components/quant/Disclaimer';
 import { FreshnessBadge } from '../components/quant/FreshnessBadge';
@@ -34,8 +33,7 @@ const MACRO_HIGHLIGHTS = ['FEDFUNDS', 'DGS10', 'CPI'] as const;
 
 export const ResearchCopilot: React.FC = () => {
   const location = useLocation();
-  const { currentWorkspace, currentProject } = useWorkspace();
-  const { user } = useAuth();
+  const { currentWorkspace, currentProject, userId } = useWorkspace();
 
   // Live snapshots to feed Copilot context.
   const pulse = useBatchQuotes(PULSE_SYMBOLS);
@@ -213,7 +211,7 @@ export const ResearchCopilot: React.FC = () => {
   }, [pulse.data]);
 
   const handleSaveInsight = useCallback(async (content: string) => {
-    if (!currentWorkspace?.id || !currentProject?.id || !user) {
+    if (!currentWorkspace?.id || !currentProject?.id || !userId) {
       toast.error('No workspace selected');
       return;
     }
@@ -222,7 +220,7 @@ export const ResearchCopilot: React.FC = () => {
         workspaceId: currentWorkspace.id,
         projectId: currentProject.id,
         content,
-        savedBy: user.uid,
+        savedBy: userId,
         symbols: contextChips,
       };
       const docId = await saveInsight(insightPayload);
@@ -234,12 +232,12 @@ export const ResearchCopilot: React.FC = () => {
         ...insightPayload,
       };
       createArtifactFromCopilot(
-        currentWorkspace.id, currentProject.id, savedInsight, user.uid
+        currentWorkspace.id, currentProject.id, savedInsight, userId
       ).catch(console.error);
     } catch {
       toast.error('Failed to save insight');
     }
-  }, [currentWorkspace, currentProject, user, saveInsight, contextChips]);
+  }, [currentWorkspace, currentProject, userId, saveInsight, contextChips]);
 
   return (
     <div style={{ padding: '0 24px 24px', maxWidth: 920, margin: '0 auto', display: 'flex', flexDirection: 'column', height: 'calc(100vh - 80px)' }}>

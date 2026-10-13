@@ -9,7 +9,7 @@ Vercel builds the repository root with Node.js 24, `npm run build`, and the
 `dist` output directory. `vercel.json` preserves browser `/api/*` URLs by
 forwarding them to the existing Firebase Hosting gateway rewrite. Firebase
 Hosting must stay available as the API ingress while this configuration is used.
-Firebase Auth, Firestore, Storage, Cloud Functions, Cloud Run, and scheduled jobs
+Firestore, Storage, Cloud Functions, Cloud Run, and scheduled jobs
 remain on their existing infrastructure. This does not migrate the backend.
 
 The SPA fallback supports direct visits and refreshes on React Router pages.
@@ -30,11 +30,10 @@ the frontend project. Analytics remains disabled unless explicitly enabled with
 
 Before treating a new hostname as fully operational:
 
-- Add it to Firebase Authentication's authorized domains for Google sign-in.
 - Include its origin in the gateway's `ALLOWED_ORIGINS`, retaining all existing
   allowed origins. External rewrites can forward browser Origin headers.
 - Verify live API health, authenticated reads and writes, Firestore access,
-  Google sign-in, and email links.
+  and email links.
 
 Changing the canonical hostname or moving a custom domain also requires
 checking the gateway's `APP_BASE_URL`/`PUBLIC_APP_URL` and email links. Existing
@@ -65,3 +64,22 @@ Firebase Auth's public configuration listed only `localhost`,
 domains. Add both Vercel production hostnames before verifying Google sign-in.
 Authenticated account flows and live backend data could not be verified with
 the gateway unavailable. No custom domains or Google Cloud resources were changed.
+
+## Authentication removal
+
+The frontend now has no login flow, account gate, anonymous Firebase sign-in,
+or bearer-token attachment. Every surviving route is public; `/login` redirects
+to Home. Deep Research and Research Library render without an identity.
+Account-owned Firebase data stays unselected, and cloud saves remain unavailable
+until the replacement backend supplies the data flow. Existing backend
+authorization and Firestore rules remain intact. The earlier Firebase Auth
+domain findings above describe the initial deployment, before auth removal.
+The user chose to leave the existing backend availability and configuration
+issues for the planned backend replacement.
+
+Verification after auth removal: build, typecheck/lint, and all 55 existing
+frontend tests passed. Browser checks covered 15 route examples plus sidebar
+navigation, the legacy login redirect, and stale account selection in local
+storage. No authentication requests, bearer headers, private Firestore queries,
+or uncaught JavaScript errors occurred. Shared UI styles and dependencies were
+unchanged. The upstream backend remains unavailable, as previously accepted.

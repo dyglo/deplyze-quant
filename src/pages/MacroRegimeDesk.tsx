@@ -14,7 +14,6 @@ import type { MacroSeries } from '../types';
 import { createMacroShiftArtifact } from '../services/artifactService';
 import { useArtifacts, useBriefings } from '../hooks/useArtifacts';
 import { useWorkspace } from '../components/WorkspaceContext';
-import { useAuth } from '../components/AuthProvider';
 import { toast } from 'sonner';
 import { MacroYieldCurvePanel } from '../components/quant/MacroYieldCurvePanel';
 import { MacroRegimeQuadrant } from '../components/quant/MacroRegimeQuadrant';
@@ -77,8 +76,7 @@ export const MacroRegimeDesk: React.FC = () => {
     canonicalPath: '/macro',
   });
   const drawer = useDrawer();
-  const { currentWorkspace, currentProject } = useWorkspace();
-  const { user } = useAuth();
+  const { currentWorkspace, currentProject, userId } = useWorkspace();
   const artifacts = useArtifacts(currentWorkspace?.id ?? null, currentProject?.id ?? null);
   const briefings = useBriefings(currentWorkspace?.id ?? null, currentProject?.id ?? null);
   const [active, setActive] = useState<string[]>(['FEDFUNDS', 'DGS10', 'CPI']);
@@ -177,12 +175,12 @@ export const MacroRegimeDesk: React.FC = () => {
   const analogResult = useHistoricalAnalog({ lookback_years: 10, top_k: 3 });
 
   const handleSaveMacroContext = async () => {
-    if (!currentWorkspace?.id || !currentProject?.id || !user) return;
+    if (!currentWorkspace?.id || !currentProject?.id || !userId) return;
     setSavingMacro(true);
     try {
       await createMacroShiftArtifact(
         currentWorkspace.id, currentProject.id,
-        active, buildMacroNarrative(), user.uid,
+        active, buildMacroNarrative(), userId,
       );
       toast.success('Macro context saved to Research Timeline');
     } catch {

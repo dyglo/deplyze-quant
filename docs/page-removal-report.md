@@ -1,3 +1,5 @@
+> Subsequent change: frontend authentication was removed on `chore/vercel-frontend`; all surviving routes are public. This document records the earlier page-removal snapshot. See [current authentication and deployment status](vercel-deployment.md#authentication-removal).
+
 # Page removal report
 
 Branch: `chore/remove-pages`. Base: `e006e16` (main at checkout). Ten page commits; no PR or deployment.

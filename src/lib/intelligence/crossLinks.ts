@@ -22,7 +22,6 @@ type AssetClass = 'equity' | 'etf' | 'index' | 'fx' | 'commodity' | 'crypto' | '
 /** All known intelligence dashboards. */
 const ROUTES = {
   yields: '/market/global-yields',
-  countries: '/market/countries',
   commodities: '/market/commodities',
   fx: '/market/fx-liquidity',
 };

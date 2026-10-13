@@ -57,23 +57,6 @@ export interface IntelligenceSummary {
   caution?: string;
 }
 
-export const COUNTRY_ETF_SYMBOLS: Array<{ symbol: string; name: string; region: 'developed' | 'emerging'; country: string }> = [
-  { symbol: 'EWJ',  name: 'Japan',          region: 'developed', country: 'JP' },
-  { symbol: 'EWG',  name: 'Germany',        region: 'developed', country: 'DE' },
-  { symbol: 'EWU',  name: 'United Kingdom', region: 'developed', country: 'UK' },
-  { symbol: 'EWC',  name: 'Canada',         region: 'developed', country: 'CA' },
-  { symbol: 'EWA',  name: 'Australia',      region: 'developed', country: 'AU' },
-  { symbol: 'EWL',  name: 'Switzerland',    region: 'developed', country: 'CH' },
-  { symbol: 'EWD',  name: 'Sweden',         region: 'developed', country: 'SE' },
-  { symbol: 'EWT',  name: 'Taiwan',         region: 'emerging',  country: 'TW' },
-  { symbol: 'EWY',  name: 'South Korea',    region: 'emerging',  country: 'KR' },
-  { symbol: 'FXI',  name: 'China',          region: 'emerging',  country: 'CN' },
-  { symbol: 'EWZ',  name: 'Brazil',         region: 'emerging',  country: 'BR' },
-  { symbol: 'INDA', name: 'India',          region: 'emerging',  country: 'IN' },
-  { symbol: 'EWW',  name: 'Mexico',         region: 'emerging',  country: 'MX' },
-  { symbol: 'EWS',  name: 'Singapore',      region: 'emerging',  country: 'SG' },
-];
-
 export const YIELD_SERIES: Array<{ id: string; term: string; termLabel: string }> = [
   { id: 'DGS3MO', term: '3M',  termLabel: '3-Month' },
   { id: 'DGS2',   term: '2Y',  termLabel: '2-Year' },
@@ -126,13 +109,6 @@ function normalizeRow(row: BatchQuoteRow, nameMap?: Record<string, string>): Das
     lastUpdated: Date.now(),
     ok: true,
   };
-}
-
-export async function fetchCountryETFQuotes(): Promise<DashboardQuote[]> {
-  const symbols = COUNTRY_ETF_SYMBOLS.map((s) => s.symbol);
-  const nameMap = Object.fromEntries(COUNTRY_ETF_SYMBOLS.map((s) => [s.symbol, s.name]));
-  const rows = await fetchQuotes(symbols);
-  return rows.map((r) => normalizeRow(r, nameMap));
 }
 
 export async function fetchCommodityQuotes(): Promise<DashboardQuote[]> {

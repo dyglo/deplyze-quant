@@ -105,7 +105,6 @@ const bottomItems = [
 
 const MARKET_DASHBOARD_ITEMS = [
   { id: 'global-yields', label: 'Global Yields',              icon: TrendingUp,     path: '/market/global-yields' },
-  { id: 'countries',     label: 'Countries & Regional',       icon: Map,            path: '/market/countries' },
   { id: 'commodities',   label: 'Commodities',                icon: Flame,          path: '/market/commodities' },
   { id: 'fx-liquidity',  label: 'FX & Liquidity',             icon: ArrowLeftRight, path: '/market/fx-liquidity' },
 ];

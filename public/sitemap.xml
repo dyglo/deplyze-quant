@@ -6,7 +6,6 @@
   <url><loc>https://app.deplyze.com/historical-intelligence</loc><changefreq>daily</changefreq><priority>0.8</priority></url>
   <url><loc>https://app.deplyze.com/briefings</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
   <url><loc>https://app.deplyze.com/market/global-yields</loc><changefreq>hourly</changefreq><priority>0.7</priority></url>
-  <url><loc>https://app.deplyze.com/market/countries</loc><changefreq>hourly</changefreq><priority>0.7</priority></url>
   <url><loc>https://app.deplyze.com/market/commodities</loc><changefreq>hourly</changefreq><priority>0.7</priority></url>
   <url><loc>https://app.deplyze.com/market/fx-liquidity</loc><changefreq>hourly</changefreq><priority>0.7</priority></url>
   <url><loc>https://app.deplyze.com/instruments/SPY</loc><changefreq>daily</changefreq><priority>0.6</priority></url>

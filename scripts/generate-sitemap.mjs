@@ -24,7 +24,6 @@ const STATIC_ROUTES = [
   { path: '/historical-intelligence', changefreq: 'daily', priority: '0.8' },
   { path: '/briefings', changefreq: 'hourly', priority: '0.8' },
   { path: '/market/global-yields', changefreq: 'hourly', priority: '0.7' },
-  { path: '/market/countries', changefreq: 'hourly', priority: '0.7' },
   { path: '/market/commodities', changefreq: 'hourly', priority: '0.7' },
   { path: '/market/fx-liquidity', changefreq: 'hourly', priority: '0.7' },
 ];

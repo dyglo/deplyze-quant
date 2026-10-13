@@ -57,20 +57,6 @@ export interface IntelligenceSummary {
   caution?: string;
 }
 
-export const SECTOR_ETF_SYMBOLS: Array<{ symbol: string; name: string; sector: string }> = [
-  { symbol: 'XLK',  name: 'Technology',           sector: 'Technology' },
-  { symbol: 'XLF',  name: 'Financials',            sector: 'Financials' },
-  { symbol: 'XLV',  name: 'Healthcare',            sector: 'Healthcare' },
-  { symbol: 'XLI',  name: 'Industrials',           sector: 'Industrials' },
-  { symbol: 'XLE',  name: 'Energy',                sector: 'Energy' },
-  { symbol: 'XLU',  name: 'Utilities',             sector: 'Utilities' },
-  { symbol: 'XLRE', name: 'Real Estate',           sector: 'Real Estate' },
-  { symbol: 'XLB',  name: 'Materials',             sector: 'Materials' },
-  { symbol: 'XLC',  name: 'Communication Svcs',    sector: 'Communication' },
-  { symbol: 'XLP',  name: 'Consumer Staples',      sector: 'Consumer Staples' },
-  { symbol: 'XLY',  name: 'Consumer Discretionary',sector: 'Cons. Discret.' },
-];
-
 export const COUNTRY_ETF_SYMBOLS: Array<{ symbol: string; name: string; region: 'developed' | 'emerging'; country: string }> = [
   { symbol: 'EWJ',  name: 'Japan',          region: 'developed', country: 'JP' },
   { symbol: 'EWG',  name: 'Germany',        region: 'developed', country: 'DE' },
@@ -142,13 +128,6 @@ function normalizeRow(row: BatchQuoteRow, nameMap?: Record<string, string>): Das
   };
 }
 
-export async function fetchSectorQuotes(): Promise<DashboardQuote[]> {
-  const symbols = SECTOR_ETF_SYMBOLS.map((s) => s.symbol);
-  const nameMap = Object.fromEntries(SECTOR_ETF_SYMBOLS.map((s) => [s.symbol, s.name]));
-  const rows = await fetchQuotes(['SPY', ...symbols]);
-  return rows.map((r) => normalizeRow(r, nameMap));
-}
-
 export async function fetchCountryETFQuotes(): Promise<DashboardQuote[]> {
   const symbols = COUNTRY_ETF_SYMBOLS.map((s) => s.symbol);
   const nameMap = Object.fromEntries(COUNTRY_ETF_SYMBOLS.map((s) => [s.symbol, s.name]));
@@ -217,40 +196,6 @@ export async function fetchYieldCurve(): Promise<YieldCurveData> {
   }
 
   return { points, history, spread10y2y: spread, curveState };
-}
-
-export function classifySectors(quotes: DashboardQuote[]): IntelligenceSummary {
-  const sectorQuotes = quotes.filter((q) => q.symbol !== 'SPY' && q.ok);
-  const spy = quotes.find((q) => q.symbol === 'SPY');
-  if (!sectorQuotes.length) return { regime: 'neutral', headline: 'Insufficient sector data', note: '', signals: [] };
-
-  const sorted = [...sectorQuotes].sort((a, b) => b.changePercent - a.changePercent);
-  const top3 = sorted.slice(0, 3).map((q) => q.name || q.symbol);
-  const bot3 = sorted.slice(-3).map((q) => q.name || q.symbol);
-
-  const offensiveSectors = ['XLK', 'XLY', 'XLC', 'XLF'];
-  const defensiveSectors = ['XLU', 'XLP', 'XLV'];
-  const offAvg = sectorQuotes.filter((q) => offensiveSectors.includes(q.symbol)).reduce((s, q) => s + q.changePercent, 0) / offensiveSectors.length;
-  const defAvg = sectorQuotes.filter((q) => defensiveSectors.includes(q.symbol)).reduce((s, q) => s + q.changePercent, 0) / defensiveSectors.length;
-
-  const regime: RegimeClassification = offAvg > defAvg + 0.3 ? 'risk-on' : defAvg > offAvg + 0.3 ? 'risk-off' : 'neutral';
-  const signals = [
-    `Leaders: ${top3.join(', ')}`,
-    `Laggards: ${bot3.join(', ')}`,
-    `Offensive avg: ${offAvg >= 0 ? '+' : ''}${offAvg.toFixed(2)}% | Defensive avg: ${defAvg >= 0 ? '+' : ''}${defAvg.toFixed(2)}%`,
-  ];
-  if (spy) signals.push(`SPY benchmark: ${spy.changePercent >= 0 ? '+' : ''}${spy.changePercent.toFixed(2)}%`);
-
-  return {
-    regime,
-    headline: regime === 'risk-on'
-      ? 'Offensive Rotation — Cyclicals Leading'
-      : regime === 'risk-off'
-      ? 'Defensive Rotation — Staples & Utilities Leading'
-      : 'Balanced Sector Distribution',
-    note: `${sectorQuotes.length} sector ETFs analysed vs SPY benchmark`,
-    signals,
-  };
 }
 
 export function classifyYieldCurve(data: YieldCurveData): IntelligenceSummary {

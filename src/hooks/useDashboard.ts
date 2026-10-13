@@ -1,19 +1,10 @@
 import { useSWR } from './useSWR';
 import {
-  fetchSectorQuotes,
   fetchCountryETFQuotes,
   fetchCommodityQuotes,
   fetchFXQuotes,
   fetchYieldCurve,
 } from '../services/dashboardService';
-
-export function useSectorDashboard() {
-  return useSWR(
-    () => fetchSectorQuotes(),
-    [],
-    { cacheKey: 'GET /dashboard/us-sectors' },
-  );
-}
 
 export function useCountryETFs() {
   return useSWR(

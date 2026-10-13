@@ -17,7 +17,6 @@ import type { SummaryPayload } from '../../components/intelligence-drawer';
 import {
   classifyCommodities,
   classifyFX,
-  classifySectors,
   classifyYieldCurve,
   type IntelligenceSummary,
   type DashboardQuote,
@@ -45,31 +44,6 @@ function toPayload(summary: IntelligenceSummary, body?: string): SummaryPayload 
     signals: summary.signals,
     tone: regimeTone(summary.regime),
   };
-}
-
-// ─── US Sectors ───────────────────────────────────────────────────────────────
-
-export function sectorSummary(quotes: DashboardQuote[]): SummaryPayload {
-  const summary = classifySectors(quotes);
-  const ok = quotes.filter((q) => q.symbol !== 'SPY' && q.ok);
-  if (!ok.length) return toPayload(summary);
-
-  const off = ok.filter((q) => ['XLK', 'XLY', 'XLC', 'XLF'].includes(q.symbol));
-  const def = ok.filter((q) => ['XLU', 'XLP', 'XLV'].includes(q.symbol));
-  const offAvg = off.length ? off.reduce((s, q) => s + q.changePercent, 0) / off.length : 0;
-  const defAvg = def.length ? def.reduce((s, q) => s + q.changePercent, 0) / def.length : 0;
-  const gap = offAvg - defAvg;
-
-  const sorted = [...ok].sort((a, b) => b.changePercent - a.changePercent);
-  const leader = sorted[0];
-  const laggard = sorted[sorted.length - 1];
-
-  const body = [
-    `Offensive ${offAvg >= 0 ? '+' : ''}${offAvg.toFixed(2)}% vs defensive ${defAvg >= 0 ? '+' : ''}${defAvg.toFixed(2)}% (gap ${gap >= 0 ? '+' : ''}${gap.toFixed(2)}pts)`,
-    leader && laggard ? `Leader ${leader.symbol} ${leader.changePercent >= 0 ? '+' : ''}${leader.changePercent.toFixed(2)}% · laggard ${laggard.symbol} ${laggard.changePercent.toFixed(2)}%` : null,
-  ].filter(Boolean).join(' · ');
-
-  return toPayload(summary, body);
 }
 
 // ─── Global Yields ────────────────────────────────────────────────────────────

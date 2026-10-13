@@ -104,7 +104,6 @@ const bottomItems = [
 ];
 
 const MARKET_DASHBOARD_ITEMS = [
-  { id: 'us-sectors',    label: 'US Sectors',                 icon: BarChart3,      path: '/market/us-sectors' },
   { id: 'global-yields', label: 'Global Yields',              icon: TrendingUp,     path: '/market/global-yields' },
   { id: 'countries',     label: 'Countries & Regional',       icon: Map,            path: '/market/countries' },
   { id: 'commodities',   label: 'Commodities',                icon: Flame,          path: '/market/commodities' },

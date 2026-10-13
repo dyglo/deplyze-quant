@@ -89,7 +89,6 @@ const RESEARCH_ITEMS = [
   { id: 'history',     label: 'Historical Intelligence', icon: History, path: '/historical-intelligence' },
   { id: 'research',    label: 'Deep Research',           icon: Compass,        path: '/research' },
   { id: 'lab',         label: 'Quant Lab',              icon: Beaker,          path: '/lab' },
-  { id: 'backtesting', label: 'Backtesting',            icon: FlaskConical,    path: '/backtesting' },
 ];
 
 const LIBRARY_ITEMS = [

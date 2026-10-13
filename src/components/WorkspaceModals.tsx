@@ -223,7 +223,7 @@ export const CreateProjectModal: React.FC<ModalProps> = ({ isOpen, onClose }) =>
             <label className="ds-form-label">RESEARCH SCOPE & OBJECTIVES (OPTIONAL)</label>
             <textarea 
               className="ds-input" 
-              placeholder="Define the scope of research, backtesting parameters, or strategy objectives..."
+              placeholder="Define the scope of research or strategy objectives..."
               style={{ minHeight: '4.5rem', resize: 'vertical' }}
               value={desc}
               onChange={e => setDesc(e.target.value)}

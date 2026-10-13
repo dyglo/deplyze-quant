@@ -86,7 +86,6 @@ import edgarRouter from './routes/edgar';
 import intelligenceRouter from './routes/intelligence';
 import v3p2Router from './routes/v3p2';
 import agentsRouter from './routes/agents';
-import backtestRouter from './routes/backtest';
 import personalizationRouter from './routes/personalization';
 import historicalResearchRouter from './routes/historicalResearch';
 import { authenticatedEmailRouter, publicEmailRouter } from './routes/email';
@@ -178,7 +177,6 @@ router.use('/agents', agentsRouter);
 // public-allowed routers above (market, macro, instruments, briefings, …) keep
 // `authenticate` only, so guest tokens are accepted there. (The /agents read vs
 // write split is finalized in a later PR.)
-router.use('/backtest', requireFullAccount, backtestRouter);
 router.use('/personalization', requireFullAccount, personalizationRouter);
 router.use('/historical-research', requireFullAccount, historicalResearchRouter);
 router.use('/email', requireFullAccount, authenticatedEmailRouter);

@@ -7,7 +7,6 @@ Allow: /
 # Authenticated / personal surfaces (no useful content for crawlers; gated anyway)
 Disallow: /settings
 Disallow: /lab
-Disallow: /backtesting
 Disallow: /investigations
 Disallow: /library
 Disallow: /research

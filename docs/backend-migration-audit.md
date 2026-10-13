@@ -171,21 +171,49 @@ do not remove that CPU limit. Merely limiting the batch to one document is
 insufficient for large PDFs. No Wasm parser has been selected or benchmarked;
 claiming full free-Worker compatibility would be unsupported.
 
-The smallest proposed free alternative is a bounded **native Rust GitHub
+The initially proposed free alternative was a bounded **native Rust GitHub
 Actions document-extraction job**, using the public repository's standard
 runner, with private inputs/results in Supabase and no private data in logs or
 public artifacts. Keep API, ingestion dispatch, other bounded jobs, and data
 access on Cloudflare. This changes batch execution hosting and requires the
-user's decision before implementing it. Paid Workers is another option, but
-must not be activated without approval. Keep this decision pending; do not
-silently drop document extraction or report failed parses as successes.
+user's decision before implementing it. The user declined this alternative,
+requiring all processing to remain on Cloudflare and a paid-runtime discussion
+first. Do not implement the GitHub extraction job.
+
+The resulting proposed alternative is **Workers Paid + one bounded Cloudflare
+Container for native Rust document extraction**. Keep the API and other jobs
+in Rust/Wasm Workers, data in Supabase, and presentation on Vercel. Paid Workers
+increase CPU allowance but retain 128 MB isolate memory; this is why upgrading
+Workers alone is not a sufficient large-document design. A `basic` Container
+offers 1 GiB RAM, 1/4 vCPU, and 4 GB disk. Process one document at a time, keep
+one active instance maximum, cap input/decompressed content and job time, and
+stop the instance when idle. Verify memory/CPU against representative real
+filings before enabling the schedule. Unsupported/failed extraction remains
+an explicit failed job, never a successful empty write.
+
+[Current Workers pricing](https://developers.cloudflare.com/workers/platform/pricing/)
+starts at $5 USD/month/account with 10 million requests and 30 million CPU
+milliseconds included. [Containers](https://developers.cloudflare.com/containers/platform/pricing/)
+include 25 GiB-hours memory, 375 vCPU-minutes, and 200 GB-hours disk monthly.
+Extra memory is $0.0000025/GiB-second, CPU $0.000020/vCPU-second, and disk
+$0.00000007/GB-second; network egress has separate pricing. At ten minutes/day
+for a `basic` instance, 30 days uses about 5 GiB-hours, at most 75 vCPU-minutes,
+and 20 GB-hours, before startup/idle overhead. Those values fit the included
+allowances; they are an illustrative budget, not a measured workload or a
+hard $5 spending cap. Account-wide usage and provider fees remain separate.
+
+Architecture/cost approval is pending. No paid plan or Container has been
+activated. Do not silently drop document extraction or report failed parses
+as successes while waiting for the decision.
 
 ## Available account access and migration status
 
 - Supabase: sole organization `Tafar`, ID `afwkalnaplqvoblbpmzj`, Free. Existing
   `MindFlow-Routines` is healthy and `smartmoney-book` inactive; neither is a
-  dedicated Deplyze project. Dedicated project organization confirmation is
-  pending. No project, schema, bucket, or data import has been created.
+  dedicated Deplyze project. The user approved organization Tafar. The
+  connected server rejects `get_cost` as unavailable (`MCP tool get_cost was
+  not returned by tools/list`), preventing the listed project-creation flow.
+  No project, schema, bucket, or data import has been created.
 - Vercel: confirmed `deplyze-quant`, project
   `prj_driGsM8ftyGdbSyBPIqbtxdxqzB7`, team
   `team_5sOdHI6Lp35U60vlevwPPTid`; Vite/Node 24. Environment metadata lists

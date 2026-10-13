@@ -76,17 +76,6 @@ export const COMMODITY_SYMBOLS: Array<{ symbol: string; name: string; category: 
   { symbol: 'HG/USD',  name: 'Copper',            category: 'metals' },
 ];
 
-export const FX_SYMBOLS: Array<{ from: string; to: string; label: string; pair: string; group: 'g10' | 'em' | 'dxy' }> = [
-  { from: 'UUP',     to: '',      label: 'DXY (proxy)', pair: 'UUP',     group: 'dxy' },
-  { from: 'EUR',     to: 'USD',   label: 'EUR/USD',     pair: 'EUR/USD', group: 'g10' },
-  { from: 'GBP',     to: 'USD',   label: 'GBP/USD',     pair: 'GBP/USD', group: 'g10' },
-  { from: 'USD',     to: 'JPY',   label: 'USD/JPY',     pair: 'USD/JPY', group: 'g10' },
-  { from: 'USD',     to: 'CHF',   label: 'USD/CHF',     pair: 'USD/CHF', group: 'g10' },
-  { from: 'AUD',     to: 'USD',   label: 'AUD/USD',     pair: 'AUD/USD', group: 'g10' },
-  { from: 'USD',     to: 'CAD',   label: 'USD/CAD',     pair: 'USD/CAD', group: 'g10' },
-  { from: 'NZD',     to: 'USD',   label: 'NZD/USD',     pair: 'NZD/USD', group: 'g10' },
-];
-
 // ─── Normalizer ───────────────────────────────────────────────────────────────
 
 function normalizeRow(row: BatchQuoteRow, nameMap?: Record<string, string>): DashboardQuote {
@@ -115,13 +104,6 @@ export async function fetchCommodityQuotes(): Promise<DashboardQuote[]> {
   const symbols = COMMODITY_SYMBOLS.map((s) => s.symbol);
   const nameMap = Object.fromEntries(COMMODITY_SYMBOLS.map((s) => [s.symbol, s.name]));
   const rows = await fetchQuotes(symbols);
-  return rows.map((r) => normalizeRow(r, nameMap));
-}
-
-export async function fetchFXQuotes(): Promise<DashboardQuote[]> {
-  const quoteSymbols = FX_SYMBOLS.map((f) => f.pair);
-  const nameMap = Object.fromEntries(FX_SYMBOLS.map((f) => [f.pair, f.label]));
-  const rows = await fetchQuotes(quoteSymbols);
   return rows.map((r) => normalizeRow(r, nameMap));
 }
 
@@ -230,39 +212,6 @@ export function classifyCommodities(quotes: DashboardQuote[]): IntelligenceSumma
       ? 'Commodity Weakness — Disinflationary Signal'
       : 'Commodities Mixed — No Clear Directional Bias',
     note: `Avg change across ${ok.length} tracked commodities: ${avgChange >= 0 ? '+' : ''}${avgChange.toFixed(2)}%`,
-    signals,
-  };
-}
-
-export function classifyFX(quotes: DashboardQuote[]): IntelligenceSummary {
-  const dxy = quotes.find((q) => q.symbol === 'UUP');
-  const ok = quotes.filter((q) => q.ok && q.symbol !== 'UUP');
-
-  const signals: string[] = [];
-  let regime: RegimeClassification = 'neutral';
-
-  if (dxy?.ok) {
-    if (dxy.changePercent > 0.3) {
-      regime = 'strengthening';
-      signals.push('Dollar strengthening — risk-off / tightening bias');
-    } else if (dxy.changePercent < -0.3) {
-      regime = 'weakening';
-      signals.push('Dollar weakening — risk-on / easing bias');
-    }
-    signals.push(`DXY proxy (UUP): ${dxy.changePercent >= 0 ? '+' : ''}${dxy.changePercent.toFixed(2)}%`);
-  }
-
-  const pairs = ok.map((q) => `${q.symbol}: ${q.changePercent >= 0 ? '+' : ''}${q.changePercent.toFixed(2)}%`);
-  if (pairs.length) signals.push(`G10 pairs: ${pairs.slice(0, 3).join(' · ')}`);
-
-  return {
-    regime,
-    headline: regime === 'strengthening'
-      ? 'Dollar Strength — Risk-Off / Tightening Bias'
-      : regime === 'weakening'
-      ? 'Dollar Weakness — Risk-On / Easing Bias'
-      : 'FX Market Stable — Dollar Directionless',
-    note: `${ok.length} G10 pairs tracked`,
     signals,
   };
 }

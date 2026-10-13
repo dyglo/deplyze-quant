@@ -99,7 +99,7 @@ export const SNAPSHOT_ASSET_CLASSES: AssetClassMeta[] = [
   { id: 'indices',     label: 'Indices',     viewMore: undefined },
   { id: 'stocks',      label: 'Stocks' },
   { id: 'commodities', label: 'Commodities', viewMore: '/market/commodities' },
-  { id: 'currencies',  label: 'Currencies',  viewMore: '/market/fx-liquidity' },
+  { id: 'currencies',  label: 'Currencies',  viewMore: undefined },
   { id: 'etfs',        label: 'ETFs' },
   { id: 'bonds',       label: 'Bonds',       viewMore: '/market/global-yields' },
   { id: 'crypto',      label: 'Crypto' },

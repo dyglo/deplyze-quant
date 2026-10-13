@@ -24,7 +24,6 @@ import { ResearchLibrary } from './pages/ResearchLibrary';
 import { ArtifactPage } from './pages/ArtifactPage';
 import { GlobalYields } from './pages/market/GlobalYields';
 import { CommoditiesIntelligence } from './pages/market/CommoditiesIntelligence';
-import { FxLiquidityIntelligence } from './pages/market/FxLiquidityIntelligence';
 import { PortfolioOverview } from './pages/portfolio/PortfolioOverview';
 import { HoldingsWatchlist } from './pages/portfolio/HoldingsWatchlist';
 import { ExposureAnalysis } from './pages/portfolio/ExposureAnalysis';
@@ -112,7 +111,6 @@ export default function App() {
             {/* Market Dashboards — Phase 1 + 2 (public discovery) */}
             <Route path="/market/global-yields" element={<PublicRoute><GlobalYields /></PublicRoute>} />
             <Route path="/market/commodities"   element={<PublicRoute><CommoditiesIntelligence /></PublicRoute>} />
-            <Route path="/market/fx-liquidity"  element={<PublicRoute><FxLiquidityIntelligence /></PublicRoute>} />
             {/* Portfolio Intelligence Workspace */}
             <Route path="/portfolio/overview"     element={<ProtectedRoute><PortfolioOverview /></ProtectedRoute>} />
             <Route path="/portfolio/holdings"     element={<ProtectedRoute><HoldingsWatchlist /></ProtectedRoute>} />

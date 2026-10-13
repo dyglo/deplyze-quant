@@ -23,7 +23,6 @@ type AssetClass = 'equity' | 'etf' | 'index' | 'fx' | 'commodity' | 'crypto' | '
 const ROUTES = {
   yields: '/market/global-yields',
   commodities: '/market/commodities',
-  fx: '/market/fx-liquidity',
 };
 
 const SECTOR_SYMBOLS = new Set(['XLK', 'XLF', 'XLV', 'XLI', 'XLE', 'XLU', 'XLRE', 'XLB', 'XLC', 'XLP', 'XLY', 'SPY']);
@@ -99,12 +98,6 @@ export function buildLinksForSymbol({ symbol, assetClass }: CrossLinkInput): Lin
         filter: sym === 'XLE' ? 'energy' : 'metals',
       });
     }
-    links.push({
-      label: 'FX & Liquidity',
-      description: 'Dollar regime for cyclical / cross-border exposure.',
-      to: ROUTES.fx,
-      state: { fromSymbol: sym, fromDashboard: 'sectors' },
-    });
     return links;
   }
 
@@ -115,12 +108,6 @@ export function buildLinksForSymbol({ symbol, assetClass }: CrossLinkInput): Lin
       label: 'Global Yields',
       description: meta.yields ?? 'Real-rate context for the commodity.',
       to: ROUTES.yields,
-      state: { fromSymbol: sym, fromDashboard: 'commodities' },
-    });
-    links.push({
-      label: 'FX & Liquidity',
-      description: meta.fx ?? 'Dollar regime — commodities are dollar-priced.',
-      to: ROUTES.fx,
       state: { fromSymbol: sym, fromDashboard: 'commodities' },
     });
     return links;
@@ -145,12 +132,6 @@ export function buildLinksForSymbol({ symbol, assetClass }: CrossLinkInput): Lin
 
   // Country ETFs → FX (local currency) + Commodities (when export-exposed)
   if (COUNTRY_ETFS.has(sym)) {
-    links.push({
-      label: 'FX & Liquidity',
-      description: 'Dollar regime affects this country market.',
-      to: ROUTES.fx,
-      state: { fromSymbol: sym, fromDashboard: 'countries' },
-    });
     const commodityLink = COUNTRY_COMMODITY_LINKS[sym];
     if (commodityLink) {
       links.push({
@@ -169,12 +150,6 @@ export function buildLinksForSymbol({ symbol, assetClass }: CrossLinkInput): Lin
     label: 'Global Yields',
     description: 'Macro rate environment.',
     to: ROUTES.yields,
-    state: { fromSymbol: sym },
-  });
-  links.push({
-    label: 'FX & Liquidity',
-    description: 'Dollar regime context.',
-    to: ROUTES.fx,
     state: { fromSymbol: sym },
   });
   return links;

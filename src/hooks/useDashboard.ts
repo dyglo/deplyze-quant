@@ -1,7 +1,6 @@
 import { useSWR } from './useSWR';
 import {
   fetchCommodityQuotes,
-  fetchFXQuotes,
   fetchYieldCurve,
 } from '../services/dashboardService';
 
@@ -10,14 +9,6 @@ export function useCommodityDashboard() {
     () => fetchCommodityQuotes(),
     [],
     { cacheKey: 'GET /dashboard/commodities' },
-  );
-}
-
-export function useFXDashboard() {
-  return useSWR(
-    () => fetchFXQuotes(),
-    [],
-    { cacheKey: 'GET /dashboard/fx' },
   );
 }
 

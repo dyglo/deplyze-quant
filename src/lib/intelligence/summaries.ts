@@ -16,7 +16,6 @@
 import type { SummaryPayload } from '../../components/intelligence-drawer';
 import {
   classifyCommodities,
-  classifyFX,
   classifyYieldCurve,
   type IntelligenceSummary,
   type DashboardQuote,
@@ -62,26 +61,6 @@ export function yieldsSummary(data: YieldCurveData): SummaryPayload {
     spread != null ? `Spread ${spread >= 0 ? '+' : ''}${spread.toFixed(2)}%` : null,
     bei != null ? `5Y BEI ${bei.toFixed(2)}%` : null,
     realRate != null ? `Real 10Y ${realRate >= 0 ? '+' : ''}${realRate.toFixed(2)}%` : null,
-  ].filter(Boolean).join(' · ');
-
-  return toPayload(summary, body);
-}
-
-// ─── FX & Liquidity ───────────────────────────────────────────────────────────
-
-export function fxSummary(quotes: DashboardQuote[]): SummaryPayload {
-  const summary = classifyFX(quotes);
-  const dxy = quotes.find((q) => q.symbol === 'UUP' && q.ok);
-  const eurusd = quotes.find((q) => q.symbol === 'EUR/USD' && q.ok);
-  const usdjpy = quotes.find((q) => q.symbol === 'USD/JPY' && q.ok);
-  const g10 = quotes.filter((q) => q.ok && q.symbol !== 'UUP');
-  const g10Adv = g10.filter((q) => q.changePercent > 0).length;
-
-  const body = [
-    dxy ? `DXY ${dxy.changePercent >= 0 ? '+' : ''}${dxy.changePercent.toFixed(2)}%` : null,
-    eurusd ? `EUR/USD ${eurusd.changePercent >= 0 ? '+' : ''}${eurusd.changePercent.toFixed(2)}%` : null,
-    usdjpy ? `USD/JPY ${usdjpy.changePercent >= 0 ? '+' : ''}${usdjpy.changePercent.toFixed(2)}%` : null,
-    g10.length ? `${g10Adv}/${g10.length} G10 pairs advancing` : null,
   ].filter(Boolean).join(' · ');
 
   return toPayload(summary, body);

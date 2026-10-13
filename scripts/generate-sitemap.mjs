@@ -25,7 +25,6 @@ const STATIC_ROUTES = [
   { path: '/briefings', changefreq: 'hourly', priority: '0.8' },
   { path: '/market/global-yields', changefreq: 'hourly', priority: '0.7' },
   { path: '/market/commodities', changefreq: 'hourly', priority: '0.7' },
-  { path: '/market/fx-liquidity', changefreq: 'hourly', priority: '0.7' },
 ];
 
 // Curated, liquid instruments with public detail pages. Expand as needed.

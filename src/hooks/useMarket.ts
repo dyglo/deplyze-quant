@@ -1,4 +1,4 @@
-import { fetchQuote, fetchQuotes, fetchOHLCV, fetchNews, fetchHeadlines, symbolSearch } from '../services/marketService';
+import { fetchQuote, fetchQuotes, fetchOHLCV, fetchNews, symbolSearch } from '../services/marketService';
 import { useSWR } from './useSWR';
 import type { Timeframe } from '../types';
 
@@ -42,15 +42,6 @@ export function useNews(opts: { symbol?: string; category?: 'general'|'forex'|'c
     () => fetchNews(opts),
     [key],
     { cacheKey: `GET /market/news${qs ? `?${qs}` : ''}` },
-  );
-}
-
-export function useHeadlines(q?: string) {
-  const query = q ?? 'global markets';
-  return useSWR(
-    () => fetchHeadlines(query),
-    [query],
-    { cacheKey: `GET /market/headlines?q=${encodeURIComponent(query)}` },
   );
 }
 

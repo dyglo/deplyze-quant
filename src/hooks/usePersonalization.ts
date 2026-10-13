@@ -1,8 +1,6 @@
 /**
  * V5 personalization hooks.
  *
- * - useMorningBriefing()   — Morning Terminal homepage data
- * - useUserProfile()       — current user_profile_daily snapshot
  * - usePersonalizedFeed()  — ranked intelligence feed (PR6 wires this in)
  * - useCopilotContext()    — Copilot grounding payload (PR7 wires it in)
  * - useWatchlistIntel()    — watchlist-overlap candidates
@@ -16,19 +14,15 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import {
-  fetchBriefing,
   fetchCopilotContext,
   fetchFeed,
-  fetchStructuredBriefing,
   fetchWatchlistIntelligence,
   listInvestigations,
   createInvestigation,
   patchInvestigation,
   type CopilotContext,
   type Investigation,
-  type PersonalizedBriefing,
   type RankedItem,
-  type StructuredBriefing,
 } from '../services/personalizationService';
 
 interface AsyncState<T> {
@@ -77,20 +71,6 @@ function useAsyncResource<T>(loader: () => Promise<T>, deps: unknown[] = []): As
   }, deps);
 
   return { data, loading, error, refetch: run };
-}
-
-export function useMorningBriefing(): AsyncState<PersonalizedBriefing> {
-  return useAsyncResource<PersonalizedBriefing>(async () => {
-    const b = await fetchBriefing();
-    return b as PersonalizedBriefing;
-  }, []);
-}
-
-export function useStructuredBriefing(): AsyncState<StructuredBriefing> {
-  return useAsyncResource<StructuredBriefing>(async () => {
-    const b = await fetchStructuredBriefing();
-    return b as StructuredBriefing;
-  }, []);
 }
 
 export function usePersonalizedFeed(limit = 20): AsyncState<{ items: RankedItem[]; ranker_version?: string }> {

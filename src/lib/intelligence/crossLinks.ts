@@ -7,8 +7,8 @@
  * every available page.
  *
  * Example flows from the wave brief:
- *   US Sector → Global Yields → FX & Liquidity → Narrative
- *   Commodities → Inflation Regime → Global Yields → FX
+ *   US Sector → Global Yields → Commodities
+ *   Commodities → Inflation Regime → Global Yields
  *   FX → Macro Regime → Global Yields → Opportunity Radar (future)
  *
  * Each link includes an optional `filter` hint so the destination
@@ -36,23 +36,12 @@ const RATE_SENSITIVE_SECTORS: Record<string, string> = {
   XLF: 'Financials respond to curve steepness — check the 10Y–2Y spread.',
 };
 
-const COMMODITY_LINKS: Record<string, { yields?: string; fx?: string }> = {
+const COMMODITY_LINKS: Record<string, { yields?: string }> = {
   'XAU/USD': {
     yields: 'Gold tracks real rates — check 10Y minus 5Y breakeven.',
-    fx: 'Gold inversely tracks the dollar regime.',
   },
   'XAG/USD': {
     yields: 'Silver is hybrid: real-rate and industrial demand.',
-    fx: 'Silver tracks dollar weakness.',
-  },
-  'WTI/USD': {
-    fx: 'Oil moves inversely with the dollar over longer horizons.',
-  },
-  'BCO/USD': {
-    fx: 'Brent oil moves inversely with the dollar.',
-  },
-  'HG/USD': {
-    fx: 'Copper is dollar-sensitive and China-linked.',
   },
 };
 
@@ -72,7 +61,7 @@ export function buildLinksForSymbol({ symbol, assetClass }: CrossLinkInput): Lin
   const sym = symbol.toUpperCase();
   const links: LinkedDashboard[] = [];
 
-  // Sector ETFs → Yields (rate sensitivity) + FX (dollar regime for cyclicals)
+  // Sector ETFs → Yields (rate sensitivity) + Commodities (cyclical exposure)
   if (SECTOR_SYMBOLS.has(sym)) {
     if (RATE_SENSITIVE_SECTORS[sym]) {
       links.push({
@@ -101,7 +90,7 @@ export function buildLinksForSymbol({ symbol, assetClass }: CrossLinkInput): Lin
     return links;
   }
 
-  // Commodities → Yields + FX, with bespoke descriptions
+  // Commodities → Yields, with bespoke descriptions
   if (COMMODITY_SYMBOLS.has(sym) || (assetClass === 'commodity')) {
     const meta = COMMODITY_LINKS[symbol] ?? {};
     links.push({
@@ -130,7 +119,7 @@ export function buildLinksForSymbol({ symbol, assetClass }: CrossLinkInput): Lin
     return links;
   }
 
-  // Country ETFs → FX (local currency) + Commodities (when export-exposed)
+  // Country ETFs → Commodities (when export-exposed)
   if (COUNTRY_ETFS.has(sym)) {
     const commodityLink = COUNTRY_COMMODITY_LINKS[sym];
     if (commodityLink) {

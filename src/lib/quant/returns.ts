@@ -39,12 +39,6 @@ export function cumulativeReturns(simple: number[]): number[] {
   return out;
 }
 
-/** Build an equity curve (starting at 1) from a log-return series. */
-export function equityCurve(returns: number[]): number[] {
-  let eq = 1;
-  return [eq, ...returns.map((r) => { eq *= Math.exp(r); return eq; })];
-}
-
 /** Rebase a price series to 100 at index 0. */
 export function rebase100(values: number[]): number[] {
   if (!values.length || values[0] === 0) return values;

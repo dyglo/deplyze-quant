@@ -1,5 +1,7 @@
 # Institutional UX Refinement Audit — Visual System, Terminology & Feed Polish
 
+> **Scope update — 2026-10-13:** See [current frontend routes](../README.md#current-frontend-scope). This audit/specification is historical where it describes retired pages or their source files. Shared market data, saved research, briefing feeds, portfolio data, personalization, email, and the email/Copilot Awareness synthesis pipeline remain supported. No database migrations or drops accompany page removal.
+
 > **Status:** Audit only — no refinement implemented in this document.
 > **Date:** 2026-05-29
 > **Author role:** Principal Institutional UX Architect / Design Systems Lead

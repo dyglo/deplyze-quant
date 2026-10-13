@@ -1,5 +1,7 @@
 # V3 Phase 2 — BigQuery Migrations
 
+> **Scope update — 2026-10-13:** See [current frontend routes](../../../../README.md#current-frontend-scope). Descriptions of retired UI pages or their source files below are historical. Shared market data, saved research, briefing feeds, portfolio data, personalization, email, and the email/Copilot Awareness synthesis pipeline remain supported. No database migrations or drops accompany page removal.
+
 Additive schema migrations for the Intelligence Refinery work. Every script is
 idempotent: re-running is safe.
 

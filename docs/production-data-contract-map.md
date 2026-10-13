@@ -1,5 +1,7 @@
 # Production Data Contract Map
 
+> **Scope update — 2026-10-13:** See [current frontend routes](../README.md#current-frontend-scope). Descriptions of retired UI pages or their source files below are historical. Shared market data, saved research, briefing feeds, portfolio data, personalization, email, and the email/Copilot Awareness synthesis pipeline remain supported. No database migrations or drops accompany page removal.
+
 This map documents the production data path audited during the June 1, 2026 reliability fix.
 
 ## Global Contract
@@ -12,17 +14,13 @@ Gateway routes are served by Cloud Run `deplyze-gateway` behind Firebase Hosting
 
 | Page/surface | Frontend hook/service | Gateway route | Primary source | Fallback source | Cache key intent |
 | --- | --- | --- | --- | --- | --- |
-| Home market snapshot, ticker, hero rail | `marketHomeService`, `useSWR` | `/market/quotes`, `/market/movers`, `/market/news`, `/market/headlines` | Polygon/Finnhub/FMP/Serper | Twelve Data, EODHD, cached last-good UI data | route + symbol list + mover/news query |
-| World Equity / Sectors / Countries | `useDashboard`, `dashboardService` | `/market/quotes` | Polygon -> Finnhub | Twelve Data -> EODHD + UI stale cache | route + ordered symbol list + dashboard key |
+| Home market snapshot, ticker, hero rail | `marketHomeService`, `useSWR` | `/market/quotes`, `/market/movers`, `/market/news` | Polygon/Finnhub/FMP/Serper | Twelve Data, EODHD, cached last-good UI data | route + symbol list + mover/news query |
 | Commodities Intelligence | `useDashboard`, `dashboardService` | `/market/quotes`, `/market/ohlcv/:symbol` | Finnhub mapped FX/metals, Twelve Data | FRED OHLCV for mapped daily series, CoinGecko for crypto, stale UI cache | route + asset class + symbol + interval + bars |
-| FX & Liquidity | `useDashboard`, `dashboardService` | `/market/quotes`, `/macro/fx` | Finnhub OANDA, Twelve Data | FRED daily FX series, stale UI cache | route + pair + interval + bars |
 | Global Yields | `useDashboard`, `dashboardService` | `/macro/series/:id` | FRED official yield/macro series | Alpha Vantage compatible macro endpoints | `macro:v2:<series>` |
 | Macro Regime Desk | `useMacro`, `v3p2Service`, dashboard artifacts | `/macro/series/:id`, V3P2 routes | FRED/Alpha Vantage, BigQuery artifacts | cached macro series, generated artifacts | macro series id + artifact route params |
 | Historical Research | `useHistoricalResearch`, `historicalResearchService` | `/historical-research/*`, `/market/ohlcv/:symbol` | Gemini planner/reasoner + provider OHLCV | deterministic planner, BigQuery OHLCV if coverage satisfies request, provider fallbacks | route + asset class + symbol + interval + bars; planner query body |
 | Historical Intelligence | `HistoricalIntelligenceTerminal`, `useMarket` | `/market/ohlcv/:symbol` | provider OHLCV | BigQuery only when coverage satisfies requested depth | route + asset class + symbol + interval + bars |
-| Portfolio Overview / holdings / attribution / risk | portfolio hooks + `fetchOHLCV` | `/market/ohlcv/:symbol`, `/market/quote/:symbol` | provider OHLCV and quotes | BigQuery covered windows, stale UI cache | route + symbol + benchmark + interval + window |
-| Backtesting | `backtest.ts` | `/backtest/*` | gateway -> `deplyze-backtest-engine` / quant-engine prep | structured gateway errors only | route + request body, no unauthenticated direct fetch |
-| Briefings / Library / Agents / Personalization | service-specific hooks | `/briefings`, `/agents`, `/personalization`, V3P2 routes | BigQuery artifacts/model outputs + quant-engine | generated fallback states and cached artifacts | route + user/workspace where applicable |
+| Home briefing feed / Library / Agents / Personalization | service-specific hooks | `/briefings/latest`, `/agents`, `/personalization`, V3P2 routes | BigQuery artifacts/model outputs + quant-engine | generated fallback states and cached artifacts | route + user/workspace where applicable |
 
 ## BigQuery Tables Audited
 
@@ -47,3 +45,7 @@ Important tables for this incident:
 - Weekly/monthly OHLCV requests calculate calendar lookback by interval and aggregate daily fallback sources when providers return daily bars.
 - Long historical planning supports explicit 50-year / 5-decade requests and surfaces real data shortfall instead of silently reusing shallow windows.
 - Macro/yield routes prefer official FRED-backed series when configured, with Alpha Vantage fallback.
+
+## Shared portfolio and briefing data
+
+Home holdings/watchlists and Macro portfolio vulnerability retain their quote, OHLCV, Firestore, and agent flows. Daily portfolio emails and Copilot portfolio tools read `artifacts.portfolio_awareness_synthesis`; its Python writer/recompute job remains. Standalone page generation at gateway `/briefings/generate` is removed, while `/briefings/latest` and deterministic warehouse briefing generation remain for Home and Library. The standalone Terminal `/market/headlines` route is removed; `/market/news` retains its existing providers.

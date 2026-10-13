@@ -2,7 +2,7 @@
  * useAgentReasoning — hooks for V4 Phase 2 reasoning surfaces.
  *
  * Covers: multi-system reasoning, historical analogs, portfolio vulnerability,
- * and narrative exposure. All hooks are visibility-aware and cache data.
+ * All hooks are visibility-aware and cache data.
  */
 
 import { useEffect, useCallback, useState } from 'react';

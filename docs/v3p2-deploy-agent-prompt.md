@@ -1,5 +1,7 @@
 # Deplyze Quant V3 Phase 2 — Deploy Agent Prompt
 
+> **Scope update — 2026-10-13:** See [current frontend routes](../README.md#current-frontend-scope). This audit/specification is historical where it describes retired pages or their source files. Shared market data, saved research, briefing feeds, portfolio data, personalization, email, and the email/Copilot Awareness synthesis pipeline remain supported. No database migrations or drops accompany page removal.
+
 > Copy everything below the `─── BEGIN PROMPT ───` line and paste it as the
 > first message to your deploy agent (Claude Code, an internal SRE bot, or a
 > human operator). It is fully self-contained — the agent does not need any

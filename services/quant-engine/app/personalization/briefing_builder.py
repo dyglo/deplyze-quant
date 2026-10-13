@@ -402,7 +402,7 @@ _CTA_MAP = {
     "analog":        ("/historical-intelligence",   "Explore analogs"),
     "risk":          ("/macro",                      "View risk"),
     "opportunity":   ("/instruments",               "Browse instruments"),
-    "agent_output":  ("/briefings",                 "View briefings"),
+    "agent_output":  ("/",                          "View market"),
 }
 
 

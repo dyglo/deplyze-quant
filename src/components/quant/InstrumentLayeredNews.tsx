@@ -162,9 +162,8 @@ export const InstrumentLayeredNews: React.FC<Props> = ({
               </div>
             ) : (
               relatedBriefings.map(b => (
-                <a
+                <div
                   key={b.id}
-                  href={`/briefings/${b.id}`}
                   className="ds-surface ds-row"
                   style={{
                     border: '1px solid var(--border)',
@@ -183,7 +182,7 @@ export const InstrumentLayeredNews: React.FC<Props> = ({
                   </div>
                   <span className="ds-heading" style={{ fontSize: 12, fontWeight: 700, color: 'var(--foreground)' }}>{b.title}</span>
                   {b.summary && <span className="ds-caption" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{b.summary}</span>}
-                </a>
+                </div>
               ))
             )}
           </div>

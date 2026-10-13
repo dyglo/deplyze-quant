@@ -1,5 +1,7 @@
 # Deplyze Quant — Product Requirements Document (PRD)
 
+> **Scope update — 2026-10-13:** See [current frontend routes](../README.md#current-frontend-scope). This audit/specification is historical where it describes retired pages or their source files. Shared market data, saved research, briefing feeds, portfolio data, personalization, email, and the email/Copilot Awareness synthesis pipeline remain supported. No database migrations or drops accompany page removal.
+
 **Product Name:** Deplyze Quant
 **Tagline:** AI-Native Quantitative Research & Market Intelligence Platform
 

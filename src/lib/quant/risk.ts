@@ -111,24 +111,6 @@ export function downsideDeviation(returns: number[], mar = 0): number {
   return Math.sqrt(sum / returns.length);
 }
 
-/** Historical VaR at a given confidence level. Returns a positive loss fraction. */
-export function historicalVaR(returns: number[], confidence = 0.95): number {
-  if (returns.length < 10) return 0;
-  const sorted = [...returns].sort((a, b) => a - b);
-  const idx = Math.floor((1 - confidence) * sorted.length);
-  return -sorted[Math.max(0, idx)];
-}
-
-/** Parametric VaR assuming normally distributed returns. */
-export function parametricVaR(returns: number[], confidence = 0.95): number {
-  if (returns.length < 10) return 0;
-  const m = mean(returns);
-  const s = stdev(returns);
-  const zMap: Record<number, number> = { 0.9: 1.282, 0.95: 1.645, 0.99: 2.326 };
-  const z = zMap[confidence] ?? 1.645;
-  return Math.max(0, -(m - z * s));
-}
-
 /** Conditional VaR (a.k.a. Expected Shortfall): mean of returns in the tail
  *  beyond historical VaR. Returns a positive loss fraction. */
 export function conditionalVaR(returns: number[], confidence = 0.95): number {
@@ -160,16 +142,6 @@ export function sortinoRatio(returns: number[], mar = 0, periodsPerYear = 252): 
 /** Calmar ratio: annualised return / max drawdown magnitude. */
 export function calmarRatio(annualisedReturn: number, mddFraction: number): number {
   return mddFraction <= 0 ? 0 : annualisedReturn / mddFraction;
-}
-
-/** Rolling Sharpe ratio over a window of log-return periods. */
-export function rollingSharpe(returns: number[], window: number, ppy = 252): number[] {
-  if (returns.length < window) return [];
-  const out: number[] = [];
-  for (let i = window; i <= returns.length; i++) {
-    out.push(sharpeRatio(returns.slice(i - window, i), 0, ppy));
-  }
-  return out;
 }
 
 /** Rolling OLS beta of asset vs benchmark. Both arrays must align in time. */

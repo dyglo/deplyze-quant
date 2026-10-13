@@ -195,15 +195,15 @@ router.get('/portfolio/:portfolioId', requireFullAccount, async (req, res, next)
 // ─── GET /agents/registry ────────────────────────────────────────────────────
 
 const STATIC_REGISTRY = [
-  { agent_id: 'macro_agent',       domain: 'macro',        trigger_type: 'scheduled', cadence: '09:45 ET weekdays', affected_pages: ['MacroRegimeDesk','IntelligenceTerminal','ResearchCopilot','PortfolioOverview','RiskRegimeFit'] },
-  { agent_id: 'sentiment_agent',   domain: 'sentiment',    trigger_type: 'scheduled', cadence: 'Every 3 hours',     affected_pages: ['IntelligenceTerminal','ResearchCopilot','Briefings','InstrumentIntelligence'] },
-  { agent_id: 'volatility_agent',  domain: 'volatility',   trigger_type: 'scheduled', cadence: '16:30 ET weekdays', affected_pages: ['IntelligenceTerminal','RiskRegimeFit','InstrumentIntelligence','ResearchCopilot'] },
-  { agent_id: 'cross_asset_agent', domain: 'cross_asset',  trigger_type: 'scheduled', cadence: '17:00 ET weekdays', affected_pages: ['IntelligenceTerminal','ResearchCopilot','ExposureAnalysis','RelationsMap'] },
-  { agent_id: 'liquidity_agent',   domain: 'liquidity',    trigger_type: 'scheduled', cadence: '10:00 ET weekdays', affected_pages: ['MacroRegimeDesk','IntelligenceTerminal','ResearchCopilot','RiskRegimeFit'] },
-  { agent_id: 'regime_agent',      domain: 'regime',       trigger_type: 'scheduled', cadence: '10:15 ET weekdays', affected_pages: ['MacroRegimeDesk','RiskRegimeFit','PortfolioOverview','ResearchCopilot','ScenarioStress'] },
-  { agent_id: 'opportunity_agent', domain: 'opportunity',  trigger_type: 'scheduled', cadence: '16:45 ET weekdays', affected_pages: ['IntelligenceTerminal','InstrumentIntelligence','ResearchCopilot'] },
-  { agent_id: 'earnings_agent',    domain: 'earnings',     trigger_type: 'scheduled', cadence: '06:30 ET weekdays', affected_pages: ['IntelligenceTerminal','ResearchCopilot','Briefings'] },
-  { agent_id: 'risk_agent',        domain: 'risk',         trigger_type: 'scheduled', cadence: '17:30 ET weekdays', affected_pages: ['RiskRegimeFit','ScenarioStress','PortfolioOverview','ResearchCopilot'] },
+  { agent_id: 'macro_agent',       domain: 'macro',        trigger_type: 'scheduled', cadence: '09:45 ET weekdays', affected_pages: ['MacroRegimeDesk','ResearchCopilot',] },
+  { agent_id: 'sentiment_agent',   domain: 'sentiment',    trigger_type: 'scheduled', cadence: 'Every 3 hours',     affected_pages: ['ResearchCopilot','InstrumentIntelligence'] },
+  { agent_id: 'volatility_agent',  domain: 'volatility',   trigger_type: 'scheduled', cadence: '16:30 ET weekdays', affected_pages: ['InstrumentIntelligence','ResearchCopilot'] },
+  { agent_id: 'cross_asset_agent', domain: 'cross_asset',  trigger_type: 'scheduled', cadence: '17:00 ET weekdays', affected_pages: ['ResearchCopilot',] },
+  { agent_id: 'liquidity_agent',   domain: 'liquidity',    trigger_type: 'scheduled', cadence: '10:00 ET weekdays', affected_pages: ['MacroRegimeDesk','ResearchCopilot',] },
+  { agent_id: 'regime_agent',      domain: 'regime',       trigger_type: 'scheduled', cadence: '10:15 ET weekdays', affected_pages: ['MacroRegimeDesk','ResearchCopilot',] },
+  { agent_id: 'opportunity_agent', domain: 'opportunity',  trigger_type: 'scheduled', cadence: '16:45 ET weekdays', affected_pages: ['InstrumentIntelligence','ResearchCopilot'] },
+  { agent_id: 'earnings_agent',    domain: 'earnings',     trigger_type: 'scheduled', cadence: '06:30 ET weekdays', affected_pages: ['ResearchCopilot',] },
+  { agent_id: 'risk_agent',        domain: 'risk',         trigger_type: 'scheduled', cadence: '17:30 ET weekdays', affected_pages: ['ResearchCopilot'] },
   { agent_id: 'research_copilot',  domain: 'research',     trigger_type: 'on_demand', cadence: 'On demand',         affected_pages: ['ResearchCopilot'] },
 ];
 

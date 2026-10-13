@@ -1,5 +1,7 @@
 # V3 Phase 2 — Operational Runbook
 
+> **Scope update — 2026-10-13:** See [current frontend routes](../../../../README.md#current-frontend-scope). Descriptions of retired UI pages or their source files below are historical. Shared market data, saved research, briefing feeds, portfolio data, personalization, email, and the email/Copilot Awareness synthesis pipeline remain supported. No database migrations or drops accompany page removal.
+
 Reference doc for operators running the V3P2 intelligence-refinery pipelines.
 
 ## Architecture (post Wave N)

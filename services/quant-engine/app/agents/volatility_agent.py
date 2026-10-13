@@ -19,9 +19,9 @@ import structlog
 
 from app.agents.schemas import (
     AgentOutput, SEVERITY_HIGH, SEVERITY_MEDIUM, SEVERITY_LOW, SEVERITY_INFO,
-    PLACEMENT_INTELLIGENCE_TERMINAL, PLACEMENT_RESEARCH_COPILOT,
-    PLACEMENT_RISK_REGIME_FIT, PLACEMENT_INSTRUMENT_INTELLIGENCE,
-    PLACEMENT_SCENARIO_STRESS,
+    PLACEMENT_RESEARCH_COPILOT,
+    PLACEMENT_INSTRUMENT_INTELLIGENCE,
+
 )
 from app.agents.registry import DOMAIN_VOLATILITY
 from app.bigquery.client import get_bigquery_client, fully_qualified
@@ -30,9 +30,9 @@ from app.core.config import settings
 log = structlog.get_logger("quant_engine.agents.volatility")
 
 _PLACEMENTS = [
-    PLACEMENT_INTELLIGENCE_TERMINAL, PLACEMENT_RISK_REGIME_FIT,
+
     PLACEMENT_INSTRUMENT_INTELLIGENCE, PLACEMENT_RESEARCH_COPILOT,
-    PLACEMENT_SCENARIO_STRESS,
+
 ]
 
 

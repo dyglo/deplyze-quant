@@ -79,7 +79,6 @@ import researchRouter from './routes/research';
 import copilotRouter from './routes/copilot';
 import instrumentsRouter from './routes/instruments';
 import providersRouter from './routes/providers';
-import briefingsRouter from './routes/briefings';
 import fundamentalsRouter from './routes/fundamentals';
 import earningsRouter from './routes/earnings';
 import edgarRouter from './routes/edgar';
@@ -165,7 +164,6 @@ router.use('/research', researchRouter);
 router.use('/copilot', copilotRouter);
 router.use('/instruments', instrumentsRouter);
 router.use('/providers', providersRouter);
-router.use('/briefings', briefingsRouter);
 router.use('/fundamentals', fundamentalsRouter);
 router.use('/earnings', earningsRouter);
 router.use('/edgar', edgarRouter);
@@ -174,7 +172,7 @@ router.use('/agents', agentsRouter);
 // ─── Full-account-only routers ─────────────────────────────────────────────
 // Anonymous guests pass `authenticate` (valid token) but these features are
 // personalized / workspace-writing, so `requireFullAccount` 403s them. The
-// public-allowed routers above (market, macro, instruments, briefings, …) keep
+// public-allowed routers above (market, macro, instruments, …) keep
 // `authenticate` only, so guest tokens are accepted there. (The /agents read vs
 // write split is finalized in a later PR.)
 router.use('/personalization', requireFullAccount, personalizationRouter);
@@ -182,8 +180,8 @@ router.use('/historical-research', requireFullAccount, historicalResearchRouter)
 router.use('/email', requireFullAccount, authenticatedEmailRouter);
 // V3 Phase 2 routes — multi-prefix (/macro/regimes, /filings/*, /narratives/*,
 // /research/macro-observations, /relations/context, /briefings/latest).
-// Mounted last so the established /macro and /briefings routers handle their
-// existing sub-paths first; v3p2Router fills in the new V3P2 ones.
+// Mounted last so the established /macro router handles its own paths first;
+// non-matching requests fall through to this router.
 router.use('/', v3p2Router);
 
 // Mount router on both paths to handle local dev (/v1) and prod proxy (/api/v1)

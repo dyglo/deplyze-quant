@@ -68,8 +68,8 @@ AGENT_REGISTRY: List[AgentRegistryEntry] = [
         ],
         output_artifact_type="macro_intelligence",
         affected_pages=[
-            "MacroRegimeDesk", "IntelligenceTerminal", "ResearchCopilot",
-            "PortfolioOverview", "RiskRegimeFit",
+            "MacroRegimeDesk", "ResearchCopilot",
+
         ],
         description=(
             "Synthesises FRED macro series into four regime classifiers "
@@ -90,7 +90,7 @@ AGENT_REGISTRY: List[AgentRegistryEntry] = [
         ],
         output_artifact_type="sentiment_observation",
         affected_pages=[
-            "IntelligenceTerminal", "ResearchCopilot", "Briefings",
+            "ResearchCopilot",
             "InstrumentIntelligence", "PositioningSentiment",
         ],
         description=(
@@ -111,8 +111,8 @@ AGENT_REGISTRY: List[AgentRegistryEntry] = [
         ],
         output_artifact_type="volatility_observation",
         affected_pages=[
-            "IntelligenceTerminal", "RiskRegimeFit", "InstrumentIntelligence",
-            "ResearchCopilot", "ScenarioStress",
+            "InstrumentIntelligence",
+            "ResearchCopilot",
         ],
         description=(
             "Surveys realised and implied volatility regimes across the instrument universe. "
@@ -133,8 +133,8 @@ AGENT_REGISTRY: List[AgentRegistryEntry] = [
         ],
         output_artifact_type="cross_asset_observation",
         affected_pages=[
-            "IntelligenceTerminal", "ResearchCopilot", "ExposureAnalysis",
-            "RelationsMap", "RiskRegimeFit",
+            "ResearchCopilot",
+
         ],
         description=(
             "Monitors cross-asset correlation structure. Detects correlation "
@@ -154,8 +154,8 @@ AGENT_REGISTRY: List[AgentRegistryEntry] = [
         ],
         output_artifact_type="liquidity_observation",
         affected_pages=[
-            "MacroRegimeDesk", "IntelligenceTerminal", "ResearchCopilot",
-            "RiskRegimeFit", "ScenarioStress",
+            "MacroRegimeDesk", "ResearchCopilot",
+
         ],
         description=(
             "Monitors Fed balance sheet, M2, ON RRP drain, and broad USD for "
@@ -176,8 +176,8 @@ AGENT_REGISTRY: List[AgentRegistryEntry] = [
         ],
         output_artifact_type="regime_transition",
         affected_pages=[
-            "MacroRegimeDesk", "RiskRegimeFit", "PortfolioOverview",
-            "ResearchCopilot", "ScenarioStress", "IntelligenceTerminal",
+            "MacroRegimeDesk",
+            "ResearchCopilot",
         ],
         description=(
             "Composites macro, liquidity, volatility, and sentiment into a unified "
@@ -199,7 +199,7 @@ AGENT_REGISTRY: List[AgentRegistryEntry] = [
         ],
         output_artifact_type="opportunity_observation",
         affected_pages=[
-            "IntelligenceTerminal", "InstrumentIntelligence",
+            "InstrumentIntelligence",
             "ResearchCopilot", "HistoricalIntelligenceTerminal",
         ],
         description=(
@@ -224,8 +224,8 @@ AGENT_REGISTRY: List[AgentRegistryEntry] = [
         ],
         output_artifact_type="earnings_observation",
         affected_pages=[
-            "IntelligenceTerminal", "ResearchCopilot", "ResearchLibrary",
-            "InstrumentIntelligence", "Briefings",
+            "ResearchCopilot", "ResearchLibrary",
+            "InstrumentIntelligence",
         ],
         description=(
             "Processes recent SEC filings and earnings reports. Detects EPS surprise "
@@ -247,8 +247,8 @@ AGENT_REGISTRY: List[AgentRegistryEntry] = [
         ],
         output_artifact_type="risk_observation",
         affected_pages=[
-            "RiskRegimeFit", "ScenarioStress", "PortfolioOverview",
-            "ResearchCopilot", "IntelligenceTerminal",
+
+            "ResearchCopilot",
         ],
         description=(
             "Composites all agent outputs into a unified risk environment score. "

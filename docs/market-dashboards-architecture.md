@@ -1,5 +1,7 @@
 # Market Dashboards — Wave A Architecture Inspection
 
+> **Scope update — 2026-10-13:** See [current frontend routes](../README.md#current-frontend-scope). This audit/specification is historical where it describes retired pages or their source files. Shared market data, saved research, briefing feeds, portfolio data, personalization, email, and the email/Copilot Awareness synthesis pipeline remain supported. No database migrations or drops accompany page removal.
+
 _Last updated: 2026-05-17_
 
 ## 1. Codebase Summary

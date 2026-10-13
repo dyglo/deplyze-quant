@@ -1,5 +1,7 @@
 # V3 Phase 2 — Cost Controls & Verification
 
+> **Scope update — 2026-10-13:** See [current frontend routes](../../../../README.md#current-frontend-scope). Descriptions of retired UI pages or their source files below are historical. Shared market data, saved research, briefing feeds, portfolio data, personalization, email, and the email/Copilot Awareness synthesis pipeline remain supported. No database migrations or drops accompany page removal.
+
 Verification checklist for deploy agents. Re-run after every Wave A–N PR
 merge that touches ingestion or query patterns.
 

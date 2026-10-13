@@ -1,5 +1,7 @@
 # CI/CD Architecture — Deplyze Quant
 
+> **Scope update — 2026-10-13:** See [current frontend routes](../README.md#current-frontend-scope). Descriptions of retired UI pages or their source files below are historical. Shared market data, saved research, briefing feeds, portfolio data, personalization, email, and the email/Copilot Awareness synthesis pipeline remain supported. No database migrations or drops accompany page removal.
+
 > **Audience**: contributors, future agents, DevOps reviewers.  
 > This document is the authoritative source for how CI/CD works in this repository.
 
@@ -200,3 +202,7 @@ See [SECRETS.md](SECRETS.md) for the full list of required repository secrets an
 - `dorny/paths-filter@v3` is pinned to the major version, not a SHA. Review its changelog if GitHub Actions security policy requires SHA pinning.
 - The `detect-changes` job on the very first push to a branch (where `github.event.before` is all zeros) treats all paths as changed. This is intentional — safe default.
 - `deploy-hosting` depends on `deploy-gateway` completing (success or skip) before running. If you need to deploy hosting independently, use `workflow_dispatch` with `skip_gateway: true`.
+
+## Retired deployment scope
+
+The dedicated Rust backtest deployment and nightly parquet export scheduler configuration have been removed from `deploy.yml`. Gateway, Hosting, Firestore, and Quant Engine jobs retain their existing triggers and behavior. Existing deployed backtest resources require a separate owner decision; this change does not delete them.

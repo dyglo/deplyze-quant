@@ -62,15 +62,6 @@ export async function symbolSearch(q: string): Promise<SymbolMatch[]> {
   return r.matches;
 }
 
-export async function fetchHeadlines(q = 'global markets'): Promise<Array<{
-  title: string; link: string; snippet: string; source: string; date?: string;
-}>> {
-  const r = await gatewayGet<{ items: Array<{ title: string; link: string; snippet: string; source: string; date?: string }> }>(
-    '/market/headlines', { q }, ClientTTL.headlines,
-  );
-  return r.items;
-}
-
 export interface MarketMoverItem {
   ticker?: string;
   symbol?: string;

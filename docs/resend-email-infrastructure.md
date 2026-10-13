@@ -1,5 +1,7 @@
 # Resend Email Infrastructure
 
+> **Scope update — 2026-10-13:** See [current frontend routes](../README.md#current-frontend-scope). Descriptions of retired UI pages or their source files below are historical. Shared market data, saved research, briefing feeds, portfolio data, personalization, email, and the email/Copilot Awareness synthesis pipeline remain supported. No database migrations or drops accompany page removal.
+
 Deplyze Quant sends email only from the Cloud Run gateway. The Vite client only reads and updates user email preferences through authenticated gateway routes.
 
 ## Production Requirements
@@ -30,3 +32,7 @@ Deplyze Quant sends email only from the Cloud Run gateway. The Vite client only 
    `EMAIL_BATCH_ENABLE=true npm --prefix cloud-run/gateway run email:batch:send -- --email-type=daily_portfolio_brief --date=YYYY-MM-DD`
 
 Each Resend batch is capped at 100 recipients, uses an idempotency key, waits between batches, and skips users with an existing pending or sent log for the same user/date/email type.
+
+## Navigation after page removal
+
+Daily portfolio brief CTAs open Home (`/`); risk/regime alert CTAs open Macro (`/macro`). Email generation, preferences, opt-in/out, delivery, webhook handling, templates, and Awareness synthesis inputs retain their existing behavior.

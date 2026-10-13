@@ -1,5 +1,7 @@
 # CI Usage Discipline
 
+> **Scope update — 2026-10-13:** See [current frontend routes](../README.md#current-frontend-scope). Descriptions of retired UI pages or their source files below are historical. Shared market data, saved research, briefing feeds, portfolio data, personalization, email, and the email/Copilot Awareness synthesis pipeline remain supported. No database migrations or drops accompany page removal.
+
 GitHub Actions minutes are limited on the free plan. This repository keeps CI scoped so feature work does not burn minutes on every intermediate push.
 
 ## Trigger policy

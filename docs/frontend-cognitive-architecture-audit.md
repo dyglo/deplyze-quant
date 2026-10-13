@@ -1,5 +1,7 @@
 # Frontend Cognitive Architecture Audit
 
+> **Scope update — 2026-10-13:** See [current frontend routes](../README.md#current-frontend-scope). This audit/specification is historical where it describes retired pages or their source files. Shared market data, saved research, briefing feeds, portfolio data, personalization, email, and the email/Copilot Awareness synthesis pipeline remain supported. No database migrations or drops accompany page removal.
+
 > **Status:** Audit only — no redesign implemented.
 > **Date:** 2026-05-29
 > **Scope:** Page / workspace topology, navigation, naming, embedded-vs-standalone workflow conflicts.

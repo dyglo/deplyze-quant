@@ -7,17 +7,11 @@ import {
   MessageSquare,
   Activity,
   TrendingUp,
-  BarChart3,
-  Network,
-  Beaker,
-  FileText,
-  FlaskConical,
   Library,
   History,
   Sparkles,
   Compass,
   Home,
-  Radar,
   ChevronLeft,
   ChevronDown,
   ChevronRight,
@@ -32,15 +26,7 @@ import {
   MoreVertical,
   Edit2,
   Trash2,
-  Globe,
-  Map,
   Flame,
-  ArrowLeftRight,
-  Briefcase,
-  ListTree,
-  PieChart,
-  ShieldAlert,
-  Zap,
   Lock,
 } from 'lucide-react';
 import { useAuth } from './AuthProvider';
@@ -92,7 +78,6 @@ const RESEARCH_ITEMS = [
 
 const LIBRARY_ITEMS = [
   { id: 'library',     label: 'Research Library',       icon: Library,         path: '/library' },
-  { id: 'briefings',   label: 'Briefings',              icon: FileText,        path: '/briefings' },
 ];
 
 const menuItems = [HOME_ITEM, ...DISCOVER_ITEMS, ...RESEARCH_ITEMS, ...LIBRARY_ITEMS];

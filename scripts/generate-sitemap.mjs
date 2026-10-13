@@ -7,8 +7,6 @@
  *
  *   node scripts/generate-sitemap.mjs
  *
- * Per-briefing URLs are intentionally omitted — they require querying published
- * briefings (BigQuery/Firestore) and are best emitted by a server-side job.
  */
 
 import { writeFileSync } from 'node:fs';
@@ -22,7 +20,6 @@ const STATIC_ROUTES = [
   { path: '/', changefreq: 'hourly', priority: '1.0' },
   { path: '/macro', changefreq: 'hourly', priority: '0.9' },
   { path: '/historical-intelligence', changefreq: 'daily', priority: '0.8' },
-  { path: '/briefings', changefreq: 'hourly', priority: '0.8' },
   { path: '/market/global-yields', changefreq: 'hourly', priority: '0.7' },
   { path: '/market/commodities', changefreq: 'hourly', priority: '0.7' },
 ];

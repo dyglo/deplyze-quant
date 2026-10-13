@@ -13,11 +13,6 @@ export function annualisedVol(lr: number[], periodsPerYear = 252): number {
   return stdev(lr) * Math.sqrt(periodsPerYear);
 }
 
-/** Rolling annualised volatility (%) from a log-return series. */
-export function rollingAnnualisedVol(returns: number[], window: number, ppy = 252): number[] {
-  return rollingStdev(returns, window).map((s) => s * Math.sqrt(ppy) * 100);
-}
-
 /** Realised volatility over the last `window` log returns (annualised, fractional). */
 export function realisedVol(returns: number[], window: number, ppy = 252): number {
   if (returns.length < window) return 0;

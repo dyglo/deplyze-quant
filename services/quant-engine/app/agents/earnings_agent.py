@@ -21,8 +21,8 @@ import structlog
 
 from app.agents.schemas import (
     AgentOutput, SEVERITY_HIGH, SEVERITY_MEDIUM, SEVERITY_INFO,
-    PLACEMENT_INTELLIGENCE_TERMINAL, PLACEMENT_RESEARCH_COPILOT,
-    PLACEMENT_BRIEFINGS, PLACEMENT_INSTRUMENT_INTELLIGENCE,
+    PLACEMENT_RESEARCH_COPILOT,
+    PLACEMENT_INSTRUMENT_INTELLIGENCE,
 )
 from app.agents.registry import DOMAIN_EARNINGS
 from app.bigquery.client import get_bigquery_client, fully_qualified
@@ -31,8 +31,8 @@ from app.core.config import settings
 log = structlog.get_logger("quant_engine.agents.earnings")
 
 _PLACEMENTS = [
-    PLACEMENT_INTELLIGENCE_TERMINAL, PLACEMENT_RESEARCH_COPILOT,
-    PLACEMENT_BRIEFINGS, PLACEMENT_INSTRUMENT_INTELLIGENCE,
+    PLACEMENT_RESEARCH_COPILOT,
+    PLACEMENT_INSTRUMENT_INTELLIGENCE,
 ]
 
 

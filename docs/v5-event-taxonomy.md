@@ -1,5 +1,7 @@
 # V5 Event Taxonomy
 
+> **Scope update — 2026-10-13:** See [current frontend routes](../README.md#current-frontend-scope). Descriptions of retired UI pages or their source files below are historical. Shared market data, saved research, briefing feeds, portfolio data, personalization, email, and the email/Copilot Awareness synthesis pipeline remain supported. No database migrations or drops accompany page removal.
+
 Canonical event types and categories for the V5 behavioral spine. This file
 is the human-readable reference; the machine-readable definitions live in
 three places that must stay in sync:

@@ -20,7 +20,7 @@ import structlog
 
 from app.agents.schemas import (
     AgentOutput, SEVERITY_MEDIUM, SEVERITY_INFO,
-    PLACEMENT_INTELLIGENCE_TERMINAL, PLACEMENT_INSTRUMENT_INTELLIGENCE,
+    PLACEMENT_INSTRUMENT_INTELLIGENCE,
     PLACEMENT_RESEARCH_COPILOT,
 )
 from app.agents.registry import DOMAIN_OPPORTUNITY
@@ -30,7 +30,7 @@ from app.core.config import settings
 log = structlog.get_logger("quant_engine.agents.opportunity")
 
 _PLACEMENTS = [
-    PLACEMENT_INTELLIGENCE_TERMINAL, PLACEMENT_INSTRUMENT_INTELLIGENCE,
+    PLACEMENT_INSTRUMENT_INTELLIGENCE,
     PLACEMENT_RESEARCH_COPILOT,
 ]
 

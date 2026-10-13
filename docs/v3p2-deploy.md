@@ -1,5 +1,7 @@
 # Deplyze Quant V3 Phase 2 — Deploy Agent Execution Prompt
 
+> **Scope update — 2026-10-13:** See [current frontend routes](../README.md#current-frontend-scope). Descriptions of retired UI pages or their source files below are historical. Shared market data, saved research, briefing feeds, portfolio data, personalization, email, and the email/Copilot Awareness synthesis pipeline remain supported. No database migrations or drops accompany page removal.
+
 > **Self-contained instructions for a deploy agent (human or LLM) to roll
 > V3 Phase 2 to production.** Assumes Phase 1 is already live (Cloud Run
 > services `deplyze-gateway` + `deplyze-quant-engine`, BigQuery datasets

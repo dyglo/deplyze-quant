@@ -1,5 +1,7 @@
 # Wave A — Dashboard Intelligence Audit
 
+> **Scope update — 2026-10-13:** See [current frontend routes](../../README.md#current-frontend-scope). This audit/specification is historical where it describes retired pages or their source files. Shared market data, saved research, briefing feeds, portfolio data, personalization, email, and the email/Copilot Awareness synthesis pipeline remain supported. No database migrations or drops accompany page removal.
+
 > Inventory of every dashboard's interaction surface, with concrete intelligence
 > opportunities mapped to existing `src/lib/quant/*` infrastructure. This is the
 > implementation map for Waves B–I.

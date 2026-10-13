@@ -132,19 +132,6 @@ export function rollingStdev(values: number[], window: number): number[] {
   return out;
 }
 
-/** Rolling z-score: (value[t] − rolling_mean) / rolling_stdev. Mean-reversion signal. */
-export function rollingZScore(values: number[], window: number): number[] {
-  if (values.length < window || window < 2) return [];
-  const out: number[] = [];
-  for (let i = window; i <= values.length; i++) {
-    const slice = values.slice(i - window, i);
-    const m = mean(slice);
-    const s = stdev(slice);
-    out.push(s === 0 ? 0 : (values[i - 1] - m) / s);
-  }
-  return out;
-}
-
 /** Z-score of a single value vs a sample. */
 export function zScore(history: number[], value: number): number {
   const s = stdev(history);

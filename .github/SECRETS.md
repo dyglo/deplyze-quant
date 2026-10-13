@@ -1,5 +1,7 @@
 # GitHub Secrets — Setup Guide
 
+> **Scope update — 2026-10-13:** See [current frontend routes](../README.md#current-frontend-scope). Descriptions of retired UI pages or their source files below are historical. Shared market data, saved research, briefing feeds, portfolio data, personalization, email, and the email/Copilot Awareness synthesis pipeline remain supported. No database migrations or drops accompany page removal.
+
 Add these at **Settings → Secrets and variables → Actions → New repository secret**.
 
 ---
@@ -82,3 +84,7 @@ The workflow runs `gcloud artifacts repositories create` idempotently before eve
 
 > Feature branch pushes (without an open PR) do not trigger CI — the PR event covers them.
 > See [CICD.md](CICD.md) for the full architecture, rollback procedure, and cost practices.
+
+## Unreferenced backtest configuration
+
+`BACKTEST_ENGINE_URL` and `BACKTEST_PARQUET_BUCKET` are no longer referenced by deployment configuration. No remote secrets were deleted. Review these only when retiring the existing backtest service/export scheduler. All provider, Firebase, personalization, Redis, and email configuration remains in use.

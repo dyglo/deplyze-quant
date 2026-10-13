@@ -17,9 +17,9 @@ import structlog
 
 from app.agents.schemas import (
     AgentOutput, SEVERITY_HIGH, SEVERITY_MEDIUM, SEVERITY_INFO,
-    PLACEMENT_RISK_REGIME_FIT, PLACEMENT_SCENARIO_STRESS,
-    PLACEMENT_PORTFOLIO_OVERVIEW, PLACEMENT_RESEARCH_COPILOT,
-    PLACEMENT_INTELLIGENCE_TERMINAL,
+
+    PLACEMENT_RESEARCH_COPILOT,
+
 )
 from app.agents.registry import DOMAIN_RISK
 from app.bigquery.client import get_bigquery_client, fully_qualified
@@ -28,9 +28,9 @@ from app.core.config import settings
 log = structlog.get_logger("quant_engine.agents.risk")
 
 _PLACEMENTS = [
-    PLACEMENT_RISK_REGIME_FIT, PLACEMENT_SCENARIO_STRESS,
-    PLACEMENT_PORTFOLIO_OVERVIEW, PLACEMENT_RESEARCH_COPILOT,
-    PLACEMENT_INTELLIGENCE_TERMINAL,
+
+    PLACEMENT_RESEARCH_COPILOT,
+
 ]
 
 _SEVERITY_WEIGHTS = {"high": 1.0, "medium": 0.5, "info": 0.1, "low": 0.1}

@@ -183,15 +183,6 @@ export type BenchmarkCategory =
   | 'commodity'
   | 'custom';
 
-export interface BenchmarkDefinition {
-  id: string;                 // canonical symbol
-  name: string;               // display name
-  description?: string;
-  category: BenchmarkCategory;
-  currency: string;
-  provider?: string;
-}
-
 // ─── Exposure Snapshot ────────────────────────────────────────────────────────
 
 export interface ExposureBreakdown {

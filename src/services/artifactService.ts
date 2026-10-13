@@ -147,32 +147,6 @@ interface InstrumentAnalytics {
   mdd: number;
 }
 
-export function createArtifactFromBriefing(
-  workspaceId: string,
-  projectId: string,
-  briefing: Briefing,
-  uid: string,
-): Promise<string> {
-  return createArtifact(workspaceId, projectId, {
-    workspaceId,
-    projectId,
-    artifactType: 'briefing',
-    category: 'macro',
-    title: briefing.title,
-    summary: briefing.summary,
-    body: briefing.body,
-    narrative: briefing.summary,
-    symbols: briefing.symbols,
-    tags: [briefing.kind],
-    confidence: briefing.sourceCoverage ? Math.min(briefing.sourceCoverage / 5, 1) : 0.5,
-    confidenceScore: briefing.sourceCoverage ? Math.min(briefing.sourceCoverage / 5, 1) : 0.5,
-    completenessScore: briefing.dataCompleteness ?? 0.5,
-    significance: 0.5,
-    evidence: [],
-    createdBy: uid,
-  });
-}
-
 export function createArtifactFromCopilot(
   workspaceId: string,
   projectId: string,

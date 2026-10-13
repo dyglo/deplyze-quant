@@ -54,7 +54,7 @@ type TimelineRow = {
   symbols: string[];
   tags: string[];
   filterKey: Filter;
-  detailLink: string;
+  detailLink?: string;
 };
 
 export const TimelineTab: React.FC<{ symbol: string }> = ({ symbol }) => {
@@ -93,7 +93,6 @@ export const TimelineTab: React.FC<{ symbol: string }> = ({ symbol }) => {
         symbols: b.symbols ?? [],
         tags: [b.kind],
         filterKey: 'briefing',
-        detailLink: `/briefings/${b.id}`,
       });
     }
     return out.sort((x, y) => y.ts - x.ts);
@@ -173,9 +172,11 @@ export const TimelineTab: React.FC<{ symbol: string }> = ({ symbol }) => {
                     display: 'grid', gap: 6,
                   }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
-                      <Link to={r.detailLink} style={{ textDecoration: 'none', color: 'var(--foreground)' }}>
-                        <strong style={{ fontSize: 13 }}>{r.title}</strong>
-                      </Link>
+                      {r.detailLink ? (
+                        <Link to={r.detailLink} style={{ textDecoration: 'none', color: 'var(--foreground)' }}>
+                          <strong style={{ fontSize: 13 }}>{r.title}</strong>
+                        </Link>
+                      ) : <strong style={{ fontSize: 13 }}>{r.title}</strong>}
                       <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
                         {r.confidence != null && <ConfidenceBadge score={r.confidence} />}
                         <KindBadge kind={r.filterKey} />

@@ -1,5 +1,7 @@
 # V5 Phase 1 — Data Flow & Privacy Model
 
+> **Scope update — 2026-10-13:** See [current frontend routes](../README.md#current-frontend-scope). Descriptions of retired UI pages or their source files below are historical. Shared market data, saved research, briefing feeds, portfolio data, personalization, email, and the email/Copilot Awareness synthesis pipeline remain supported. No database migrations or drops accompany page removal.
+
 This document defines the data spine for the V5 Personalized Institutional
 Intelligence Infrastructure. It is the contract for PR1 of the V5 Phase 1
 rollout and the reference for every later PR.

@@ -17,8 +17,8 @@ const PUBLIC_MATCHERS: PathMatcher[] = [
   exact('/'),
   prefix('/macro'),
   prefix('/instruments'),
-  prefix('/market'),
-  prefix('/briefings'),
+  prefix('/market/global-yields'),
+  prefix('/market/commodities'),
   prefix('/historical-intelligence'),
 ];
 

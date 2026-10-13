@@ -5,7 +5,6 @@
  *   GET  /v1/agents/reasoning         — multi-system synthesised reasoning
  *   GET  /v1/agents/analog            — historical analog search
  *   POST /v1/agents/vulnerability     — portfolio regime vulnerability
- *   GET  /v1/agents/narrative-exposure — narrative theme exposure by symbols
  */
 
 import { gatewayGet, gatewayPost, GatewayError } from './gatewayClient';

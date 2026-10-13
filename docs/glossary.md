@@ -1,5 +1,7 @@
 # Glossary — Deplyze Quant
 
+> **Scope update — 2026-10-13:** See [current frontend routes](../README.md#current-frontend-scope). Descriptions of retired UI pages or their source files below are historical. Shared market data, saved research, briefing feeds, portfolio data, personalization, email, and the email/Copilot Awareness synthesis pipeline remain supported. No database migrations or drops accompany page removal.
+
 This file maps internal Firestore/codebase identifiers to the PRD product
 vocabulary. The Sentinel-era tenancy collections were named `organizations` /
 `sites`; in Deplyze Quant they are reframed as **research desks** and

@@ -1,5 +1,7 @@
 # Deplyze Quant V5 R&D Plan for Personalized Institutional Retention
 
+> **Scope update — 2026-10-13:** See [current frontend routes](../README.md#current-frontend-scope). This audit/specification is historical where it describes retired pages or their source files. Shared market data, saved research, briefing feeds, portfolio data, personalization, email, and the email/Copilot Awareness synthesis pipeline remain supported. No database migrations or drops accompany page removal.
+
 ## Executive summary
 
 Deplyze Quant V5 should not be built as a generic “engagement engine.” It should be built as a **personalized institutional utility system** that makes users return because the platform continuously understands their portfolio, watchlists, active research threads, preferred reasoning style, and market context. The strongest institutional pattern in adjacent products is consistent: Bloomberg emphasizes tailored news and alerts, LSEG Workspace says its AI-powered recommendations and UX “learn from you,” AlphaSense centers saved searches, watchlists, alerts, dashboards, and event calendars, and Kensho now exposes grounded workflow skills such as tearsheets and earnings previews directly inside AI workflows. The common denominator is not endless scrolling; it is **high-signal personalization tied to workflow**. citeturn19view1turn19view0turn19view2turn19view3turn19view4

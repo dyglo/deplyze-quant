@@ -1,5 +1,7 @@
 # V5 Personalization — Privacy Notice (Internal Reference)
 
+> **Scope update — 2026-10-13:** See [current frontend routes](../README.md#current-frontend-scope). Descriptions of retired UI pages or their source files below are historical. Shared market data, saved research, briefing feeds, portfolio data, personalization, email, and the email/Copilot Awareness synthesis pipeline remain supported. No database migrations or drops accompany page removal.
+
 This document captures the privacy posture Deplyze publishes externally and
 enforces internally for the V5 Personalized Institutional Intelligence
 Infrastructure. It is the canonical reference for security review and for

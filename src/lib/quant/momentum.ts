@@ -3,7 +3,7 @@
  */
 
 import { logReturns } from './returns';
-import { mean, sma, stdev } from './primitives';
+import { mean, stdev } from './primitives';
 
 /** Slope of OLS y = a + b*t over an evenly-spaced index axis. Returns the
  *  per-step slope; multiply by length for total expected drift. */
@@ -37,26 +37,6 @@ export function trendLabel(closesArr: number[]): {
   else if (pctPerDay < -0.25) label = 'strong-down';
   else                        label = 'down';
   return { label, pctPerDay };
-}
-
-export type SmaCrossState = 'bullish' | 'bearish' | 'neutral' | 'insufficient';
-
-/** SMA crossover analysis. fast < slow required. */
-export function smaCross(
-  values: number[],
-  fast = 20,
-  slow = 50,
-): { state: SmaCrossState; fastSma: number[]; slowSma: number[]; lastFast: number; lastSlow: number } {
-  if (values.length < slow || fast >= slow) {
-    return { state: 'insufficient', fastSma: [], slowSma: [], lastFast: 0, lastSlow: 0 };
-  }
-  const fastSma = sma(values, fast);
-  const slowSma = sma(values, slow);
-  const lastFast = fastSma[fastSma.length - 1];
-  const lastSlow = slowSma[slowSma.length - 1];
-  const diff = (lastFast - lastSlow) / lastSlow;
-  const state: SmaCrossState = Math.abs(diff) < 0.001 ? 'neutral' : lastFast > lastSlow ? 'bullish' : 'bearish';
-  return { state, fastSma, slowSma, lastFast, lastSlow };
 }
 
 /** Rolling N-period momentum as compounded simple return over the window. */

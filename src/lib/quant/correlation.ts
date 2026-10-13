@@ -61,26 +61,6 @@ export function interpretCorrelation(r: number): { strength: string; direction: 
   return { strength, direction, phrase };
 }
 
-/** Full NxN covariance matrix from N aligned log-return series. */
-export function covarianceMatrix(returnSeries: number[][]): number[][] {
-  const n = returnSeries.length;
-  if (n === 0) return [];
-  const minLen = Math.min(...returnSeries.map((s) => s.length));
-  const aligned = returnSeries.map((s) => s.slice(-minLen));
-  const means = aligned.map(mean);
-  const cov: number[][] = Array.from({ length: n }, () => new Array(n).fill(0));
-  for (let i = 0; i < n; i++) {
-    for (let j = i; j < n; j++) {
-      let s = 0;
-      for (let k = 0; k < minLen; k++) {
-        s += (aligned[i][k] - means[i]) * (aligned[j][k] - means[j]);
-      }
-      cov[i][j] = cov[j][i] = minLen > 1 ? s / (minLen - 1) : 0;
-    }
-  }
-  return cov;
-}
-
 /** Pairwise correlation matrix from N aligned log-return series. */
 export function correlationMatrix(returnSeries: number[][]): number[][] {
   const n = returnSeries.length;

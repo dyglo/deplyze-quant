@@ -1,5 +1,4 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
 import { FileText, GitBranch } from 'lucide-react';
 import { useSWR } from '../../hooks/useSWR';
 import { SectionCard } from './SectionCard';
@@ -16,7 +15,6 @@ const Skeleton: React.FC<{ n: number }> = ({ n }) => (
 );
 
 const BriefingsBlock: React.FC = () => {
-  const navigate = useNavigate();
   const { data, loading, error } = useSWR(() => fetchLatestBriefings(), [], { cacheKey: 'marketHome:briefings' });
   const items = (data ?? []).slice(0, 4);
 
@@ -31,21 +29,17 @@ const BriefingsBlock: React.FC = () => {
         : (
           <div style={{ display: 'grid', gap: 2 }}>
             {items.map((b) => (
-              <button
+              <div
                 key={b.id}
-                type="button"
-                onClick={() => navigate(`/briefings/${encodeURIComponent(b.id)}`)}
                 className="ds-transition-fast"
-                style={{ display: 'block', width: '100%', textAlign: 'left', padding: '9px 2px', background: 'transparent', border: 'none', borderBottom: '1px solid var(--border)', cursor: 'pointer' }}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'var(--muted)'; }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+                style={{ display: 'block', width: '100%', textAlign: 'left', padding: '9px 2px', background: 'transparent', border: 'none', borderBottom: '1px solid var(--border)' }}
               >
                 <span style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                   <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--foreground)', minWidth: 0, display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{stripMarkdown(b.title)}</span>
                   <span style={{ fontSize: 10, color: 'var(--muted-foreground)', flexShrink: 0 }}>{relTime(tsValue(b.observation_time))}</span>
                 </span>
                 <span style={{ fontSize: 11, color: 'var(--muted-foreground)', lineHeight: 1.4, marginTop: 3, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{stripMarkdown(b.summary)}</span>
-              </button>
+              </div>
             ))}
           </div>
         )}

@@ -20,6 +20,34 @@ With **V5 Phase 1**, Deplyze Quant introduces the **Personalized Institutional I
 
 ---
 
+## Current frontend scope
+
+The page removal on 2026-10-13 retires Intelligent Terminal, Relation Maps, World Equity, US Sectors, Countries and Regional, FX and Liquidity, Portfolio (all sub-pages), Backtesting, Quant Lab, and the standalone Briefing pages. Historical Intelligence remains available.
+
+| Surface | Route | Access |
+|---|---|---|
+| Home | `/` | Public |
+| Instrument detail | `/instruments/:symbol` | Public |
+| Macro Regime Desk | `/macro` | Public |
+| Historical Intelligence | `/historical-intelligence` | Public |
+| Global Yields | `/market/global-yields` | Public |
+| Commodities | `/market/commodities` | Public |
+| Investigations | `/investigations` | Full account |
+| Deep Research | `/research`, `/research/i/:id` | Full account |
+| Research Copilot | `/copilot` | Full account |
+| Research Library | `/library` | Full account |
+| Artifact detail | `/artifacts/:id` | Full account |
+| Settings | `/settings` | Full account |
+| Login | `/login` | Sign-in surface |
+
+The `/positioning` alias still redirects to `/research`. Unknown and retired routes use the existing Home fallback. Navigation and the public sitemap contain only supported routes.
+
+Shared portfolio holdings/watchlists, Macro portfolio analysis, saved research (including older lab/briefing artifacts), Home/Library briefing feeds, personalization, provider integrations, and email remain available. The Awareness synthesis writer/recompute job stays because daily emails and Copilot portfolio tools consume its data. Email CTAs now open Home or Macro instead of retired Portfolio pages.
+
+The Rust backtest service source, Python backtest endpoints/exporters, gateway backtest proxy, deployment job, and export scheduler configuration were removed. No database tables, persisted collections, migrations, deployed services, or live scheduler jobs were deleted or changed.
+
+See [the removal report](docs/page-removal-report.md) for the file inventory, verification results, retained dependencies, and infrastructure candidates. Earlier architecture audits and release specifications are historical where they describe retired pages.
+
 ## Architecture
 
 ```

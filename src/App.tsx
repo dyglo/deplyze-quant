@@ -16,8 +16,6 @@ import { MacroRegimeDesk } from './pages/MacroRegimeDesk';
 import { HistoricalResearch } from './pages/HistoricalResearch';
 import { ResearchCopilot } from './pages/ResearchCopilot';
 import { HistoricalIntelligenceTerminal } from './pages/HistoricalIntelligenceTerminal';
-import { Briefings } from './pages/Briefings';
-import { BriefingDetail } from './pages/BriefingDetail';
 import { ResearchLibrary } from './pages/ResearchLibrary';
 import { ArtifactPage } from './pages/ArtifactPage';
 import { GlobalYields } from './pages/market/GlobalYields';
@@ -91,8 +89,6 @@ export default function App() {
             <Route path="/positioning"          element={<Navigate to="/research" replace />} />
             <Route path="/copilot"              element={<ProtectedRoute><ResearchCopilot /></ProtectedRoute>} />
             <Route path="/historical-intelligence" element={<PublicRoute><HistoricalIntelligenceTerminal /></PublicRoute>} />
-            <Route path="/briefings"            element={<PublicRoute><Briefings /></PublicRoute>} />
-            <Route path="/briefings/:id"        element={<PublicRoute><BriefingDetail /></PublicRoute>} />
             <Route path="/library"              element={<ProtectedRoute><ResearchLibrary /></ProtectedRoute>} />
             <Route path="/artifacts/:id"        element={<ProtectedRoute><ArtifactPage /></ProtectedRoute>} />
             <Route path="/settings"             element={<ProtectedRoute><Settings /></ProtectedRoute>} />

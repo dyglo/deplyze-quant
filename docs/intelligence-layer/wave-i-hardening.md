@@ -1,5 +1,7 @@
 # Wave I — Final Hardening & Phase Summary
 
+> **Scope update — 2026-10-13:** See [current frontend routes](../../README.md#current-frontend-scope). Descriptions of retired UI pages or their source files below are historical. Shared market data, saved research, briefing feeds, portfolio data, personalization, email, and the email/Copilot Awareness synthesis pipeline remain supported. No database migrations or drops accompany page removal.
+
 > Closes the Dashboard Intelligence Layer phase. Records the final
 > architecture, verification matrix, and the deliverables the prompt asked
 > for at the end of the phase.

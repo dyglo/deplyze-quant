@@ -83,6 +83,13 @@ API keys and secrets live securely in Google Secret Manager. The frontend intera
 
 ---
 
+## Vercel frontend hosting
+
+The frontend can be hosted on Vercel while Firebase and Google Cloud retain the
+backend. See [Vercel deployment instructions](docs/vercel-deployment.md) for
+build settings, API forwarding, environment variables, hostname authorization,
+and the existing live gateway availability issue.
+
 ## Local development
 
 ```bash

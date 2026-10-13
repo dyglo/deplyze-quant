@@ -35,3 +35,4 @@ vite.config.ts.timestamp-*
 __pycache__/
 *.pyc
 .playwright-mcp/
+.vercel/
